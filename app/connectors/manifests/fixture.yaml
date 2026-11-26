@@ -1,0 +1,15 @@
+id: test.fixture
+name: Fixture retailer
+country: SE
+protocol_version: 1
+connector_version: 0.1.0
+enabled: true
+access_review: approved
+implementation: app.connectors.fixture:FixtureConnector
+capabilities:
+  online_prices: supported
+  store_offers: supported
+  physical_store_offers: unsupported
+  barcode_search: unsupported
+allowed_hosts: []
+minimum_request_interval_seconds: 1

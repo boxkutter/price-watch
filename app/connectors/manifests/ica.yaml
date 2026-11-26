@@ -1,0 +1,15 @@
+id: se.ica
+name: ICA
+country: SE
+protocol_version: 1
+connector_version: 0.0.0
+enabled: false
+access_review: unverified
+capabilities:
+  store_discovery: unverified
+  product_search: unverified
+  online_prices: unverified
+  physical_store_prices: unverified
+  store_offers: unverified
+allowed_hosts: []
+minimum_request_interval_seconds: 60

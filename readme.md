@@ -2,7 +2,9 @@
 
 > Self-hosted retail discovery, price history and promotion monitoring service.
 
-**Specification:** v1.0 | **Status:** proposed implementation baseline, not implemented | **Initial market:** Sweden (SE)
+**Specification:** v1.0 | **Status:** implementation in progress; fixture-backed service available, live retailer connectors disabled | **Initial market:** Sweden (SE)
+
+The code currently implements invitation-based users, scoped client credentials with per-user grants, a fixture-backed store, basic catalogue/prices/offers, three public monitor types, database-backed jobs, signed webhook delivery, a small admin page, and a Docker image. It does **not** yet meet the full MVP checklist below. In particular, ICA, City Gross and Coop access and coverage are unverified. See [Implementation status](docs/implementation-status.md) for setup and remaining work.
 
 ## 1. Purpose
 
@@ -75,6 +77,8 @@ flowchart TD
 Use async database sessions in API handlers; Celery tasks may wrap async connector execution in an explicitly managed event loop. Never reuse an async client or browser across incompatible event loops or forked processes.
 
 ## 3. Repository layout
+
+This is the target layout. The current code is flatter (`app/main.py`, `app/models.py`, `app/monitoring.py`, `app/worker.py`, `app/connectors/`) and will be split as the API grows.
 
 ```text
 retail-monitor/
@@ -639,7 +643,7 @@ Post-MVP acceptance: interactive retailer login and account-specific session iso
 
 ## 20. Outstanding decisions and limitations
 
-No code, retailer connector or access permission has been tested as part of this design document. ICA, City Gross and Coop support must be established empirically and within permitted access conditions. Physical-store prices, barcode search, unpublished clearance, authentication/session persistence and complete offer coverage remain uncertain. No guaranteed alert latency or comprehensive physical-store coverage is possible from polling online sources alone.
+The original design baseline preceded implementation. The current fixture-backed code and migration checks are described at the top of this README and in [Implementation status](docs/implementation-status.md). ICA, City Gross and Coop support must be established empirically and within permitted access conditions. Physical-store prices, retailer barcode search, unpublished clearance, authentication/session persistence and complete offer coverage remain uncertain. No guaranteed alert latency or comprehensive physical-store coverage is possible from polling online sources alone.
 
 Engineering defaults added by this specification: Jinja2/HTMX; Keycloak compatibility; household permissions; UUIDs; PostgreSQL-backed leases/outbox; hourly public polling; three-hour private polling; first scan baseline; public monitoring before private/AI features; resource estimates and retention defaults. These may be adjusted during implementation. Interactive remote-browser login transport, precise connector selectors, retailer endpoints, final dependency versions and measured rate limits are deliberately not invented. Compose and protocol snippets are implementation sketches, not finished runnable files.
 

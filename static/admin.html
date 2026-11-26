@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Retail Monitor admin</title>
+<style>
+body{font:16px system-ui,sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;color:#18212b}
+section{border:1px solid #ccd3db;border-radius:8px;padding:1rem;margin:1rem 0}
+form{display:flex;gap:.6rem;flex-wrap:wrap;align-items:end}label{display:grid;gap:.2rem}
+input,button{font:inherit;padding:.45rem}button{cursor:pointer}pre{overflow:auto;background:#f1f4f7;padding:.8rem}
+.muted{color:#5c6874}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.5rem;border-bottom:1px solid #dce1e7}
+</style>
+<h1>Retail Monitor</h1>
+<p class="muted">Local administration. Live retailer connectors are disabled pending access review.</p>
+<section id="login-section"><h2>Sign in</h2>
+<form id="login-form"><label>Email<input name="email" type="email" required></label>
+<label>Password<input name="password" type="password" required></label><button>Sign in</button></form></section>
+<main id="dashboard" hidden>
+<button id="logout">Sign out</button>
+<section><h2>Connectors</h2><div id="connectors"></div></section>
+<section><h2>Stores</h2><div id="stores"></div></section>
+<section><h2>Monitors</h2><div id="monitors"></div>
+<form id="monitor-form"><label>Name<input name="name" required></label>
+<label>Type<select name="type"><option value="store">Store offers</option><option value="generic_product">Generic product</option><option value="exact_product">Exact listing</option></select></label>
+<label>Store<select id="store-select" name="store_id"></select></label>
+<label>Conditions JSON<input name="conditions" value="{}"></label>
+<label><input type="checkbox" name="notify_existing_offers"> Notify on first scan</label>
+<button>Create monitor</button></form></section>
+<section><h2>Recent jobs</h2><div id="jobs"></div></section>
+<section><h2>Recent events</h2><div id="events"></div></section>
+<section><h2>Invite a user</h2><form id="invite-form">
+<label>Email<input name="email" type="email" required></label><button>Create invitation</button></form>
+<pre id="invitation" hidden></pre><p class="muted">Share the token securely; it appears only here.</p></section>
+<section><h2>Client application</h2><form id="client-form">
+<label>Name<input name="name" required></label><button>Create client</button></form>
+<pre id="client-secret" hidden></pre><p class="muted">Save the client token securely; it appears only here.</p></section>
+</main><p id="message" role="status"></p>
+<script>
+let token=sessionStorage.getItem('retailToken');
+const $=id=>document.getElementById(id);
+const escaped=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(path,options={}){
+ const response=await fetch(path,{...options,headers:{'Content-Type':'application/json',
+  'Authorization':'Bearer '+token,...(options.headers||{})}});
+ const data=response.status===204?{}:await response.json();
+ if(!response.ok)throw Error(data.message||data.detail||`HTTP ${response.status}`);return data;
+}
+async function refresh(){
+ const [me,connectors,stores,monitors,jobs,events]=await Promise.all([
+  api('/v1/me'),api('/v1/connectors'),api('/v1/stores'),api('/v1/monitors'),
+  api('/v1/admin/jobs'),api('/v1/events')]);
+ if(!me.is_admin)throw Error('Admin account required');
+ $('login-section').hidden=true;$('dashboard').hidden=false;
+ $('connectors').innerHTML='<table><tr><th>Retailer</th><th>Enabled</th><th>Access review</th></tr>'+
+  connectors.items.map(x=>`<tr><td>${escaped(x.name)}</td><td>${x.enabled?'Yes':'No'}</td><td>${escaped(x.access_review)}</td></tr>`).join('')+'</table>';
+ $('stores').innerHTML='<table><tr><th>Store</th><th>Retailer</th><th>ID</th></tr>'+
+  stores.items.map(x=>`<tr><td>${escaped(x.name)}</td><td>${escaped(x.retailer_id)}</td><td>${escaped(x.id)}</td></tr>`).join('')+'</table>';
+ $('store-select').innerHTML=stores.items.map(x=>`<option value="${escaped(x.id)}">${escaped(x.name)}</option>`).join('');
+ $('monitors').innerHTML='<table><tr><th>Name</th><th>Type</th><th>Next check</th><th>Actions</th></tr>'+
+  monitors.items.map(x=>`<tr><td>${escaped(x.name)}</td><td>${escaped(x.type)}</td><td>${escaped(x.next_due_at)}</td><td><button data-check="${escaped(x.id)}">Check</button> <button data-disable="${escaped(x.id)}">Disable</button></td></tr>`).join('')+'</table>';
+ $('monitors').querySelectorAll('[data-check]').forEach(button=>button.onclick=async()=>{
+  try{await api('/v1/monitors/'+button.dataset.check+'/check',{method:'POST'});$('message').textContent='Check queued'}
+  catch(error){$('message').textContent=error.message}});
+ $('monitors').querySelectorAll('[data-disable]').forEach(button=>button.onclick=async()=>{
+  try{await api('/v1/monitors/'+button.dataset.disable,{method:'DELETE'});await refresh()}
+  catch(error){$('message').textContent=error.message}});
+ $('jobs').innerHTML='<table><tr><th>Kind</th><th>State</th><th>Created</th><th>Action</th></tr>'+
+  jobs.items.map(x=>`<tr><td>${escaped(x.kind)}</td><td>${escaped(x.state)}</td><td>${escaped(x.created_at)}</td><td>${['failed','partial'].includes(x.state)?`<button data-retry="${escaped(x.id)}">Retry</button>`:''}</td></tr>`).join('')+'</table>';
+ $('jobs').querySelectorAll('[data-retry]').forEach(button=>button.onclick=async()=>{
+  try{await api('/v1/admin/jobs/'+button.dataset.retry+'/retry',{method:'POST'});await refresh()}
+  catch(error){$('message').textContent=error.message}});
+ $('events').innerHTML='<table><tr><th>Event</th><th>When</th></tr>'+
+  events.items.map(x=>`<tr><td>${escaped(x.type)}</td><td>${escaped(x.created_at)}</td></tr>`).join('')+'</table>';
+}
+$('login-form').onsubmit=async event=>{event.preventDefault();try{
+ const body=Object.fromEntries(new FormData(event.target));
+ const result=await api('/v1/auth/login',{method:'POST',body:JSON.stringify(body)});
+ token=result.access_token;sessionStorage.setItem('retailToken',token);await refresh();$('message').textContent='';
+}catch(error){$('message').textContent=error.message}};
+$('logout').onclick=async()=>{try{await api('/v1/auth/logout',{method:'POST'})}catch(_){}
+ sessionStorage.removeItem('retailToken');token=null;
+ $('dashboard').hidden=true;$('login-section').hidden=false};
+$('monitor-form').onsubmit=async event=>{event.preventDefault();try{
+ const form=new FormData(event.target);const body={name:form.get('name'),type:form.get('type'),
+  store_id:form.get('store_id'),conditions:JSON.parse(form.get('conditions')),
+  notify_existing_offers:form.has('notify_existing_offers')};
+ await api('/v1/monitors',{method:'POST',body:JSON.stringify(body)});await refresh();
+}catch(error){$('message').textContent=error.message}};
+$('invite-form').onsubmit=async event=>{event.preventDefault();try{
+ const result=await api('/v1/admin/invitations',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(event.target)))});
+ $('invitation').hidden=false;$('invitation').textContent=JSON.stringify(result,null,2);
+}catch(error){$('message').textContent=error.message}};
+$('client-form').onsubmit=async event=>{event.preventDefault();try{
+ const result=await api('/v1/clients',{method:'POST',body:JSON.stringify({
+ name:new FormData(event.target).get('name'),scopes:['catalogue:read','monitors:read','monitors:write','events:read','webhooks:manage']})});
+ $('client-secret').hidden=false;$('client-secret').textContent=JSON.stringify(result,null,2);
+}catch(error){$('message').textContent=error.message}};
+if(token)refresh().catch(error=>{$('message').textContent=error.message;
+ sessionStorage.removeItem('retailToken');token=null});
+</script>
+</html>
