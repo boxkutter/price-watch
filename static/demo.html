@@ -1,7 +1,8 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b6b3a">
 <title>Price Watch: example client</title>
 <style>
 body{font:16px system-ui,sans-serif;max-width:1600px;margin:1rem auto;padding:0 1.5rem;color:#18212b}
@@ -58,6 +59,52 @@ details.edit{margin-top:.35rem}details.edit>summary{display:inline-block;cursor:
 details.edit[open]{padding:.5rem .6rem;background:#f6f8fa;border-radius:8px}
 .editrow{display:flex;gap:.4rem;margin:.3rem 0;flex-wrap:wrap;align-items:center}.editrow input{font:inherit;font-size:.85rem;padding:.3rem .5rem;border:1px solid #ccd3db;border-radius:6px;width:12rem}
 .toolbar{display:flex;gap:.9rem;flex-wrap:wrap;align-items:center;margin:.3rem 0 .8rem}
+/* ---- the camera button and scanner ---- */
+.inputwrap{position:relative;display:inline-flex;flex:1 1 18rem;min-width:0}.inputwrap input{width:100%;padding-right:3rem;box-sizing:border-box}
+button.scanbtn{position:absolute;right:2px;top:2px;bottom:2px;width:2.6rem;padding:0;border:0;background:none;color:#0b6b3a;border-radius:6px;display:flex;align-items:center;justify-content:center}button.scanbtn:hover,button.scanbtn:focus-visible{background:#e8f3ec}
+button.primary{background:#0b6b3a;color:#fff;border:0;border-radius:8px;padding:.5rem 1.1rem;font-weight:600}button.primary:hover{background:#095c32}
+#scanner{position:fixed;inset:0;background:#000;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center}
+#scan-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.scanframe{position:relative;width:min(86vw,520px);height:min(34vw,200px);min-height:130px;border:2px solid rgba(255,255,255,.9);border-radius:12px;box-shadow:0 0 0 100vmax rgba(0,0,0,.45)}
+.scanframe i{position:absolute;left:8%;right:8%;top:50%;height:2px;background:#ff4d4d;animation:scanline 1.6s ease-in-out infinite alternate}
+@keyframes scanline{from{top:18%}to{top:82%}}@media (prefers-reduced-motion:reduce){.scanframe i{animation:none}}
+#scan-close{position:absolute;top:max(.8rem,env(safe-area-inset-top));right:.8rem;width:3rem;height:3rem;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:2rem;line-height:1;padding:0}
+.scanbar{position:absolute;left:0;right:0;bottom:0;padding:1rem 1rem max(1.2rem,env(safe-area-inset-bottom));text-align:center;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.7))}
+.scanbar p{margin:0 0 .7rem}.scanbar button{font:inherit;padding:.7rem 1.2rem;border-radius:10px;border:1px solid rgba(255,255,255,.7);background:rgba(0,0,0,.35);color:#fff}
+/* ---- phones and small windows ---- */
+.mobmeta{display:none}#hx-hit{touch-action:pan-y}html{-webkit-text-size-adjust:100%}
+@media (max-width:760px){
+ body{margin:.4rem auto;padding:0 max(.75rem,env(safe-area-inset-left))}
+ header{flex-direction:column;align-items:flex-start;gap:.3rem}header .row{width:100%;justify-content:space-between}
+ nav{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-left:-.75rem;margin-right:-.75rem;padding:0 .75rem}nav::-webkit-scrollbar{display:none}
+ nav button{flex:none;white-space:nowrap}
+ input,select,textarea{font-size:16px}                      /* a smaller font makes iOS zoom into the field */
+ input,select,button{min-height:44px}button.chip,button.btn-sm,button.linkbtn,.photo-ctl .chip,.meta .chip{min-height:0}
+ fieldset{padding:.6rem .7rem;margin:.7rem 0}legend{font-size:.95rem}
+ .searchrow{flex-wrap:nowrap;gap:.5rem}.searchrow .inputwrap{flex:1 1 auto}.searchrow button.primary{flex:none}
+ .row.small label{flex:1 1 40%}.row.small label input{width:100%;box-sizing:border-box}
+ .tiles{grid-template-columns:1fr 1fr}.tile .val{font-size:1.35rem}
+ .hx-head{flex-wrap:wrap}.hx-chart{padding:.2rem}.hx-legend{flex-direction:column;gap:.5rem}
+ .card .row{flex-wrap:wrap}.price{font-size:1.3rem}
+ /* a result is a card: picture and name side by side, then the price, then what you can do */
+ #search-result{overflow-x:visible}
+ #search-result table,#search-result tbody{display:block;min-width:0;width:100%}
+ #search-result colgroup,#search-result tr:has(th){display:none!important}
+ #search-result tr.grouphead{display:block;margin:.5rem 0 0}#search-result tr.grouphead td{display:block;padding:.5rem .7rem;border-radius:8px;border:0}
+ #search-result tr:not(.grouphead){display:grid;grid-template-columns:76px 1fr;grid-template-areas:"pic prod" "price price" "act act";gap:.3rem .75rem;padding:.9rem 0;border-bottom:1px solid #e3e8ee}
+ #search-result td{display:block;padding:0;border:0;min-width:0}
+ #search-result td.c-pic{grid-area:pic}#search-result td.c-prod{grid-area:prod}
+ #search-result td.c-brandcell,#search-result td.c-sizecell{display:none}
+ .intro{display:none}
+ .mobmeta{display:block;color:#44505c;font-size:.9rem;margin-top:.1rem}
+ #search-result td.c-pricecell{grid-area:price;text-align:left;display:flex;align-items:baseline;gap:.4rem .8rem;flex-wrap:wrap;margin-top:.2rem}
+ #search-result td.c-pricecell .pills{flex-direction:row;flex-wrap:wrap;margin-top:0}
+ #search-result td.act{grid-area:act;display:flex;align-items:center;gap:1rem;text-align:left}
+ #search-result button.watch{width:auto;flex:1 1 auto;min-height:44px}#search-result button.linkbtn{margin:0;padding:.6rem .2rem;min-height:44px}
+ .suggest button.btn-sm{min-height:40px}details.edit>summary{padding:.5rem 0;min-height:24px}.editrow input{flex:1 1 9rem;width:auto}
+ .toolbar{gap:.6rem}.toolbar select{max-width:100%}
+ #lightbox img{max-height:75vh}
+}
 code,pre{background:#f1f4f7;border-radius:4px}code{padding:0 .25rem}pre{padding:.6rem;overflow:auto;font-size:.85rem}
 .err{color:#a1281a}.chip{border:1px solid #ccd3db;border-radius:1rem;background:#fff;padding:.15rem .6rem;font-size:.85rem}
 details.group{border:1px solid #dce1e7;border-radius:8px;margin:.4rem 0;padding:.3rem .7rem}details.group summary{cursor:pointer;font-weight:600}details.group[open] summary{margin-bottom:.4rem}details.group .list{max-height:18rem;overflow:auto}
@@ -73,8 +120,15 @@ label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid
 <p id="msg" role="status" class="muted"></p>
 <main id="app" hidden>
 <input type="file" id="photo-input" accept="image/*" hidden>
+<input type="file" id="scan-photo" accept="image/*" capture="environment" hidden>
+<div id="scanner" role="dialog" aria-modal="true" aria-label="Scan a barcode" hidden>
+ <video id="scan-video" playsinline muted></video>
+ <div class="scanframe" aria-hidden="true"><i></i></div>
+ <button type="button" id="scan-close" aria-label="Close the scanner">&times;</button>
+ <div class="scanbar"><p id="scan-msg">Point the camera at the barcode</p><button type="button" id="scan-photo-btn">Take a photo instead</button></div>
+</div>
 <div id="lightbox" role="dialog" aria-modal="true" aria-label="Picture" hidden><figure><img id="lightbox-img" alt=""><figcaption id="lightbox-cap"></figcaption></figure></div>
-<p class="muted small">This page is a client app: a <b>regular user</b> (not an admin) calling the public API with a user token and a client token, the way a phone app or script would. Everything you do here is an ordinary API call; see the "API calls" tab.</p>
+<p class="muted small intro">This page is a client app: a <b>regular user</b> (not an admin) calling the public API with a user token and a client token, the way a phone app or script would. Everything you do here is an ordinary API call; see the "API calls" tab.</p>
 <nav id="tabs"><button data-tab="watch" class="on">Watchlist</button><button data-tab="add">Lookup</button><button data-tab="compare">Compare</button><button data-tab="history">Price history</button><button data-tab="stores">Your stores</button><button data-tab="activity">Activity</button><button data-tab="api">API calls</button></nav>
 <label class="inline small"><input type="checkbox" id="auto" checked> Refresh every 15 seconds</label>
 
@@ -96,7 +150,7 @@ label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid
   <p class="small">The demo shop is a made-up store whose prices move every minute, so you can watch monitoring work without any real retailer.</p>
   <button id="try-demo">Use the demo shop and search "demo"</button></fieldset>
  <fieldset><legend>Search by name or barcode</legend>
-  <form id="search-form" class="row"><input name="q" size="32" required minlength="2" placeholder="name (e.g. havregryn) or barcode digits"><button>Search</button></form>
+  <form id="search-form" class="row searchrow"><span class="inputwrap"><input name="q" size="32" required minlength="2" placeholder="Name or barcode" enterkeyhint="search" autocomplete="off"><button type="button" class="scanbtn" data-scan="search-form" aria-label="Scan a barcode with the camera" title="Scan a barcode"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button></span><button class="primary">Search</button></form>
   <div class="row small">
    <label>Brand <input name="brand" form="search-form" size="12" placeholder="e.g. Axa"></label>
    <label>Pack <input name="pack" form="search-form" size="7" inputmode="numeric" placeholder="6 or 4-8" title="Multipack count: a number (6) or a range (4-8). 1 means a single item"></label>
@@ -115,7 +169,7 @@ label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid
 <section class="panel" id="tab-compare">
  <h2>Compare</h2>
  <p class="muted small">Standing in a store? Type the barcode and say where you are. Prices we already know appear at once; live prices follow. Uses the stores you ticked.</p>
- <form id="compare-form" class="row"><input name="gtin" size="18" inputmode="numeric" required placeholder="barcode digits"><select id="compare-here"></select><button>Compare</button></form>
+ <form id="compare-form" class="row searchrow"><span class="inputwrap"><input name="gtin" size="18" inputmode="numeric" required placeholder="barcode digits"><button type="button" class="scanbtn" data-scan="compare-form" aria-label="Scan a barcode with the camera" title="Scan a barcode"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button></span><select id="compare-here"></select><button>Compare</button></form>
  <div class="row small muted demo-only">Demo barcodes: <button type="button" class="chip" data-gtin="9999990000019">demo oats</button> <button type="button" class="chip" data-gtin="9999990000026">demo coffee</button></div>
  <div id="compare-result" role="status"></div>
 </section>
@@ -365,6 +419,88 @@ document.addEventListener('change',e=>{
  const s=e.target.closest('[data-hstore]');if(!s)return;
  s.checked?hist.hidden.delete(s.dataset.hstore):hist.hidden.add(s.dataset.hstore);renderHistory();
 });
+
+// ---- barcode scanner: the camera button next to a barcode or search field --------------------
+// Live scanning (a preview that reads frames) needs a secure page (https) and camera permission.
+// Where that is not possible the same button opens the phone's camera app to take a photo of the
+// barcode, which is read the same way. The reading is done in the browser; nothing is uploaded.
+let zxingReady=null;
+const loadZXing=()=>zxingReady||(zxingReady=new Promise((resolve,reject)=>{
+ if(window.ZXing)return resolve(window.ZXing);
+ const s=document.createElement('script');s.src='/vendor/zxing.min.js';
+ s.onload=()=>resolve(window.ZXing);s.onerror=()=>{zxingReady=null;reject(Error('Could not load the barcode reader'))};document.head.append(s);
+}));
+const BARCODE_FORMATS=['ean_13','ean_8','upc_a','upc_e'];
+// a read counts only with a valid check digit: a misread is then almost never accepted
+const goodBarcode=text=>{const d=String(text||'').replace(/\D/g,'');return /^\d{8,14}$/.test(d)&&!barcodeProblem(d)?d:null};
+async function zxingDecoder(){
+ const Z=await loadZXing(),hints=new Map();
+ hints.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.EAN_13,Z.BarcodeFormat.EAN_8,Z.BarcodeFormat.UPC_A,Z.BarcodeFormat.UPC_E]);
+ hints.set(Z.DecodeHintType.TRY_HARDER,true);
+ const reader=new Z.MultiFormatReader();reader.setHints(hints);
+ return canvas=>{
+  try{return reader.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(canvas)))).getText()}
+  catch(e){return null}                      // nothing readable in this frame
+ };
+}
+const scan={stream:null,stop:false,form:null};
+const scanMsg=t=>{$('scan-msg').textContent=t};
+const canLiveScan=()=>window.isSecureContext&&!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);
+function closeScanner(){scan.stop=true;if(scan.stream){scan.stream.getTracks().forEach(t=>t.stop());scan.stream=null}$('scan-video').srcObject=null;$('scanner').hidden=true}
+function scanFound(code){
+ closeScanner();if(navigator.vibrate)navigator.vibrate(60);
+ const input=scan.form.querySelector('input[name=q],input[name=gtin]');input.value=code;say('Scanned '+code);scan.form.requestSubmit();
+}
+async function startScan(form){
+ scan.form=form;
+ if(!canLiveScan())return photoScan('Live scanning needs an https page, so the camera app opens to take a photo of the barcode instead.');
+ $('scanner').hidden=false;scanMsg('Starting the camera...');
+ try{scan.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false})}
+ catch(err){closeScanner();return photoScan(err&&err.name==='NotAllowedError'?'Camera permission was refused. You can take a photo of the barcode instead.':'The camera could not be started. You can take a photo of the barcode instead.')}
+ const video=$('scan-video');video.srcObject=scan.stream;await video.play().catch(()=>{});
+ scanMsg('Point the camera at the barcode');
+ let detect=null;
+ if('BarcodeDetector' in window){try{const det=new BarcodeDetector({formats:BARCODE_FORMATS});detect=async()=>{const r=await det.detect(video);return r.length?r[0].rawValue:null}}catch(e){detect=null}}
+ if(!detect){
+  try{
+   const decode=await zxingDecoder(),canvas=document.createElement('canvas');
+   detect=async()=>{const w=Math.min(960,video.videoWidth||960),h=Math.round(w*(video.videoHeight||540)/(video.videoWidth||960));
+    canvas.width=w;canvas.height=h;canvas.getContext('2d',{willReadFrequently:true}).drawImage(video,0,0,w,h);return decode(canvas)};
+  }catch(err){closeScanner();return photoScan(err.message+'. You can take a photo of the barcode instead.')}
+ }
+ scan.stop=false;
+ while(!scan.stop&&!$('scanner').hidden){
+  let text=null;try{text=await detect()}catch(e){}
+  const code=goodBarcode(text);if(code)return scanFound(code);
+  await new Promise(r=>setTimeout(r,140));
+ }
+}
+function photoScan(note){if(note)say(note);$('scan-photo').value='';$('scan-photo').click()}
+// a photo: tried at a few sizes and both ways up, since a phone may save it turned
+async function decodePhoto(file){
+ const bitmap=await createImageBitmap(file);
+ if('BarcodeDetector' in window){try{const r=await new BarcodeDetector({formats:BARCODE_FORMATS}).detect(bitmap);const c=r.length&&goodBarcode(r[0].rawValue);if(c)return c}catch(e){}}
+ const decode=await zxingDecoder(),canvas=document.createElement('canvas');
+ for(const side of [1600,1000,640])for(const turn of [0,90]){
+  const scale=Math.min(1,side/Math.max(bitmap.width,bitmap.height)),w=Math.round(bitmap.width*scale),h=Math.round(bitmap.height*scale);
+  canvas.width=turn?h:w;canvas.height=turn?w:h;
+  const g=canvas.getContext('2d',{willReadFrequently:true});g.save();
+  if(turn){g.translate(canvas.width,0);g.rotate(Math.PI/2)}
+  g.drawImage(bitmap,0,0,w,h);g.restore();
+  const code=goodBarcode(decode(canvas));if(code)return code;
+ }
+ return null;
+}
+$('scan-photo').onchange=async e=>{
+ const file=e.target.files[0];if(!file)return;say('Reading the barcode...');
+ try{const code=await decodePhoto(file);
+  if(code)scanFound(code);else say("Couldn't read a barcode in that photo. Fill the frame with the barcode, hold the phone steady and try again.")}
+ catch(err){say(err.message)}};
+document.addEventListener('click',e=>{const b=e.target.closest('[data-scan]');if(b)startScan($(b.dataset.scan))});
+$('scan-close').onclick=closeScanner;
+$('scan-photo-btn').onclick=()=>{closeScanner();photoScan()};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('scanner').hidden)closeScanner()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&!$('scanner').hidden)closeScanner()});
 
 // ---- pictures and reference data -----------------------------------------------------------
 function thumb(img,size){
@@ -666,11 +802,11 @@ function showResults(job,target,note,problems){
      :`<button type="button" data-watch-group="${esc(i.like_key)}">${watchedStores.size?`Watch in the other ${todo.length} store${todo.length>1?'s':''}`:`Watch in all ${n} stores`}</button>`;
     head=`<tr class="grouphead"><td colspan="6"><b>Same item in ${n} stores</b> <span class="muted small">${basis}${cheapest}</span> ${all}</td></tr>`}}
   const w=watched.has(i.listing_id);
-  return head+`<tr><td>${pictureCell(i.image,i.product_id,64)}</td>
-   <td title="${esc(i.name)}"><div class="ptitle">${productTitle(i)}${i.via?' <span class="badge" title="The store words it differently; found through another of its names.">found via another name</span>':''}</div>
-    <div class="meta">${storeLogo(i.store_id,16)} <span>${esc(sname(i.store_id))}</span></div>${refLine(i)}${alsoLine(i)}${barcodeLine(i)}${suggestBlock(i)}${editBox(i)}</td>
-   <td>${esc(i.brand||'')}</td><td>${esc([i.size,i.pack].filter(Boolean).join(' · '))}</td>
-   <td class="num"><div class="pr">${priceText(i)}</div><div class="pills">${offersCell(i)}${stockCell(i)}</div></td>
+  return head+`<tr><td class="c-pic">${pictureCell(i.image,i.product_id,64)}</td>
+   <td class="c-prod" title="${esc(i.name)}"><div class="ptitle">${productTitle(i)}${i.via?' <span class="badge" title="The store words it differently; found through another of its names.">found via another name</span>':''}</div>
+    <div class="meta">${storeLogo(i.store_id,16)} <span>${esc(sname(i.store_id))}</span></div><div class="mobmeta">${esc([i.brand,i.size,i.pack].filter(Boolean).join(' · '))}</div>${refLine(i)}${alsoLine(i)}${barcodeLine(i)}${suggestBlock(i)}${editBox(i)}</td>
+   <td class="c-brandcell">${esc(i.brand||'')}</td><td class="c-sizecell">${esc([i.size,i.pack].filter(Boolean).join(' · '))}</td>
+   <td class="num c-pricecell"><div class="pr">${priceText(i)}</div><div class="pills">${offersCell(i)}${stockCell(i)}</div></td>
    <td class="act"><button class="watch" data-watch="${esc(i.listing_id)}" data-store-id="${esc(i.store_id)}" data-name="${esc(i.name)}"${watched.has(i.listing_id)?' disabled':''}>${watched.has(i.listing_id)?'Watching':'Watch'}</button><button type="button" class="linkbtn" data-open-history="${esc(i.product_id)}">Price history</button></td></tr>`}).join('');
  out.innerHTML=(lastNotes[id]?`<p class="muted small">${esc(lastNotes[id])}</p>`:'')+trouble+bar+`<table><colgroup><col class="c-pic"><col><col class="c-brand"><col class="c-size"><col class="c-price"><col class="c-act"></colgroup><tr><th></th><th>Product</th><th>Brand</th><th>Size</th><th class="num">Price</th><th></th></tr>`+rows+'</table>';
 }

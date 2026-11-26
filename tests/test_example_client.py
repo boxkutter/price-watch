@@ -231,3 +231,15 @@ def test_the_example_client_page_is_served_and_calls_only_the_public_api():
     paths = set(re.findall(r"call\('(?:GET|POST|PUT|DELETE)','(/v1/[^'?]*)", page.text))
     assert paths and not [p for p in paths if p.startswith("/v1/admin")], paths
     assert "X-Client-Token" in page.text and "Authorization" in page.text
+
+
+def test_the_example_client_can_scan_a_barcode_with_the_camera(fresh_db):
+    client = TestClient(app)
+    page = client.get("/demo").text
+    assert 'name="viewport"' in page and "viewport-fit=cover" in page          # made for a phone
+    assert 'data-scan="search-form"' in page and 'data-scan="compare-form"' in page   # the camera buttons
+    assert 'id="scanner"' in page and 'capture="environment"' in page             # live view and photo fallback
+    script = client.get("/vendor/zxing.min.js")
+    assert script.status_code == 200 and script.headers["content-type"].startswith("text/javascript")
+    assert len(script.content) > 200_000 and b"fetch(" not in script.content and b"eval(" not in script.content
+    assert "max-age" in script.headers["cache-control"]

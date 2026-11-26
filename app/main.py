@@ -190,6 +190,13 @@ def demo_page():
     return FileResponse(STATIC / "demo.html")
 
 
+@app.get("/vendor/zxing.min.js", include_in_schema=False)
+def zxing_script():
+    """The barcode-decoding library the example client's camera button loads (see static/vendor)."""
+    return FileResponse(STATIC / "vendor" / "zxing-library-0.21.3.min.js", media_type="text/javascript",
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+
 LIVE_LOOKUP_KINDS = ("search", "compare")  # share one per-user budget of live retailer lookups
 RETRYABLE_JOB_STATES = {"failed", "partial", "paused", "rate_limited", "access_blocked",
                         "extraction_failed", "not_found", "invalid_data", "auth_required"}
