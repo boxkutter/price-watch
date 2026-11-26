@@ -8,7 +8,7 @@ body{font:16px system-ui,sans-serif;max-width:860px;margin:1rem auto;padding:0 1
 header{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;justify-content:space-between;margin-bottom:.4rem}
 h1{font-size:1.3rem;margin:.2rem 0}h2{font-size:1.05rem;margin:.2rem 0 .5rem}
 a,button{font:inherit}button{cursor:pointer;padding:.4rem .7rem}input,select{font:inherit;padding:.4rem}
-.muted{color:#5c6874}.small{font-size:.85rem}.row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.4rem 0}
+[hidden]{display:none!important}.muted{color:#5c6874}.small{font-size:.85rem}.row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.4rem 0}
 nav{display:flex;gap:.3rem;flex-wrap:wrap;border-bottom:1px solid #ccd3db;margin:.6rem 0}
 nav button{border:0;border-bottom:3px solid transparent;background:none;padding:.5rem .8rem}
 nav button.on{border-color:#0b6b3a;font-weight:600}
@@ -20,6 +20,7 @@ section.panel{display:none}section.panel.on{display:block}
 table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.4rem;border-bottom:1px solid #dce1e7;vertical-align:top}
 code,pre{background:#f1f4f7;border-radius:4px}code{padding:0 .25rem}pre{padding:.6rem;overflow:auto;font-size:.85rem}
 .err{color:#a1281a}.chip{border:1px solid #ccd3db;border-radius:1rem;background:#fff;padding:.15rem .6rem;font-size:.85rem}
+details.group{border:1px solid #dce1e7;border-radius:8px;margin:.4rem 0;padding:.3rem .7rem}details.group summary{cursor:pointer;font-weight:600}details.group[open] summary{margin-bottom:.4rem}details.group .list{max-height:18rem;overflow:auto}
 label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid #dce1e7;border-radius:8px;margin:.6rem 0}
 </style>
 <header>
@@ -41,7 +42,7 @@ label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid
  <h2>Your stores</h2>
  <p class="muted small">Tick the stores you shop in. Searches and price comparisons use these.</p>
  <div id="stores"></div>
- <fieldset><legend>Try it offline</legend>
+ <fieldset id="offline" hidden><legend>Try it offline</legend>
   <p class="small">The demo shop is a made-up store whose prices move every minute, so you can watch monitoring work without any real retailer.</p>
   <button id="try-demo">Use the demo shop and search "demo"</button></fieldset>
  <fieldset><legend>Add by product page link</legend>
@@ -50,8 +51,11 @@ label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid
   <div class="row small muted">Examples: <button type="button" class="chip" data-fill="https://demo.example.org/p/oats-1kg">demo oats</button>
    <button type="button" class="chip" data-fill="https://www.citygross.se/matvaror/frukt-och-gront/frukt/%C3%A4pple-ingrid-marie-p100142800_KG">City Gross apple</button></div>
   <div id="link-result" role="status"></div></fieldset>
- <fieldset><legend>Add by name</legend>
-  <form id="search-form" class="row"><input name="q" size="30" required minlength="2" placeholder="e.g. oats"><button>Search my stores</button></form>
+ <fieldset><legend>Search by name or barcode</legend>
+  <form id="search-form" class="row"><input name="q" size="32" required minlength="2" placeholder="name (e.g. havregryn) or barcode digits"><button>Search</button></form>
+  <div id="search-scope" class="small"></div>
+  <div class="row small muted demo-only">Try: <button type="button" class="chip" data-search-fill="demo">demo</button> <button type="button" class="chip" data-search-fill="9999990000019">demo oats barcode</button> <button type="button" class="chip" data-search-fill="9999990000026">demo coffee barcode</button></div>
+  <p class="muted small">Digits only (8 to 14) are treated as a barcode; anything else is searched by name, in Swedish.</p>
   <div id="search-result" role="status"></div></fieldset>
 </section>
 
@@ -59,7 +63,7 @@ label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid
  <h2>Compare in a shop</h2>
  <p class="muted small">Standing in a store? Type the barcode and say where you are. Prices we already know appear at once; live prices follow. Uses the stores you ticked.</p>
  <form id="compare-form" class="row"><input name="gtin" size="18" inputmode="numeric" required placeholder="barcode digits"><select id="compare-here"></select><button>Compare</button></form>
- <div class="row small muted">Demo barcodes: <button type="button" class="chip" data-gtin="9999990000019">demo oats</button> <button type="button" class="chip" data-gtin="9999990000026">demo coffee</button></div>
+ <div class="row small muted demo-only">Demo barcodes: <button type="button" class="chip" data-gtin="9999990000019">demo oats</button> <button type="button" class="chip" data-gtin="9999990000026">demo coffee</button></div>
  <div id="compare-result" role="status"></div>
 </section>
 
@@ -79,7 +83,7 @@ const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const adminToken=sessionStorage.getItem('retailToken');
-let userToken=null,clientToken=null,stores=[],mine=new Set(),monitors=[],names={},events=[],callLog=[],open=new Set(),busy=false;
+let userToken=null,clientToken=null,stores=[],mine=new Set(),monitors=[],names={},events=[],callLog=[],open=new Set(),busy=false,retailerNames={},openGroups=new Set(),groupFilter={},storesHtml='';
 const say=t=>{$('msg').textContent=t||''};
 
 // ---- the client's API helper: user token + client token on every call -----------------------
@@ -113,8 +117,8 @@ $('reset').onclick=async()=>{if(!adminToken){say('Sign in on the admin page firs
 
 // ---- loading -------------------------------------------------------------------------------
 async function loadAll(){
- const [s,m,my,ev]=await Promise.all([call('GET','/v1/stores'),call('GET','/v1/monitors?include_removed=true'),call('GET','/v1/me/stores'),call('GET','/v1/events?limit=200')]);
- stores=s.items;mine=new Set(my.items.map(x=>x.store_id));events=ev.items;
+ const [s,m,my,ev,rt]=await Promise.all([call('GET','/v1/stores'),call('GET','/v1/monitors?include_removed=true'),call('GET','/v1/me/stores'),call('GET','/v1/events?limit=200'),call('GET','/v1/connectors').catch(()=>({items:[]}))]);
+ retailerNames=Object.fromEntries(rt.items.map(x=>[x.id,x.name]));stores=s.items;mine=new Set(my.items.map(x=>x.store_id));events=ev.items;
  monitors=m.items.filter(x=>!x.removed_at);names={};m.items.forEach(x=>names[x.id]=x.name);
  renderStores();renderWatch();renderActivity();
 }
@@ -162,25 +166,42 @@ $('watchlist').onclick=async e=>{
   else if(d.unlink){await call('DELETE','/v1/monitors/'+d.unlink+'/barcode');say('Barcode removed');await loadAll()}
   else if(d.link){await linkBarcode(d.link)}
  }catch(err){say(err.message)}};
-async function linkBarcode(id){
- const input=document.querySelector(`[data-code="${CSS.escape(id)}"]`);const gtin=input.value.trim();if(!gtin){say('Enter the barcode first');return}
+async function linkBarcode(id,typed){
+ const input=document.querySelector(`[data-code="${CSS.escape(id)}"]`);const gtin=(typed!==undefined?typed:input.value).trim();if(!gtin){say('Enter the barcode first');return false}
  const path='/v1/monitors/'+id+'/barcode';
  try{const r=await call('POST',path,{gtin});say('Barcode linked ('+r.outcome+')')}
  catch(err){
   const ex=err.status===409&&err.data&&err.data.details&&err.data.details[0]&&err.data.details[0].existing_product;if(!ex)throw err;
-  if(!confirm(`That barcode already belongs to "${ex.name}" (${ex.retailers.join(', ')||'no store'}). Are they the same item? Merging treats your product as that one.`))return;
+  if(!confirm(`That barcode already belongs to "${ex.name}" (${ex.retailers.join(', ')||'no store'}). Are they the same item? Merging treats your product as that one.`))return false;
   const r=await call('POST',path,{gtin,merge:true});say('Merged ('+r.merged_listings+' listing moved)')}
- await loadAll();
+ await loadAll();return true;
 }
 
 // ---- stores, adding products ---------------------------------------------------------------
 function renderStores(){
  const real=s=>s.retailer_id!=='test.fixture';
- $('stores').innerHTML=stores.filter(real).map(s=>`<label class="inline"><input type="checkbox" data-store="${esc(s.id)}" ${mine.has(s.id)?'checked':''}> ${esc(s.name)} <span class="muted small">${esc(s.retailer_id)}</span></label>`).join('')||'<p class="muted">No stores yet. An administrator registers them on the admin page.</p>';
- const options=stores.filter(real).map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
- const keep=$('link-store').value;$('link-store').innerHTML='<option value="">(store: automatic if only one)</option>'+options;$('link-store').value=keep;
+ const groups={};stores.filter(real).forEach(s=>(groups[s.retailer_id]=groups[s.retailer_id]||[]).push(s));
+ const retailerName=id=>retailerNames[id]||id;
+ const html=Object.keys(groups).sort((a,b)=>retailerName(a).localeCompare(retailerName(b))).map(id=>{
+  const list=groups[id],chosen=list.filter(s=>mine.has(s.id)).length;
+  const picked=chosen&&!openGroups.has(id)?`<div class="muted small">${list.filter(s=>mine.has(s.id)).map(s=>esc(s.name)).join(', ')}</div>`:'';
+  const filter=list.length>8?`<input type="search" placeholder="Find a store in ${esc(retailerName(id))}" data-filter="${esc(id)}" value="${esc(groupFilter[id]||'')}" size="28"> `:'';
+  return `<details class="group" data-group="${esc(id)}" ${openGroups.has(id)?'open':''}><summary>${esc(retailerName(id))} <span class="muted small">${chosen} of ${list.length} selected</span></summary>${picked}${filter}
+   <div class="list">${list.map(s=>`<label class="inline" data-name="${esc(s.name.toLowerCase())}"><input type="checkbox" data-store="${esc(s.id)}" ${mine.has(s.id)?'checked':''}> ${esc(s.name)}</label>`).join('')}</div></details>`}).join('')
+  ||'<p class="muted">No stores yet. An administrator registers them on the admin page.</p>';
+ if(html!==storesHtml){storesHtml=html;$('stores').innerHTML=html;$('stores').querySelectorAll('[data-filter]').forEach(applyFilter)}
+ renderScope();
+ $('offline').hidden=!groups['test.demoshop'];
+ document.querySelectorAll('.demo-only').forEach(x=>x.hidden=!groups['test.demoshop']);   // only offered while the demo shop is enabled
+ const options=Object.keys(groups).filter(id=>groups[id].some(s=>mine.has(s.id))).map(id=>`<optgroup label="${esc(retailerName(id))}">${groups[id].filter(s=>mine.has(s.id)).map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</optgroup>`).join('');
+ const keep=$('link-store').value;$('link-store').innerHTML='<option value="">(store: pick from Your stores)</option>'+options;$('link-store').value=keep;
  const here=$('compare-here').value;$('compare-here').innerHTML='<option value="">I am in: (not specified)</option>'+stores.filter(s=>mine.has(s.id)&&real(s)).map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');$('compare-here').value=here;
 }
+function applyFilter(input){const q=input.value.trim().toLowerCase();
+ input.closest('details').querySelectorAll('label[data-name]').forEach(l=>l.hidden=!!q&&!l.dataset.name.includes(q))}
+$('stores').addEventListener('toggle',e=>{const d=e.target;if(!d.dataset||!d.dataset.group)return;
+ d.open?openGroups.add(d.dataset.group):openGroups.delete(d.dataset.group);renderStores()},true);
+$('stores').addEventListener('input',e=>{const i=e.target;if(!i.dataset.filter)return;groupFilter[i.dataset.filter]=i.value;applyFilter(i)});
 $('stores').onchange=async e=>{const b=e.target;if(!b.dataset.store)return;
  try{await call(b.checked?'PUT':'DELETE','/v1/me/stores/'+b.dataset.store);b.checked?mine.add(b.dataset.store):mine.delete(b.dataset.store);renderStores()}
  catch(err){b.checked=!b.checked;say(err.message)}};
@@ -200,25 +221,88 @@ $('link-form').onsubmit=async e=>{e.preventDefault();const out=$('link-result');
   else out.textContent='Could not add it ('+job.state+'): '+(r.detail||'no details');
  }catch(err){out.textContent=err.message}};
 
-async function searchStores(query,ids){
- const first=await call('POST','/v1/search/jobs',{query,store_ids:ids});const job=await waitJob(first.job_id);return job;
+// Which of my stores a search covers: all of them, or the ones picked here.
+let searchAll=true;const searchPick=new Set();let scopeHtml='';
+const searchIds=()=>searchAll?[...mine]:[...searchPick].filter(id=>mine.has(id));
+function renderScope(){
+ const mineStores=stores.filter(s=>mine.has(s.id)&&s.retailer_id!=='test.fixture');
+ for(const id of [...searchPick])if(!mine.has(id))searchPick.delete(id);
+ const html=!mineStores.length?'<span class="muted">Tick the stores you shop in above, then search them.</span>'
+  :`<div class="row"><b>Search in:</b> <label class="inline"><input type="checkbox" data-scope-all ${searchAll?'checked':''}> All my stores (${mineStores.length})</label></div>`+
+   (searchAll?'':`<div class="row">${mineStores.map(s=>`<label class="inline"><input type="checkbox" data-scope="${esc(s.id)}" ${searchPick.has(s.id)?'checked':''}> ${esc(s.name)}</label>`).join('')}</div>`);
+ if(html!==scopeHtml){scopeHtml=html;$('search-scope').innerHTML=html}
 }
-function showResults(job){
- const out=$('search-result');const items=(job.result&&job.result.items)||[];
- if(!items.length){out.innerHTML='<p class="muted">No products found'+(job.result&&job.result.coverage?': '+esc(job.result.coverage.map(c=>c.status).join(', ')):'')+'.</p>';return}
+$('search-scope').addEventListener('change',e=>{const b=e.target;
+ if(b.dataset.scopeAll!==undefined){searchAll=b.checked;if(!searchAll&&!searchPick.size)mine.forEach(id=>searchPick.add(id))}
+ else if(b.dataset.scope){b.checked?searchPick.add(b.dataset.scope):searchPick.delete(b.dataset.scope)}
+ renderScope()});
+async function runSearch(text,ids){
+ const out=$('search-result');
+ if(!ids.length){out.textContent=mine.size?'Pick at least one store to search in.':'Tick at least one store above first.';return}
+ const digits=text.replace(/[\s-]/g,'');const isCode=/^\d{8,14}$/.test(digits);
+ const items=[],coverage=[];let done=0;
+ try{
+  for(let i=0;i<ids.length;i+=5){          // a search job covers up to 5 stores
+   const chunk=ids.slice(i,i+5);
+   out.textContent=`Searching ${isCode?'barcode '+digits:'"'+text+'"'} in ${ids.length} store(s)${ids.length>5?' ('+done+' done)':''}...`;
+   const first=await call('POST','/v1/search/jobs',isCode?{gtin:digits,store_ids:chunk}:{query:text,store_ids:chunk});
+   const job=await waitJob(first.job_id);const r=job.result||{};
+   items.push(...(r.items||[]));coverage.push(...(r.coverage||[]));done+=chunk.length;
+  }
+  showResults({result:{items,coverage}},'search-result',`Searched ${done} store(s) by ${isCode?'barcode':'name'}.`);
+ }catch(err){
+  if(items.length)showResults({result:{items,coverage}},'search-result',`Stopped after ${done} of ${ids.length} stores: ${err.message}`);
+  else out.textContent=err.message}
+}
+const shortCode=g=>g.replace(/^0+/,'');
+function barcodeCell(i){
+ if(i.barcode)return `<div class="small">Barcode ${esc(shortCode(i.barcode.gtin14))} <span class="muted">(${esc(i.barcode.source)})</span></div>`;
+ return `<div class="small muted">No barcode known. <input data-newcode="${esc(i.listing_id)}" placeholder="barcode" size="13" inputmode="numeric"> <button type="button" data-add-code="${esc(i.listing_id)}" data-store-id="${esc(i.store_id)}" data-name="${esc(i.name)}">Add barcode</button> <span class="muted">(this also watches the product)</span></div>`;
+}
+const lastResults={};let resultSort='barcode';
+function sortedItems(items){
  const sname=id=>(stores.find(s=>s.id===id)||{}).name||'';
- out.innerHTML='<table>'+items.map(i=>`<tr><td>${esc(i.name)}<div class="muted small">${esc(sname(i.store_id))}</div></td><td>${esc(i.current_price)} ${esc(i.currency)}</td><td><button data-watch="${esc(i.listing_id)}" data-store-id="${esc(i.store_id)}" data-name="${esc(i.name)}">Watch</button></td></tr>`).join('')+'</table>';
+ const by=(a,b)=>String(a).localeCompare(String(b),'sv',{sensitivity:'base'});
+ const key={barcode:(a,b)=>(a.barcode?0:1)-(b.barcode?0:1)||by(a.barcode?a.barcode.gtin14:'',b.barcode?b.barcode.gtin14:''),
+  name:(a,b)=>by(a.name,b.name),store:(a,b)=>by(sname(a.store_id),sname(b.store_id))};
+ // like items sit together: the chosen key first, then the other two as tie-breakers
+ const order=[resultSort,...['barcode','name','store'].filter(k=>k!==resultSort)];
+ return [...items].sort((a,b)=>{for(const k of order){const c=key[k](a,b);if(c)return c}return 0});
 }
-$('search-form').onsubmit=async e=>{e.preventDefault();const out=$('search-result');
- try{const ids=[...mine].slice(0,5);if(!ids.length){out.textContent='Tick at least one store above first.';return}
-  out.textContent='Searching...';showResults(await searchStores(new FormData(e.target).get('q').trim(),ids))}catch(err){out.textContent=err.message}};
+function showResults(job,target,note){
+ const id=target||'search-result',out=$(id);const items=(job.result&&job.result.items)||[];lastResults[id]=items;
+ if(!items.length){out.innerHTML='<p class="muted">No products found'+(job.result&&job.result.coverage?': '+esc(job.result.coverage.map(c=>stText[c.status]||c.status).join(', ')):'')+'.</p>';return}
+ const sname=sid=>(stores.find(s=>s.id===sid)||{}).name||'';
+ const watched=new Set(monitors.filter(m=>m.type==='exact_product'&&m.conditions).map(m=>m.conditions.listing_id));
+ const picker=`<label class="small">Sort by <select data-sort>${[['barcode','Barcode'],['name','Name'],['store','Store']].map(([k,l])=>`<option value="${k}"${k===resultSort?' selected':''}>${l}</option>`).join('')}</select></label> <span class="muted small">Same barcode = same item, so sorting by barcode lines up like-for-like across stores.</span>`;
+ out.innerHTML=(note?`<p class="muted small">${esc(note)}</p>`:'')+picker+'<table>'+sortedItems(items).map(i=>`<tr><td>${esc(i.name)}<div class="muted small">${esc(sname(i.store_id))}</div>${barcodeCell(i)}</td><td>${esc(i.current_price)} ${esc(i.currency)}</td><td><button data-watch="${esc(i.listing_id)}" data-store-id="${esc(i.store_id)}" data-name="${esc(i.name)}"${watched.has(i.listing_id)?' disabled':''}>${watched.has(i.listing_id)?'Watching':'Watch'}</button></td></tr>`).join('')+'</table>';
+}
+document.addEventListener('change',e=>{const s=e.target.closest('[data-sort]');if(!s)return;resultSort=s.value;
+ if(lastResults['search-result']&&lastResults['search-result'].length)showResults({result:{items:lastResults['search-result']}},'search-result',(($('search-result').querySelector('p.muted.small')||{}).textContent)||'')});
+$('search-form').onsubmit=async e=>{e.preventDefault();await runSearch(new FormData(e.target).get('q').trim(),searchIds())};
 $('try-demo').onclick=async()=>{const out=$('search-result');
  try{const demo=stores.filter(s=>s.retailer_id==='test.demoshop');if(!demo.length){out.textContent='The demo shop is not installed.';return}
   for(const s of demo)if(!mine.has(s.id)){await call('PUT','/v1/me/stores/'+s.id);mine.add(s.id)}renderStores();
-  out.textContent='Searching the demo shops...';showResults(await searchStores('demo',demo.map(s=>s.id)))}catch(err){out.textContent=err.message}};
-$('search-result').onclick=async e=>{const b=e.target.closest('[data-watch]');if(!b)return;
+  await runSearch('demo',demo.map(s=>s.id))}catch(err){out.textContent=err.message}};
+document.addEventListener('click',e=>{const g=e.target.closest('[data-search-fill]');if(g)document.querySelector('#search-form [name=q]').value=g.dataset.searchFill});
+const watchClick=async e=>{
+ const add=e.target.closest('[data-add-code]');
+ if(add){const out=add.closest('[role=status]');
+  try{const input=out.querySelector(`[data-newcode="${CSS.escape(add.dataset.addCode)}"]`);
+   if(!input.value.trim()){say('Enter the barcode first');return}
+   // A barcode is attached through a monitor you own, so watch the product first if you are not.
+   let mon=monitors.find(m=>m.type==='exact_product'&&m.conditions&&m.conditions.listing_id===add.dataset.addCode);
+   if(!mon)mon=await call('POST','/v1/monitors',{name:add.dataset.name,type:'exact_product',store_id:add.dataset.storeId,conditions:{listing_id:add.dataset.addCode},interval_minutes:60});
+   const done=await linkBarcode(mon.id,input.value);
+   if(done){const row=add.closest('tr');const w=row&&row.querySelector('[data-watch]');if(w){w.textContent='Watching';w.disabled=true}
+    const item=(lastResults[out.id]||[]).find(x=>x.listing_id===add.dataset.addCode);if(item)item.barcode={gtin14:input.value.trim().padStart(14,'0'),source:'user'};
+    add.closest('div').innerHTML='Barcode '+esc(shortCode(input.value.trim()))+' <span class="muted">(you added it)</span>'}
+  }catch(err){say(err.message)}
+  return}
+ const b=e.target.closest('[data-watch]');if(!b)return;
  try{await call('POST','/v1/monitors',{name:b.dataset.name,type:'exact_product',store_id:b.dataset.storeId,conditions:{listing_id:b.dataset.watch},interval_minutes:60});
   b.textContent='Watching';b.disabled=true;await loadAll();say('Added to your watchlist.')}catch(err){say(err.message)}};
+$('search-result').onclick=watchClick;
 
 // ---- comparing in a shop -------------------------------------------------------------------
 const stText={unknown:'not checked yet',not_found:'does not sell it',unknown_mapping:'cannot search by barcode here',paused:'paused',disabled:'disabled',rate_limited:'busy, try later',unsupported:'unavailable'};

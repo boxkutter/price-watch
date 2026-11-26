@@ -109,6 +109,15 @@ async function refresh(){
   events.items.map(x=>`<tr><td>${escaped(x.type)}</td><td>${escaped(x.created_at)}</td></tr>`).join('')+'</table>';
 }
 
+function discoveryLine(c){
+ const d=c.last_discovery;if(!d||!c.capabilities||c.capabilities.store_discovery!=='supported')return '';
+ const inputs=Object.values(d.inputs||{}).join(', ');const what='Last store lookup'+(inputs?` (${escaped(inputs)})`:'');
+ const when=d.created_at?' <span class="muted small">'+escaped(d.created_at)+'</span>':'';
+ if(['queued','running','retry_wait'].includes(d.state))return `<div class="small">${what}: working on it...${when}</div>`;
+ const r=d.result||{};
+ if(d.state==='succeeded')return `<div class="small">${what}: found ${r.stores} store(s), ${r.created} new, ${r.updated} renamed. They are now listed for every user.${when}</div>`;
+ return `<div class="warn small">${what} failed (${escaped(d.state)}): ${escaped(r.detail||'no details')}${when}</div>`;
+}
 const statusText={ready:'Ready',disabled:'Disabled',paused:'Paused',needs_configuration:'Needs configuration',error:'Error',not_installable:'Not installable'};
 function settingRow(c,x){
  const where=x.configured?(x.source==='admin'?'set here':'set in the environment'):(x.required?'missing':'not set');
@@ -129,7 +138,8 @@ function connectorCard(c){
   ${c.load_error?`<div class="warn">Failed to load: ${escaped(c.load_error)}</div>`:''}
   ${c.paused?`<div class="warn">Paused: ${escaped(c.pause_reason||'')}</div>`:''}
   ${c.access_note?`<div class="muted small">${escaped(c.access_note)}</div>`:''}
-  <div class="muted small">${c.stores} store(s), ${c.active_monitors} active monitor(s). Contacts: ${escaped((c.allowed_hosts||[]).join(', ')||'nothing')}.${c.overridden?' Enabled state set by an administrator.':''}</div>
+  ${discoveryLine(c)}
+  <div class="muted small">${c.stores} store(s) listed for users, ${c.active_monitors} active monitor(s). Contacts: ${escaped((c.allowed_hosts||[]).join(', ')||'nothing')}.${c.overridden?' Enabled state set by an administrator.':''}</div>
   <div class="row">
    ${c.installable&&!c.load_error?(c.enabled?`<button data-act="disable" data-id="${id}">Disable</button>`:`<button data-act="enable" data-id="${id}">Enable</button>`):''}
    ${c.installable&&c.enabled?(c.paused?`<button data-act="resume" data-id="${id}">Resume</button>`:`<button data-act="pause" data-id="${id}">Pause</button>`):''}
@@ -154,7 +164,8 @@ $('connectors').addEventListener('click',async event=>{
     await api(`/v1/admin/connector-packages/${id}?disable_monitors=true`,{method:'DELETE'});say(`Removed ${id}`)}
    else if(act==='discover'){
     const body={};document.querySelectorAll(`[data-discover-input^="${CSS.escape(id)}|"]`).forEach(i=>{if(i.value.trim())body[i.dataset.discoverInput.split('|')[1]]=i.value.trim()});
-    const r=await api(`/v1/admin/retailers/${id}/stores/discover`,{method:'POST',body:JSON.stringify(body)});say('Store lookup queued ('+r.job_id.slice(0,8)+'); it runs in the worker')}
+    const r=await api(`/v1/admin/retailers/${id}/stores/discover`,{method:'POST',body:JSON.stringify(body)});say('Store lookup queued; waiting for the worker...');
+    await refresh();watchDiscovery(r.job_id)}
    else{await api(`/v1/admin/connectors/${id}/${act}`,{method:'POST'});say(`${act} ${id}: done`)}
   }else if(b.dataset.settingSave){
    const [id,name]=b.dataset.settingSave.split('|');
@@ -168,6 +179,14 @@ $('connectors').addEventListener('click',async event=>{
   await refresh();
  }catch(error){say(error.message)}
 });
+async function watchDiscovery(jobId){
+ let job={state:'queued'};
+ for(let i=0;i<40&&['queued','running','retry_wait'].includes(job.state);i++){await sleep(1500);job=await api('/v1/jobs/'+jobId)}
+ const r=job.result||{};
+ say(job.state==='succeeded'?`Store lookup done: ${r.stores} found, ${r.created} new.`
+  :['queued','running','retry_wait'].includes(job.state)?'The store lookup is still waiting for the worker.':`Store lookup failed (${job.state}): ${r.detail||'no details'}`);
+ await refresh();
+}
 let staged=null;
 function renderPreview(r){
  const p=r.package;staged=r.upload_id;

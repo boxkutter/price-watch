@@ -817,7 +817,9 @@ def stores(db: Session = Depends(get_db), p: Principal = Depends(principal)):
     p.require("catalogue:read")
     return {"items": [{"id": s.id, "name": s.name, "retailer_id": s.retailer_id,
                        "country": s.country}
-                      for s in db.scalars(select(Store).order_by(Store.retailer_id, Store.name))]}
+                      for s in db.scalars(select(Store).where(
+                          Store.retailer_id.in_(connector_state.enabled_ids(db)))
+                          .order_by(Store.retailer_id, Store.name))]}
 
 
 @app.get("/v1/retailers/{retailer_id}/stores")
@@ -826,7 +828,9 @@ def retailer_stores(retailer_id: str, db: Session = Depends(get_db),
     p.require("catalogue:read")
     return {"items": [{"id": s.id, "name": s.name, "retailer_id": s.retailer_id,
                        "country": s.country, "timezone": s.timezone} for s in
-                      db.scalars(select(Store).where(Store.retailer_id == retailer_id))]}
+                      db.scalars(select(Store).where(
+                          Store.retailer_id == retailer_id,
+                          Store.retailer_id.in_(connector_state.enabled_ids(db))))]}
 
 
 @app.get("/v1/stores/{store_id}")
@@ -1344,7 +1348,9 @@ def my_stores(db: Session = Depends(get_db), p: Principal = Depends(principal)):
     """The stores you compare prices across (see POST /v1/compare/barcode)."""
     p.require("monitors:read")
     rows = db.execute(select(Store).join(UserStore, UserStore.store_id == Store.id)
-                      .where(UserStore.user_id == p.user.id).order_by(Store.name)).scalars()
+                      .where(UserStore.user_id == p.user.id,
+                             Store.retailer_id.in_(connector_state.enabled_ids(db)))
+                      .order_by(Store.name)).scalars()
     return {"items": [{"store_id": s.id, "name": s.name, "retailer_id": s.retailer_id} for s in rows]}
 
 

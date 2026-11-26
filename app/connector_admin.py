@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app import connector_state
 from app.connectors import registry
-from app.models import ConnectorPackage, ConnectorSetting, Monitor, Store, utcnow
+from app.models import ConnectorPackage, ConnectorSetting, Job, Monitor, Store, utcnow
 from app.security import decrypt_secret, encrypt_secret
 
 
@@ -96,7 +96,20 @@ def status_of(db: Session, info: dict) -> str:
     return "ready"
 
 
+def last_discoveries(db: Session) -> dict[str, dict]:
+    """The most recent store lookup per connector, so the admin page can show what it did."""
+    latest: dict[str, dict] = {}
+    for job in db.scalars(select(Job).where(Job.kind == "discover_stores")
+                          .order_by(Job.created_at.desc()).limit(200)):
+        payload = job.payload or {}
+        latest.setdefault(payload.get("retailer_id", ""), {
+            "job_id": job.id, "state": job.state, "inputs": payload.get("inputs") or {},
+            "created_at": job.created_at, "result": job.result})
+    return latest
+
+
 def admin_view(db: Session) -> dict:
+    discoveries = last_discoveries(db)
     stores = dict(db.execute(select(Store.retailer_id, func.count()).group_by(Store.retailer_id)).all())
     monitors = dict(db.execute(
         select(Store.retailer_id, func.count()).select_from(Monitor)
@@ -119,6 +132,7 @@ def admin_view(db: Session) -> dict:
             "status": status_of(db, info),
             "paused": state.state == "paused", "pause_reason": state.reason,
             "settings": settings_status(db, info["id"]),
+            "last_discovery": discoveries.get(info["id"]),
             "stores": stores.get(info["id"], 0), "active_monitors": monitors.get(info["id"], 0),
             "installed_at": package.installed_at if package else None,
         })

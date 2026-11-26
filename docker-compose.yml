@@ -2,12 +2,20 @@ services:
   api:
     build: .
     env_file: .env
-    command: sh -c "alembic upgrade head && python -m app.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "alembic upgrade head && python -m app.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --reload-dir connectors"
     ports: ["127.0.0.1:8085:8000"]
-    # connectors/ is mounted read-only so adding or removing a folder on the host takes effect without
-    # a rebuild; connectors_data holds the ones installed from the admin page. The `z` label lets
-    # SELinux hosts (Fedora, RHEL) read the mount; other systems ignore it.
-    volumes: ["./connectors:/service/connectors:ro,z", "connectors_data:/data/connectors"]
+    # Development runs from the source tree, not the image: the code folders are mounted read-only
+    # and uvicorn reloads on every change (static pages are read per request, so they update on a
+    # browser refresh). Rebuild only when requirements.lock or the Dockerfile change.
+    # connectors_data holds the connectors installed from the admin page. The `z` label lets
+    # SELinux hosts (Fedora, RHEL) read the mounts; other systems ignore it.
+    volumes:
+      - ./app:/service/app:ro,z
+      - ./connectors:/service/connectors:ro,z
+      - ./static:/service/static:ro,z
+      - ./migrations:/service/migrations:ro,z
+      - ./docs/api.md:/service/docs/api.md:ro,z
+      - connectors_data:/data/connectors
     depends_on:
       postgres: {condition: service_healthy}
     healthcheck:
@@ -19,8 +27,12 @@ services:
   worker:
     build: .
     env_file: .env
-    command: python -m app.worker
-    volumes: ["./connectors:/service/connectors:ro,z", "connectors_data:/data/connectors"]
+    # Restarts itself when the source changes.
+    command: watchfiles --filter python "python -m app.worker" app connectors
+    volumes:
+      - ./app:/service/app:ro,z
+      - ./connectors:/service/connectors:ro,z
+      - connectors_data:/data/connectors
     depends_on:
       api: {condition: service_healthy}
     restart: unless-stopped

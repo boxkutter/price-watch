@@ -89,7 +89,10 @@ def process_search(db: Session, job: Job) -> dict:
                     barcode_found = barcode_found or normalize_gtin(item.gtin) == gtin14
                 except ValueError:
                     pass
+            product = db.get(Product, listing.product_id) if listing.product_id else None
             items.append({"product_id": listing.product_id, "listing_id": listing.id,
+                          "barcode": ({"gtin14": product.gtin14, "source": product.gtin_source}
+                                      if product and product.gtin14 else None),
                           "store_id": store.id, "channel": channel, "name": item.name,
                           "current_price": str(item.current_price), "currency": item.currency})
     complete = all(scope["status"] in ("complete", "not_found") for scope in coverage)

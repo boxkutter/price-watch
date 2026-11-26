@@ -38,6 +38,11 @@ def is_enabled(db: Session, retailer_id: str) -> bool:
     return state.enabled if state is not None and state.enabled is not None else entry.manifest.enabled
 
 
+def enabled_ids(db: Session) -> list[str]:
+    """The connectors users can see: only these retailers' stores are listed."""
+    return [info["id"] for info in registry.retailers() if is_enabled(db, info["id"])]
+
+
 def set_enabled(db: Session, retailer_id: str, enabled: bool | None) -> None:
     state = get_state(db, retailer_id)
     state.enabled, state.updated_at = enabled, utcnow()

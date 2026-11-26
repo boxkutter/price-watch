@@ -112,6 +112,10 @@ def test_disabling_a_connector_stops_all_requests_and_new_monitors_and_enabling_
     refused = monitor(cg, "generic_product", query="mjölk")
     assert refused.status_code == 422 and "disabled" in refused.json()["message"]
     assert cg.client.post("/v1/admin/retailers/se.citygross/stores/discover").status_code == 404
+    # its stores disappear for users (list, per-retailer list and "my stores") and return with it
+    assert cg.store_id not in [s["id"] for s in cg.client.get("/v1/stores").json()["items"]]
+    assert cg.client.get("/v1/retailers/se.citygross/stores").json()["items"] == []
+    assert cg.client.get("/v1/me/stores").json()["items"] == []
     shown = {i["id"]: i for i in cg.client.get("/v1/admin/connectors").json()["items"]}
     assert shown["se.citygross"]["overridden"] and shown["se.citygross"]["default_enabled"]
     assert next(i for i in cg.client.get("/v1/connectors").json()["items"]
@@ -213,6 +217,9 @@ def test_the_full_lifecycle_install_configure_enable_use_update_and_remove(lab):
     ns = SimpleNamespace(client=lab.client)
     found = job_of(ns, lab.client.post("/v1/admin/retailers/ex.exampleshop/stores/discover"))
     assert found["result"]["status"] == "success" and found["result"]["stores"] == 1
+    card = listing(lab)["ex.exampleshop"]    # the admin card reports what the lookup did
+    assert card["stores"] == 1 and card["last_discovery"]["state"] == "succeeded"
+    assert card["last_discovery"]["result"]["created"] == 1
     store_id = next(s["id"] for s in lab.client.get("/v1/stores").json()["items"]
                     if s["retailer_id"] == "ex.exampleshop")
     ns.store_id = store_id

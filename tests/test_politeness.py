@@ -117,6 +117,9 @@ def test_barcode_search_finds_the_product_and_records_a_verified_mapping(cg):
     (item,) = result["result"]["items"]
     assert item["name"] == "Havregryn 1,5KG AXA" and item["current_price"] == "19.95"
     assert cg.client.get(f"/v1/products/barcode/{AXA}").json()["id"] == item["product_id"]
+    assert item["barcode"]["gtin14"].endswith(AXA.lstrip("0"))    # results carry the barcode
+    by_name = search(cg, query="havregryn")["result"]["items"][0]
+    assert "barcode" in by_name    # null when no barcode is known, which the page offers to add
     unknown = search(cg, gtin="4006381333931")
     assert unknown["result"]["items"] == [] and unknown["result"]["barcode_mapping"] == "unknown"
     assert unknown["result"]["coverage"][0]["status"] == "not_found"
