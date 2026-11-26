@@ -72,6 +72,9 @@ button.primary{background:#0b6b3a;color:#fff;border:0;border-radius:8px;padding:
 .scanbar{position:absolute;left:0;right:0;bottom:0;padding:1rem 1rem max(1.2rem,env(safe-area-inset-bottom));text-align:center;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.7))}
 .scanbar p{margin:0 0 .7rem}.scanbar button{font:inherit;padding:.7rem 1.2rem;border-radius:10px;border:1px solid rgba(255,255,255,.7);background:rgba(0,0,0,.35);color:#fff}
 /* ---- phones and small windows ---- */
+fieldset{min-width:0;max-width:100%;box-sizing:border-box}input,select,textarea{max-width:100%;box-sizing:border-box}
+body,main{overflow-wrap:anywhere}pre{max-width:100%}
+#link-form{display:flex;flex-wrap:wrap;gap:.5rem}#link-form input[name=url]{flex:1 1 20rem;min-width:0}#link-form select{flex:1 1 12rem;min-width:0}#link-form input[name=maximum_price]{flex:0 1 8rem;min-width:0}
 .mobmeta{display:none}#hx-hit{touch-action:pan-y}html{-webkit-text-size-adjust:100%}
 @media (max-width:760px){
  body{margin:.4rem auto;padding:0 max(.75rem,env(safe-area-inset-left))}
@@ -96,6 +99,8 @@ button.primary{background:#0b6b3a;color:#fff;border:0;border-radius:8px;padding:
  #search-result td.c-pic{grid-area:pic}#search-result td.c-prod{grid-area:prod}
  #search-result td.c-brandcell,#search-result td.c-sizecell{display:none}
  .intro{display:none}
+ #watchlist .card>.row:last-of-type button{flex:1 1 auto;min-height:44px;white-space:nowrap;padding:.4rem .5rem}
+ #link-form input[name=url],#link-form select{flex:1 1 100%}#link-form input[name=maximum_price]{flex:1 1 6rem}
  .mobmeta{display:block;color:#44505c;font-size:.9rem;margin-top:.1rem}
  #search-result td.c-pricecell{grid-area:price;text-align:left;display:flex;align-items:baseline;gap:.4rem .8rem;flex-wrap:wrap;margin-top:.2rem}
  #search-result td.c-pricecell .pills{flex-direction:row;flex-wrap:wrap;margin-top:0}

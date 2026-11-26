@@ -262,3 +262,11 @@ def test_accepting_an_invitation_returns_the_email_so_the_page_can_sign_the_new_
     signed_in = TestClient(app).post("/v1/auth/login", json={
         "email": accepted.json()["email"], "password": "a-long-enough-password"})
     assert signed_in.status_code == 200
+
+
+def test_no_box_or_field_can_make_the_page_wider_than_a_phone_screen(fresh_db):
+    page = TestClient(app).get("/demo").text
+    # a fieldset will not shrink below its contents unless told to, and a 46-character field
+    # inside one is what once made the Watchlist scroll sideways on a phone
+    assert "fieldset{min-width:0;max-width:100%" in page
+    assert "input,select,textarea{max-width:100%;box-sizing:border-box}" in page
