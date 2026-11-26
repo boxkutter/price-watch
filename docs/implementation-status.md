@@ -93,7 +93,7 @@ The aim is that the service never behaves like a crawler or an abusive client.
 | Spacing | At least 3 s between requests to City Gross, one at a time (`minimum_request_interval_seconds` in the manifest) |
 | Per scan | At most 6 requests (`max_requests_per_scan`); a search fetches at most 80 results; a result limit is reported as `truncated` |
 | Per day | At most 400 requests per retailer per rolling 24 hours (`max_requests_per_day`), kept in the database so it holds across processes and restarts |
-| Duplicates | Identical store/search/SKU requests within 10 minutes share one fetch (`cache_seconds`) |
+| Duplicates | Identical store/search/SKU requests within an hour share one fetch (`cache_seconds`, 3600) |
 | Scheduling | Monitor checks are at least 60 minutes apart for City Gross, and next-due times get up to 10% random jitter so checks do not synchronise |
 | Refusals | A 401/403/redirect pauses the connector for review (`access_blocked`); it is never retried or worked around. A 429 starts a cooldown that honours `Retry-After` (minimum 60 s, default 15 min). Five consecutive extraction failures pause it too. Resume with `POST /v1/admin/connectors/{id}/resume` |
 | Network errors | Retried by the job queue with exponential backoff, at most 5 attempts |

@@ -396,3 +396,15 @@ class RetailerLogo(Base):
     height: Mapped[int] = mapped_column(Integer)
     updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class JobProgress(Base):
+    """What a running job is doing right now ("Searching City Gross Höör"), so a client can show it.
+    Written on its own connection while the job's transaction is open, hence no foreign key (it would
+    wait for the job's lock) and a table of its own. Rows are tiny and purged when old."""
+    __tablename__ = "job_progress"
+    job_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    text: Mapped[str] = mapped_column(String(200))
+    done: Mapped[int] = mapped_column(Integer, default=0)
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

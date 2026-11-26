@@ -84,6 +84,7 @@ class Collected:
     truncated: bool = False        # more results exist than were fetched
     fetched: int = 0               # raw items fetched (for the truncation note)
     skipped: int = 0               # items dropped because their price was unknown
+    next_skip: int | None = None   # where the next page of results starts, when there is one
     notes: list[str] = field(default_factory=list)  # why something was left out, shown to the person
 
 
@@ -177,6 +178,7 @@ class HttpJsonConnector:
             # A missing product is unknown, not proof of discontinuation.
             status = "not_found" if not collected.prices else "partial"
             return Snapshot(collected.prices, collected.offers, False, source, status, detail,
-                            tuple(collected.missing), collected.truncated, True, requests)
+                            tuple(collected.missing), collected.truncated, True, requests,
+                            next_skip=collected.next_skip)
         return Snapshot(collected.prices, collected.offers, True, source, "", detail, (),
-                        collected.truncated, True, requests)
+                        collected.truncated, True, requests, next_skip=collected.next_skip)

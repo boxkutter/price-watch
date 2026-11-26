@@ -117,21 +117,25 @@ class CoopConnector(HttpJsonConnector):
             raise ExtractionError("Unexpected response")
         return results["items"], int(results.get("count") or 0)
 
-    def _query(self, store: str, text: str) -> tuple[list[dict], bool]:
-        """Search results up to the cap. A short page is the reliable end signal."""
-        found, skip = [], 0
-        while self.client.budget_left() > 0 and len(found) < self.max_results:
+    def _query(self, store: str, text: str, skip: int = 0,
+               take: int | None = None) -> tuple[list[dict], bool, int | None]:
+        """Search results from `skip`, up to `take` (default: the cap). A short page is the reliable
+        end signal. Returns (items, truncated, next_skip)."""
+        limit = min(take or self.max_results, self.max_results)
+        found, offset = [], skip
+        while self.client.budget_left() > 0 and len(found) < limit:
+            size = min(PAGE_SIZE, limit - len(found))
             body = {"query": text[:100],
-                    "resultsOptions": {"skip": skip, "take": PAGE_SIZE, "sortBy": [], "facets": []},
+                    "resultsOptions": {"skip": offset, "take": size, "sortBy": [], "facets": []},
                     "relatedResultsOptions": {"skip": 0, "take": 0},
                     "customData": {"consent": False}}  # no personalisation
             items, count = self._items(self.client.post_json(
                 SEARCH_URL, body, self._params(store), self._headers()))
             found += items
-            skip += len(items)
-            if len(items) < PAGE_SIZE or skip >= count:
-                return found, False
-        return found, True
+            offset += len(items)
+            if len(items) < size or offset >= count:
+                return found, False, None
+        return found, True, offset
 
     def _by_id(self, store: str, ids: list[str]) -> dict[str, dict]:
         found: dict[str, dict] = {}
@@ -144,9 +148,9 @@ class CoopConnector(HttpJsonConnector):
     def collect(self, store: str, request: ScanRequest) -> Collected:
         raw: dict[str, dict] = {}
         missing: list[str] = []
-        truncated = False
+        truncated, next_skip = False, None
         if request.query:
-            items, truncated = self._query(store, request.query)
+            items, truncated, next_skip = self._query(store, request.query, request.skip, request.take)
             raw.update((str(item.get("ean") or item.get("id")), item) for item in items)
         candidates = {gtin: _gtin_candidates(gtin) for gtin in request.gtins}
         ids = list(dict.fromkeys([*request.skus, *(c for cs in candidates.values() for c in cs)]))
@@ -165,4 +169,4 @@ class CoopConnector(HttpJsonConnector):
                     missing.append(gtin)
         prices = [price for item in raw.values() if (price := parse_item(item))]
         return Collected(prices=prices, missing=tuple(missing), truncated=truncated,
-                         fetched=len(raw), skipped=len(raw) - len(prices))
+                         fetched=len(raw), skipped=len(raw) - len(prices), next_skip=next_skip)

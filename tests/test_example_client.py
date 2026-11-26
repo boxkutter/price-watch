@@ -270,3 +270,44 @@ def test_no_box_or_field_can_make_the_page_wider_than_a_phone_screen(fresh_db):
     # inside one is what once made the Watchlist scroll sideways on a phone
     assert "fieldset{min-width:0;max-width:100%" in page
     assert "input,select,textarea{max-width:100%;box-sizing:border-box}" in page
+
+
+def test_the_admin_people_tables_are_narrow_enough_for_any_screen(fresh_db):
+    page = TestClient(app).get("/admin").text
+    assert "<th>Sessions</th>" not in page and "<th>Last signed in</th>" not in page   # the ten-column table is gone
+    assert "main,section{min-width:0}" in page and "td.act{text-align:right" in page
+    assert "#users tr{display:grid" in page                                               # stacked on a phone
+    assert "<th>Created</th>" not in page and "<th>Permissions</th>" not in page          # clients: one cell each
+    assert "<th>State</th>" not in page and "pre{max-width:100%;white-space:pre-wrap" in page   # jobs, and tokens wrap
+
+
+def test_a_search_result_is_a_compact_card_on_a_phone_with_the_rest_folded_away(fresh_db):
+    page = TestClient(app).get("/demo").text
+    # the row names its parts so a phone can show: name and price, brand/size and offer, store and Details
+    for needle in ('class="moreinfo"', 'class="mobmeta"', 'class="moreline"', 'data-more=', 'class="pextra"', 'class="stockwrap"'):
+        assert needle in page, needle
+    assert 'grid-template-areas:"pic title price" "pic meta offers" "more more watch" "extra extra extra"' in page
+    assert "#search-result tr.open .moreinfo{display:block" in page             # Details unfolds the rest
+    assert ".mobmeta,.moreline,.mobtools,.mobonly{display:none}" in page        # the desktop table is untouched
+
+
+def test_the_shared_word_list_lives_at_the_bottom_of_your_stores(fresh_db):
+    page = TestClient(app).get("/demo").text
+    stores_tab = page[page.index('id="tab-stores"'):]
+    stores_tab = stores_tab[:stores_tab.index("</section>")]
+    assert 'id="stores"' in stores_tab and 'id="words"' in stores_tab
+    assert stores_tab.index('id="stores"') < stores_tab.index('id="words"')       # after the store list
+    lookup = page[page.index('id="tab-add"'):page.index('id="tab-compare"')]
+    assert 'id="words"' not in lookup
+
+
+def test_a_broad_search_offers_show_more_for_the_stores_with_further_results(fresh_db):
+    page = TestClient(app).get("/demo").text
+    assert "data-more-results" in page and "function moreBar" in page
+    assert "skip:Object.fromEntries" in page                      # the next page starts where the last one ended
+    assert "timed_out:" in page                                   # a store the search ran out of time for is named
+
+
+def test_search_results_can_be_refreshed_past_the_stores_hour_long_cache(fresh_db):
+    page = TestClient(app).get("/demo").text
+    assert "data-refresh-results" in page and "{fresh:true}" in page

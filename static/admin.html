@@ -16,6 +16,11 @@ input,button{font:inherit;padding:.45rem}button{cursor:pointer}pre{overflow:auto
 label.inline{display:flex;gap:.4rem;align-items:center}.logo{display:inline-flex;align-items:center;justify-content:center;border-radius:6px;color:#fff;font-weight:700;vertical-align:middle;flex:none;letter-spacing:-.02em}img.logo{background:#fff;border:1px solid #dce1e7;padding:1px}
 .storecount{font-size:1.1rem;margin:.1rem 0 .3rem}
 .nw{white-space:nowrap}
+main,section{min-width:0}td,th{overflow-wrap:anywhere}td.act{text-align:right;white-space:nowrap;width:1%}input,select{max-width:100%;box-sizing:border-box}pre{max-width:100%;white-space:pre-wrap;word-break:break-all}
+@media (max-width:640px){body{margin:1rem auto;padding:0 .6rem}section{padding:.7rem}h1{font-size:1.4rem}
+ #users table,#users tbody{display:block}#users tr:has(th){display:none}
+ #users tr{display:grid;grid-template-columns:1fr auto;gap:.3rem .6rem;align-items:center;padding:.6rem 0;border-bottom:1px solid #dce1e7}#users td{display:block;border:0;padding:0;width:auto}
+ #users td:first-child{grid-column:1/-1}#users td.small{overflow-wrap:normal}}
 code{background:#f1f4f7;padding:0 .25rem;border-radius:3px}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.5rem;border-bottom:1px solid #dce1e7}
 </style>
 <h1>Price Watch</h1>
@@ -56,8 +61,8 @@ async function refresh(){
  $('login-section').hidden=true;$('dashboard').hidden=false;
  renderConnectors(connectors);
  renderPeople(me,users,invitations,clients);
- $('jobs').innerHTML='<table><tr><th>Kind</th><th>State</th><th>Created</th><th>Action</th></tr>'+
-  jobs.items.map(x=>`<tr><td>${escaped(x.kind)}</td><td>${escaped(x.state)}</td><td>${escaped(x.created_at)}</td><td>${['failed','partial','paused','rate_limited','access_blocked','extraction_failed','not_found','invalid_data','auth_required'].includes(x.state)?`<button data-retry="${escaped(x.id)}">Retry</button>`:''}</td></tr>`).join('')+'</table>';
+ const retryable=['failed','partial','paused','rate_limited','access_blocked','extraction_failed','not_found','invalid_data','auth_required'];
+ $('jobs').innerHTML=jobs.items.length?'<table><tr><th>Job</th><th></th></tr>'+jobs.items.map(x=>`<tr><td><b>${escaped(x.kind)}</b> <span class="badge ${x.state==='succeeded'?'ready':retryable.includes(x.state)?'error':''}">${escaped(x.state)}</span><div class="small muted">${escaped(when(x.created_at))}</div></td><td class="act">${retryable.includes(x.state)?`<button data-retry="${escaped(x.id)}">Retry</button>`:''}</td></tr>`).join('')+'</table>':'<p class="muted small">No jobs yet.</p>';
  $('jobs').querySelectorAll('[data-retry]').forEach(button=>button.onclick=async()=>{
   try{await api('/v1/admin/jobs/'+button.dataset.retry+'/retry',{method:'POST'});await refresh()}
   catch(error){$('message').textContent=error.message}});
@@ -65,11 +70,21 @@ async function refresh(){
 
 const when=d=>d?new Date(/Z|[+-]\d\d:?\d\d$/.test(d)?d:d+'Z').toLocaleString('sv-SE',{dateStyle:'short',timeStyle:'short'}):'never';
 function renderPeople(me,users,invitations,clients){
- $('users').innerHTML='<table><tr><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th>Last signed in</th><th>Sessions</th><th>Monitors</th><th>Stores</th><th>Apps</th><th></th></tr>'+
-  users.items.map(u=>`<tr${u.enabled?'':' class="muted"'}><td>${escaped(u.email)}${u.id===me.id?' <span class="badge">you</span>':''}</td><td>${u.is_admin?'Administrator':'User'}</td><td>${u.enabled?'Active':'<span class="warn">Disabled</span>'}</td><td class="nw">${escaped(when(u.created_at))}</td><td class="nw">${escaped(when(u.last_signed_in_at))}</td><td>${u.active_sessions}</td><td>${u.monitors}</td><td>${u.stores}</td><td>${u.apps}</td><td>${u.id===me.id?'':u.enabled?`<button data-user-disable="${escaped(u.id)}" data-email="${escaped(u.email)}">Disable</button>`:`<button data-user-enable="${escaped(u.id)}">Enable</button>`}</td></tr>`).join('')+'</table>'
+ // a few wide-enough columns, with the detail under the name, so nothing needs sideways scrolling
+ const day=d=>d?when(d).slice(0,10):'never';
+ $('users').innerHTML='<table><tr><th>User</th><th>Uses</th><th></th></tr>'+
+  users.items.map(u=>`<tr${u.enabled?'':' class="muted"'}><td><b>${escaped(u.email)}</b>
+   ${u.id===me.id?'<span class="badge">you</span>':''}${u.is_admin?'<span class="badge">administrator</span>':''}${u.enabled?'':'<span class="badge disabled">disabled</span>'}
+   <div class="small muted">Joined ${escaped(day(u.created_at))} &middot; last signed in ${escaped(when(u.last_signed_in_at))}</div></td>
+   <td class="small">${u.monitors} monitor${u.monitors===1?'':'s'}, ${u.stores} store${u.stores===1?'':'s'}<br>${u.apps} app${u.apps===1?'':'s'}, ${u.active_sessions} session${u.active_sessions===1?'':'s'}</td>
+   <td class="act">${u.id===me.id?'':u.enabled?`<button data-user-disable="${escaped(u.id)}" data-email="${escaped(u.email)}">Disable</button>`:`<button data-user-enable="${escaped(u.id)}">Enable</button>`}</td></tr>`).join('')+'</table>'
   +'<p class="muted small">Sessions are sign-ins that are still valid. Apps are client applications the user has let in. Disabling a user ends their sessions; their data is kept.</p>';
- $('invitations').innerHTML=invitations.items.length?'<table><tr><th>Email</th><th>Status</th><th>Expires</th><th>Invited by</th><th></th></tr>'+invitations.items.map(i=>`<tr${i.status==='pending'?'':' class="muted"'}><td>${escaped(i.email)}</td><td>${i.status==='used'?'Registered '+escaped(when(i.used_at)):i.status==='expired'?'Expired':'<b>Waiting</b>'}</td><td>${escaped(when(i.expires_at))}</td><td>${escaped(i.invited_by||'')}</td><td>${i.status==='pending'?`<button data-invite-revoke="${escaped(i.id)}">Withdraw</button>`:''}</td></tr>`).join('')+'</table>':'<p class="muted small">No invitations yet.</p>';
- $('clients').innerHTML=clients.items.length?'<table><tr><th>Name</th><th>Permissions</th><th>Users</th><th>Created</th><th></th></tr>'+clients.items.map(c=>`<tr${c.revoked_at?' class="muted"':''}><td>${escaped(c.name)}</td><td class="small">${escaped((c.scopes||[]).join(', '))}</td><td>${c.users}</td><td>${escaped(when(c.created_at))}</td><td>${c.revoked_at?'Revoked':`<button data-client-revoke="${escaped(c.id)}" data-name="${escaped(c.name)}">Revoke</button>`}</td></tr>`).join('')+'</table>':'<p class="muted small">No client applications yet.</p>';
+ $('invitations').innerHTML=invitations.items.length?'<table><tr><th>Invitation</th><th></th></tr>'+invitations.items.map(i=>`<tr${i.status==='pending'?'':' class="muted"'}><td><b>${escaped(i.email)}</b> ${i.status==='used'?'<span class="badge">registered</span>':i.status==='expired'?'<span class="badge disabled">expired</span>':'<span class="badge ready">waiting</span>'}
+   <div class="small muted">${i.status==='used'?'Registered '+escaped(when(i.used_at)):'Expires '+escaped(when(i.expires_at))}${i.invited_by?' &middot; invited by '+escaped(i.invited_by):''}</div></td>
+   <td class="act">${i.status==='pending'?`<button data-invite-revoke="${escaped(i.id)}">Withdraw</button>`:''}</td></tr>`).join('')+'</table>':'<p class="muted small">No invitations yet.</p>';
+ $('clients').innerHTML=clients.items.length?'<table><tr><th>Application</th><th></th></tr>'+clients.items.map(c=>`<tr${c.revoked_at?' class="muted"':''}><td><b>${escaped(c.name)}</b> ${c.revoked_at?'<span class="badge disabled">revoked</span>':''}
+   <div class="small muted">${c.users} user${c.users===1?'':'s'} &middot; created ${escaped(when(c.created_at))}</div><div class="small">${escaped((c.scopes||[]).join(', '))}</div></td>
+   <td class="act">${c.revoked_at?'':`<button data-client-revoke="${escaped(c.id)}" data-name="${escaped(c.name)}">Revoke</button>`}</td></tr>`).join('')+'</table>':'<p class="muted small">No client applications yet.</p>';
 }
 function discoveryLine(c){
  const d=c.last_discovery;if(!d||!c.capabilities||c.capabilities.store_discovery!=='supported')return '';

@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from sqlalchemy import case, select
 
-from app import declared_stores
+from app import declared_stores, progress
 from app.compare import process_compare
 from app.connectors import registry
 from app.db import SessionLocal
@@ -109,12 +109,16 @@ def run_delivery() -> bool:
 
 
 def main() -> None:
+    last_purge = 0.0
     while True:
         try:
             if registry.refresh():  # pick up connectors installed or removed through the API
                 with SessionLocal.begin() as db:
                     declared_stores.seed(db)
             schedule_due()
+            if time.monotonic() - last_purge > 600:         # forget old progress notes now and then
+                last_purge = time.monotonic()
+                progress.purge()
             with SessionLocal.begin() as db:
                 schedule_reference(db)
             did_work = run_job()

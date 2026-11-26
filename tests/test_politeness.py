@@ -8,7 +8,7 @@ from app import connector_state, retrieval
 from app.config import settings
 from app.db import SessionLocal
 from app.main import app
-from app.models import ConnectorState, Store, aware, utcnow
+from app.models import ConnectorState, Job, Store, aware, utcnow
 from app.monitoring import next_due
 from app.ratelimit import SlidingWindow
 from app.worker import run_job
@@ -155,8 +155,35 @@ def test_duplicate_monitors_share_one_retailer_request(cg):
     second = monitor(cg, listing_id=lid).json()["id"]
     check(cg, first)
     calls = len(cg.site.calls)
-    assert check(cg, second)["state"] == "succeeded"
+    with SessionLocal.begin() as db:                      # the scheduler's check (nobody asked for it now)
+        db.add(Job(monitor_id=second, kind="scan"))
+    assert run_job()
     assert len(cg.site.calls) == calls  # served from the short cache
+
+
+def test_a_manual_check_now_asks_the_store_again_instead_of_using_the_cache(cg, monkeypatch):
+    monkeypatch.setattr(settings, "min_manual_check_interval_seconds", 0)
+    mid = monitor(cg, "generic_product", query="havregryn").json()["id"]
+    check(cg, mid)
+    calls = len(cg.site.calls)
+    with SessionLocal.begin() as db:
+        db.add(Job(monitor_id=mid, kind="scan"))          # a scheduled check is answered from the cache
+    assert run_job() and len(cg.site.calls) == calls
+    assert check(cg, mid)["state"] == "succeeded"          # "Check now" is asked of the store itself
+    assert len(cg.site.calls) > calls
+
+
+def test_a_search_can_ask_for_fresh_answers_and_otherwise_reuses_the_last_hour(cg):
+    search(cg, query="havregryn")
+    calls = len(cg.site.calls)
+    search(cg, query="havregryn")
+    assert len(cg.site.calls) == calls                     # the same search again: nothing asked
+    job_of(cg, cg.client.post("/v1/search/jobs", json={
+        "query": "havregryn", "store_ids": [cg.store_id], "fresh": True}))
+    assert len(cg.site.calls) > calls                      # "Refresh prices": asked again
+    again = len(cg.site.calls)
+    search(cg, query="havregryn")
+    assert len(cg.site.calls) == again                     # and that fresh answer is what is kept now
 
 
 def test_a_block_pauses_the_connector_and_stops_all_requests_until_resumed(cg):

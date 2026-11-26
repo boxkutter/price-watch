@@ -119,23 +119,28 @@ class WillysConnector(HttpJsonConnector):
         return {"results": results or [], "pages": int(
             ((data.get("pagination") or {}).get("numberOfPages")) or 1)}
 
-    def _query(self, text: str) -> tuple[list[dict], bool]:
-        """Results up to the cap. Returns (products, truncated)."""
-        found, page = [], 0
-        while self.client.budget_left() > 0 and len(found) < self.max_results:
+    def _query(self, text: str, skip: int = 0,
+               take: int | None = None) -> tuple[list[dict], bool, int | None]:
+        """Results from `skip`, up to `take` (default: the cap). Willys answers in pages of PAGE_SIZE,
+        so `skip` is read in whole pages and `take` rounds up to whole pages. Returns
+        (products, truncated, next_skip)."""
+        limit = min(take or self.max_results, self.max_results)
+        page = skip // PAGE_SIZE
+        found: list[dict] = []
+        while self.client.budget_left() > 0 and len(found) < limit:
             result = self._search(text, page)
             found += result["results"]
             page += 1
             if page >= result["pages"] or len(result["results"]) < PAGE_SIZE:
-                return found, False
-        return found, True
+                return found, False, None
+        return found, True, page * PAGE_SIZE
 
     def collect(self, store: str, request: ScanRequest) -> Collected:
         raw: dict[str, dict] = {}
         missing: list[str] = []
-        truncated = False
+        truncated, next_skip = False, None
         if request.query:
-            products, truncated = self._query(request.query)
+            products, truncated, next_skip = self._query(request.query, request.skip, request.take)
             raw.update((str(p.get("code")), p) for p in products)
         for sku in request.skus:
             if not SKU.match(sku):
@@ -150,7 +155,7 @@ class WillysConnector(HttpJsonConnector):
         # Anonymous search cannot find a barcode, so a barcode request is answered "not found here"
         # (the service already avoids asking: the manifest says barcode_search is unsupported).
         missing.extend(request.gtins)
-        collected = Collected(missing=tuple(missing), truncated=truncated, fetched=len(raw))
+        collected = Collected(missing=tuple(missing), truncated=truncated, fetched=len(raw), next_skip=next_skip)
         for product in raw.values():
             parsed = parse_product(product) if isinstance(product, dict) else None
             if not parsed:

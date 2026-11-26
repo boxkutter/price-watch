@@ -61,6 +61,10 @@ class ScanRequest:
     query: str | None = None
     skus: tuple[str, ...] = ()
     gtins: tuple[str, ...] = ()
+    # A text query can be asked for in pages: results from `skip`, at most `take` of them (None: the
+    # connector's own cap). A connector that cannot page ignores both and never sets `next_skip`.
+    skip: int = 0
+    take: int | None = None
 
     @property
     def targeted(self) -> bool:
@@ -121,6 +125,7 @@ class Snapshot:
     targeted: bool = False  # items were already filtered to the request by the connector
     requests: int = 0  # HTTP requests made, for the per-retailer budget
     retry_after: int | None = None  # seconds, when the retailer asked us to back off
+    next_skip: int | None = None  # where the next page of a text query starts; None: no more, or cannot
 
     @property
     def effective_status(self) -> str:

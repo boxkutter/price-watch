@@ -146,8 +146,12 @@ Looking something up in a store is slow and rate limited, so it never blocks. Th
 Poll `GET /v1/jobs/{job_id}`:
 
 ```json
-{"id": "…", "state": "succeeded", "result": {…}, "attempts": 1, "created_at": "…"}
+{"id": "…", "state": "succeeded", "result": {…}, "progress": null, "attempts": 1, "created_at": "…"}
 ```
+
+While a search is `running`, `progress` says what it is doing now, for a client that wants to show it:
+`{"text": "Searching City Gross Höör", "done": 2, "total": 5}` (`done` of `total` stores asked). It is
+`null` when nothing is being reported, and always once the job has finished.
 
 `state` is `queued`, `running` or `retry_wait` while work continues. When it stops it is
 `succeeded`, or a status that says why not: `partial`, `not_found`, `paused`, `disabled`,
@@ -255,7 +259,21 @@ many; `1` means a single item; either end may be left out), and a weight or volu
 known to differ is dropped; a result of unknown size is kept by a size range. Ignored for a barcode
 search.
 
-`offers` lists what the store offers on this product right now (`terms`, such as "2 för 35 kr", the bundle
+**Broad searches.** The stores are asked at the same time (one thread per retailer, stores of one retailer
+one after another), and a name search returns only each store's best matches first
+(`SEARCH_PAGE_SIZE`, 30 by default). A store that has more says where the next page starts in its
+`coverage` entry (`next_skip`, with `truncated: true`); ask again with `"skip": {"<store_id>": <next_skip>}`
+to get the following page (`skip` names only stores in `store_ids`). The words are asked in Swedish too
+only when a store's first answer has fewer than `SEARCH_TRANSLATE_BELOW` (8) matches. A search that
+passes `SEARCH_TIME_BUDGET_SECONDS` (45) stops asking: stores not yet reached come back with status
+`timed_out` and the result is `partial`. The result also carries `elapsed_seconds`.
+
+**Fresh answers.** A store's answer is reused for an hour (the connector's `cache_seconds`), so the same
+search again is instant. Send `"fresh": true` to ask the stores now instead (the new answer is kept for
+the next search). `POST /v1/monitors/{id}/check` ("Check now") always asks the store itself; scheduled
+checks use the kept answer.
+
+`offers` lists what the store offers on this product right now on this product right now (`terms`, such as "2 för 35 kr", the bundle
 `price` when it states one, `eligibility` `public` or `member`, `valid_to` or null); they are shown
 for what was just looked up and are recorded when the product is watched. `availability` is
 `in_stock`, `out_of_stock` or null (unknown), and `stock_quantity` is how many the store says it has
@@ -497,7 +515,7 @@ requeues a failed one. Use the event feed with `after` to reconcile anything mis
 
 | Started by | `result` |
 |---|---|
-| `POST /v1/search/jobs` | `{"status", "complete", "items": [{"product_id", "listing_id", "store_id", "channel", "name", "current_price", "currency"}], "coverage": [{"store_id", "status", "detail", "truncated"}], "barcode_mapping": "verified"\|"unknown"\|null}` |
+| `POST /v1/search/jobs` | `{"status", "complete", "items": [{"product_id", "listing_id", "store_id", "channel", "name", "current_price", "currency"}], "coverage": [{"store_id", "status", "detail", "truncated", "next_skip"}], "elapsed_seconds", "barcode_mapping": "verified"\|"unknown"\|null}` |
 | `POST /v1/monitors/from-url` | `{"status", "already_monitored", "monitor_id", "product": {…}}`, or `{"status": "not_found"\|"paused"\|…, "detail"}` |
 | `POST /v1/compare/barcode` | `{"status", "complete", "gtin14", "here_store_id", "product", "rows": […], "cheapest", "saving_vs_here", "requests"}` |
 | `POST /v1/monitors/{id}/check` | `{"status", "complete", "prices", "offers", "invalid_items", "truncated", "detail", "requests"}` |

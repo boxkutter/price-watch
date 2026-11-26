@@ -45,4 +45,4 @@ minimum_request_interval_seconds: 3
 minimum_monitor_interval_minutes: 60
 max_requests_per_scan: 6
 max_requests_per_day: 400
-cache_seconds: 600
+cache_seconds: 3600

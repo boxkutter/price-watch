@@ -145,28 +145,31 @@ class CityGrossConnector(HttpJsonConnector):
             raise ExtractionError("Unexpected search response")
         return results
 
-    def _query(self, store: str, text: str) -> tuple[list[dict], bool]:
-        """All results up to the cap. Returns (products, truncated).
+    def _query(self, store: str, text: str, skip: int = 0,
+               take: int | None = None) -> tuple[list[dict], bool, int | None]:
+        """Results from `skip`, up to `take` (default: the cap). Returns (products, truncated, next_skip).
 
         A short page is the reliable end-of-results signal: the API's `totalCount` can overstate
         (it said 25 while returning 22 products), so it is only used to stop early.
         """
-        found, skip = [], 0
-        while self.client.budget_left() > 0 and len(found) < self.max_results:
-            page = self._search(store, text, skip, PAGE_SIZE)
+        limit = min(take or self.max_results, self.max_results)
+        found, offset = [], skip
+        while self.client.budget_left() > 0 and len(found) < limit:
+            size = min(PAGE_SIZE, limit - len(found))
+            page = self._search(store, text, offset, size)
             products = page["products"]
             found += products
-            skip += len(products)
-            if len(products) < PAGE_SIZE or skip >= int(page.get("totalCount") or 0):
-                return found, False
-        return found, True
+            offset += len(products)
+            if len(products) < size or offset >= int(page.get("totalCount") or 0):
+                return found, False, None
+        return found, True, offset
 
     def collect(self, store: str, request: ScanRequest) -> Collected:
         raw: dict[str, dict] = {}
         missing: list[str] = []
-        truncated = False
+        truncated, next_skip = False, None
         if request.query:
-            products, truncated = self._query(store, request.query)
+            products, truncated, next_skip = self._query(store, request.query, request.skip, request.take)
             raw.update((str(p.get("id")), p) for p in products)
         for sku in request.skus:
             hits = [p for p in self._search(store, sku, 0, 5)["products"] if str(p.get("id")) == sku]
@@ -180,7 +183,7 @@ class CityGrossConnector(HttpJsonConnector):
             raw.update((str(hit.get("id")), hit) for hit in hits[:1])
             if not hits:
                 missing.append(gtin)
-        collected = Collected(missing=tuple(missing), truncated=truncated, fetched=len(raw))
+        collected = Collected(missing=tuple(missing), truncated=truncated, fetched=len(raw), next_skip=next_skip)
         for product in raw.values():
             parsed = parse_product(product)
             if not parsed:

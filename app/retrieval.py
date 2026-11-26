@@ -23,15 +23,18 @@ def retailer_info(retailer_id: str) -> dict:
 
 
 def fetch(db: Session, store: Store, connector, channel: str,
-          request: ScanRequest) -> tuple[Snapshot | None, dict | None]:
-    """Returns (snapshot, None) or (None, result) when the scan must not run right now."""
+          request: ScanRequest, fresh: bool = False) -> tuple[Snapshot | None, dict | None]:
+    """Returns (snapshot, None) or (None, result) when the scan must not run right now.
+
+    `fresh` is a person asking for the store's answer now: a kept answer is not used (the new one is
+    kept instead). Everything else about being polite still applies."""
     info = retailer_info(store.retailer_id)
     refused = connector_state.refusal(db, store.retailer_id, info.get("max_requests_per_day", 10**9))
     if refused:
         return None, {"status": refused[0], "complete": False, "detail": refused[1]}
     ttl = info.get("cache_seconds", 0)
     key = (id(connector), store.external_id, channel, request)
-    if ttl:
+    if ttl and not fresh:
         hit = _CACHE.get(key)
         if hit and time.monotonic() - hit[0] < ttl:
             return hit[1], None

@@ -415,6 +415,11 @@
             "title": "Channel",
             "type": "string"
           },
+          "fresh": {
+            "default": false,
+            "title": "Fresh",
+            "type": "boolean"
+          },
           "gtin": {
             "anyOf": [
               {
@@ -464,6 +469,21 @@
               }
             ],
             "title": "Query"
+          },
+          "skip": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "maxProperties": 5,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skip"
           },
           "store_ids": {
             "items": {

@@ -60,7 +60,7 @@ minimum_request_interval_seconds: 3     # between requests to the site
 minimum_monitor_interval_minutes: 60    # how often one monitor may check
 max_requests_per_scan: 6
 max_requests_per_day: 400
-cache_seconds: 600                      # identical lookups within this window share one fetch
+cache_seconds: 3600                      # identical lookups within this window share one fetch
 # Set true only if the site's canonical page address differs from one you can build from an id
 # (a redirect to another allowed host is then followed, up to 2 hops, each counted as a request).
 follow_redirects: false

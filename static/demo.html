@@ -72,6 +72,7 @@ button.primary{background:#0b6b3a;color:#fff;border:0;border-radius:8px;padding:
 .scanbar{position:absolute;left:0;right:0;bottom:0;padding:1rem 1rem max(1.2rem,env(safe-area-inset-bottom));text-align:center;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.7))}
 .scanbar p{margin:0 0 .7rem}.scanbar button{font:inherit;padding:.7rem 1.2rem;border-radius:10px;border:1px solid rgba(255,255,255,.7);background:rgba(0,0,0,.35);color:#fff}
 /* ---- phones and small windows ---- */
+.mobmeta,.moreline,.mobtools,.mobonly{display:none}.moreinfo{display:block}
 fieldset{min-width:0;max-width:100%;box-sizing:border-box}input,select,textarea{max-width:100%;box-sizing:border-box}
 body,main{overflow-wrap:anywhere}pre{max-width:100%}
 #link-form{display:flex;flex-wrap:wrap;gap:.5rem}#link-form input[name=url]{flex:1 1 20rem;min-width:0}#link-form select{flex:1 1 12rem;min-width:0}#link-form input[name=maximum_price]{flex:0 1 8rem;min-width:0}
@@ -89,23 +90,40 @@ body,main{overflow-wrap:anywhere}pre{max-width:100%}
  .tiles{grid-template-columns:1fr 1fr}.tile .val{font-size:1.35rem}
  .hx-head{flex-wrap:wrap}.hx-chart{padding:.2rem}.hx-legend{flex-direction:column;gap:.5rem}
  .card .row{flex-wrap:wrap}.price{font-size:1.3rem}
- /* a result is a card: picture and name side by side, then the price, then what you can do */
+ /* a result is a compact card: picture, name and store on the left, price and offer on the right,
+    then one slim line (Details, Watch). Everything else unfolds under Details. */
  #search-result{overflow-x:visible}
  #search-result table,#search-result tbody{display:block;min-width:0;width:100%}
  #search-result colgroup,#search-result tr:has(th){display:none!important}
  #search-result tr.grouphead{display:block;margin:.5rem 0 0}#search-result tr.grouphead td{display:block;padding:.5rem .7rem;border-radius:8px;border:0}
- #search-result tr:not(.grouphead){display:grid;grid-template-columns:76px 1fr;grid-template-areas:"pic prod" "price price" "act act";gap:.3rem .75rem;padding:.9rem 0;border-bottom:1px solid #e3e8ee}
- #search-result td{display:block;padding:0;border:0;min-width:0}
- #search-result td.c-pic{grid-area:pic}#search-result td.c-prod{grid-area:prod}
+ #search-result tr:not(.grouphead){display:grid;grid-template-columns:56px minmax(0,1fr) minmax(4rem,7.4rem);grid-template-areas:"pic title price" "pic meta offers" "more more watch" "extra extra extra";column-gap:.65rem;row-gap:.1rem;padding:.65rem 0;border-bottom:1px solid #e3e8ee}
+ #search-result td{display:contents}
+ #search-result td.c-pic{display:block;grid-area:pic}
  #search-result td.c-brandcell,#search-result td.c-sizecell{display:none}
+ #search-result .pic{width:56px!important}#search-result .pic img,#search-result .pic>span{width:56px!important;height:56px!important}
+ #search-result .pic .photo-ctl{display:none}
+ #search-result .ptitle{grid-area:title;font-size:.98rem;line-height:1.28;max-height:2.56em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+ #search-result .storeline{display:none}
+ .mobmeta{display:block;grid-area:meta;color:#44505c;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;align-self:start}
+ .mobmeta .logo{vertical-align:-3px}
+ #search-result .pr{grid-area:price;text-align:right;white-space:nowrap;font-size:1.15rem}
+ #search-result .pills{grid-area:offers;align-items:flex-end;margin-top:0;gap:.2rem}#search-result .pills .badge{white-space:normal;text-align:right;max-width:100%;overflow-wrap:anywhere}
+ #search-result .stockwrap,#search-result .pextra{display:none}
+ #search-result .moreline{display:flex;align-items:center;gap:.7rem;grid-area:more;min-width:0;margin-top:.1rem}
+ #search-result .mobstoreline{display:inline-flex;align-items:center;gap:.35rem;font-size:.9rem;color:#18212b;min-width:0;white-space:nowrap}#search-result .mobstoreline>span{overflow:hidden;text-overflow:ellipsis}
+ #search-result .more-toggle{display:inline-flex;align-items:center;gap:.25rem;flex:none;background:none;border:0;color:#0b57a8;font-size:.85rem;padding:.2rem 0;min-height:34px}
+ #search-result td.act{display:contents}
+ #search-result button.watch{grid-area:watch;justify-self:end;width:auto;min-height:34px;padding:.25rem .9rem;font-size:.85rem;background:#fff;color:#0b6b3a;border:1px solid #0b6b3a;border-radius:8px}
+ #search-result button.watch:disabled{background:#eef1f4;color:#5c6874;border-color:#d4dae1}
+ #search-result button.linkbtn{display:none}
+ #search-result .moreinfo{display:none}
+ #search-result tr.open .moreinfo{display:block;grid-area:extra;margin-top:.35rem;padding:.5rem 0 0;border-top:1px dashed #d4dae1}
+ #search-result .mobonly{display:block;margin:.15rem 0}#search-result .mobstock:empty{display:none}
+ #search-result .mobtools{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-top:.4rem}#search-result .mobtools .photo-ctl{flex-direction:row}
+ #search-result .mobtools button{min-height:36px}
  .intro{display:none}
  #watchlist .card>.row:last-of-type button{flex:1 1 auto;min-height:44px;white-space:nowrap;padding:.4rem .5rem}
  #link-form input[name=url],#link-form select{flex:1 1 100%}#link-form input[name=maximum_price]{flex:1 1 6rem}
- .mobmeta{display:block;color:#44505c;font-size:.9rem;margin-top:.1rem}
- #search-result td.c-pricecell{grid-area:price;text-align:left;display:flex;align-items:baseline;gap:.4rem .8rem;flex-wrap:wrap;margin-top:.2rem}
- #search-result td.c-pricecell .pills{flex-direction:row;flex-wrap:wrap;margin-top:0}
- #search-result td.act{grid-area:act;display:flex;align-items:center;gap:1rem;text-align:left}
- #search-result button.watch{width:auto;flex:1 1 auto;min-height:44px}#search-result button.linkbtn{margin:0;padding:.6rem .2rem;min-height:44px}
  .suggest button.btn-sm{min-height:40px}details.edit>summary{padding:.5rem 0;min-height:24px}.editrow input{flex:1 1 9rem;width:auto}
  .toolbar{gap:.6rem}.toolbar select{max-width:100%}
  #lightbox img{max-height:75vh}
@@ -113,6 +131,13 @@ body,main{overflow-wrap:anywhere}pre{max-width:100%}
 .signin{max-width:26rem;margin:1.2rem auto;padding:1.2rem 1.3rem;border:1px solid #dce1e7;border-radius:12px;background:#fff}
 .signin form{display:grid;gap:.8rem}.signin label{display:grid;gap:.25rem;font-size:.9rem;color:#44505c}.signin input{font:inherit;padding:.6rem .7rem;border:1px solid #b9c3cf;border-radius:8px;min-height:44px;box-sizing:border-box;width:100%;color:#18212b}
 .signin button.primary{min-height:46px}.signin details.invite{margin-top:1rem}.signin details.invite>summary{cursor:pointer;color:#0b57a8}
+/* ---- the "working on it" overlay ---- */
+#busy{position:fixed;inset:0;z-index:55;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.62);backdrop-filter:blur(1.5px);padding:1rem}
+.busycard{display:flex;align-items:center;gap:1rem;background:#fff;border:1px solid #dce1e7;border-radius:14px;box-shadow:0 8px 30px rgba(24,33,43,.18);padding:1rem 1.2rem;max-width:30rem;width:100%;flex-wrap:wrap}
+.busytext{flex:1 1 12rem;min-width:0}#busy-text{font-weight:650;overflow-wrap:anywhere}
+.spinner{width:2rem;height:2rem;flex:none;border:3px solid #d4e6db;border-top-color:#0b6b3a;border-radius:50%;animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.spinner{animation-duration:3.2s}}
+.busybar{height:5px;border-radius:3px;background:#e6eaef;margin-top:.5rem;overflow:hidden}.busybar i{display:block;height:100%;width:8%;background:#0b6b3a;border-radius:3px;transition:width .5s ease}
 code,pre{background:#f1f4f7;border-radius:4px}code{padding:0 .25rem}pre{padding:.6rem;overflow:auto;font-size:.85rem}
 .err{color:#a1281a}.chip{border:1px solid #ccd3db;border-radius:1rem;background:#fff;padding:.15rem .6rem;font-size:.85rem}
 details.group{border:1px solid #dce1e7;border-radius:8px;margin:.4rem 0;padding:.3rem .7rem}details.group summary{cursor:pointer;font-weight:600}details.group[open] summary{margin-bottom:.4rem}details.group .list{max-height:18rem;overflow:auto}
@@ -152,6 +177,12 @@ label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid
  <button type="button" id="scan-close" aria-label="Close the scanner">&times;</button>
  <div class="scanbar"><p id="scan-msg">Point the camera at the barcode</p><button type="button" id="scan-photo-btn">Take a photo instead</button></div>
 </div>
+<div id="busy" role="status" aria-live="polite" hidden>
+ <div class="busycard"><div class="spinner" aria-hidden="true"></div>
+  <div class="busytext"><div id="busy-text">Searching...</div><div id="busy-sub" class="muted small"></div>
+   <div class="busybar" aria-hidden="true"><i id="busy-bar"></i></div></div>
+  <button type="button" id="busy-cancel" class="btn-sm">Stop waiting</button></div>
+</div>
 <div id="lightbox" role="dialog" aria-modal="true" aria-label="Picture" hidden><figure><img id="lightbox-img" alt=""><figcaption id="lightbox-cap"></figcaption></figure></div>
 <p class="muted small intro">This page is a client app: a <b>regular user</b> (not an admin) calling the public API with a user token and a client token, the way a phone app or script would. Everything you do here is an ordinary API call; see the "API calls" tab.</p>
 <nav id="tabs"><button data-tab="watch" class="on">Watchlist</button><button data-tab="add">Lookup</button><button data-tab="compare">Compare</button><button data-tab="history">Price history</button><button data-tab="stores">Your stores</button><button data-tab="activity">Activity</button><button data-tab="api">API calls</button></nav>
@@ -185,10 +216,6 @@ label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid
   <div class="row small muted demo-only">Try: <button type="button" class="chip" data-search-fill="demo">demo</button> <button type="button" class="chip" data-search-fill="9999990000019">demo oats barcode</button> <button type="button" class="chip" data-search-fill="9999990000026">demo coffee barcode</button></div>
   <p class="muted small">Digits only (8 to 14) are treated as a barcode; anything else is searched by name, in Swedish.</p>
   <div id="search-result" role="status"></div></fieldset>
- <fieldset id="words"><legend>Word equivalents (shared)</legend>
-  <p class="muted small">English and Swedish words treated as the same in searches and when comparing names, so "oat drink" also finds "havredryck". Everyone sees what you add.</p>
-  <form id="word-form" class="row"><input name="term" size="18" required placeholder="e.g. oat drink"> → <input name="canonical" size="18" required placeholder="e.g. havredryck"><button>Add</button></form>
-  <div id="word-list" class="small"></div></fieldset>
 </section>
 
 <section class="panel" id="tab-compare">
@@ -203,6 +230,10 @@ label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid
  <h2>Your stores</h2>
  <p class="muted small">Tick the stores you shop in. Searches and price comparisons use these.</p>
  <div id="stores"></div>
+ <fieldset id="words"><legend>Word equivalents (shared)</legend>
+  <p class="muted small">English and Swedish words treated as the same in searches and when comparing names, so "oat drink" also finds "havredryck". Everyone sees what you add.</p>
+  <form id="word-form" class="row"><input name="term" size="18" required placeholder="e.g. oat drink"> → <input name="canonical" size="18" required placeholder="e.g. havredryck"><button>Add</button></form>
+  <div id="word-list" class="small"></div></fieldset>
 </section>
 
 <section class="panel" id="tab-activity"><h2>Activity</h2><div id="activity"></div></section>
@@ -253,7 +284,7 @@ const until=d=>{if(!d)return '';const s=Math.round((new Date(/Z|[+-]\d\d:?\d\d$/
 
 // ---- tabs, header --------------------------------------------------------------------------
 document.addEventListener('click',e=>{const g=e.target.closest('[data-goto]');if(g){const b=document.querySelector(`#tabs [data-tab="${g.dataset.goto}"]`);if(b)b.click()}});
-$('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.tab==='history'&&!hist.productId)renderHistory();if(b.dataset.tab==='add'&&!wordsLoaded)loadWords().catch(err=>say(err.message));
+$('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.tab==='history'&&!hist.productId)renderHistory();if(b.dataset.tab==='stores'&&!wordsLoaded)loadWords().catch(err=>say(err.message));
  document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id==='tab-'+b.dataset.tab))};
 $('reset').onclick=async()=>{if(!adminToken||mode!=='example'){say('Only the example user can be reset');return}
@@ -441,6 +472,9 @@ function wireChart(){
  wrap.addEventListener('blur',hideTip);
 }
 document.addEventListener('click',e=>{
+ if(e.target.closest('[data-refresh-results]')&&lastSearch){
+  const ls=lastSearch;lastSearch=null;
+  runSearch(ls.text,ls.ids,ls.narrow,null,true).catch(err=>{$('search-result').textContent=err.message});return}
  const o=e.target.closest('[data-open-history]');if(o){openHistory(o.dataset.openHistory);return}
  const r=e.target.closest('[data-hrange]');if(r){hist.range=r.dataset.hrange;renderHistory()}
 });
@@ -695,33 +729,72 @@ function barcodeProblem(d){
  const n=[...d].map(Number);let sum=0;n.slice(0,-1).reverse().forEach((x,i)=>{sum+=x*(i%2===0?3:1)});
  return (10-sum%10)%10===n[n.length-1]?null:'The last digit does not match the others, so the barcode was probably mistyped. Check it and try again.';
 }
-const coverageWhy={unknown_mapping:"it cannot search by barcode, and no listing of this product is linked to it yet",rate_limited:'it is busy; try again shortly',paused:'its connector is paused',disabled:'its connector is disabled',access_blocked:'it blocked the request',auth_required:'it needs a setting (such as an API key) in the admin page',extraction_failed:'its reply could not be read',unsupported:'it cannot be searched this way',failed:'the lookup failed',invalid_data:'its reply was not valid'};
+const coverageWhy={unknown_mapping:"it cannot search by barcode, and no listing of this product is linked to it yet",rate_limited:'it is busy; try again shortly',paused:'its connector is paused',disabled:'its connector is disabled',access_blocked:'it blocked the request',auth_required:'it needs a setting (such as an API key) in the admin page',extraction_failed:'its reply could not be read',timed_out:'the search ran out of time before reaching it; search it on its own',unsupported:'it cannot be searched this way',failed:'the lookup failed',invalid_data:'its reply was not valid'};
 function coverageProblems(coverage){
  const name=id=>(stores.find(s=>s.id===id)||{}).name||'A store';
  return coverage.filter(c=>!['complete','not_found'].includes(c.status)).map(c=>`${name(c.store_id)}: ${coverageWhy[c.status]||c.status}${c.detail&&c.status!=='unknown_mapping'?' ('+c.detail+')':''}`);
 }
-async function runSearch(text,ids,narrow={}){
+// ---- the overlay shown while a search runs ----------------------------------------------------
+const working={timer:null,start:0,cancelled:false,total:0,text:'',done:0};
+function showBusy(text,total){
+ working.start=Date.now();working.cancelled=false;working.total=total;working.done=0;working.text=text;
+ $('busy').hidden=false;paintBusy();clearInterval(working.timer);working.timer=setInterval(paintBusy,500);
+}
+function paintBusy(){
+ $('busy-text').textContent=working.text;
+ const secs=Math.round((Date.now()-working.start)/1000);
+ $('busy-sub').textContent=(working.total>1?`Store ${Math.min(working.done+1,working.total)} of ${working.total} · `:'')+secs+' s';
+ $('busy-bar').style.width=working.total?Math.max(6,Math.round(100*working.done/working.total))+'%':'8%';
+}
+function hideBusy(){$('busy').hidden=true;clearInterval(working.timer)}
+$('busy-cancel').onclick=()=>{working.cancelled=true;hideBusy()};
+// wait for a search job, showing what the worker says it is doing ("Searching City Gross Höör")
+async function waitSearch(jobId,base,tries=200){
+ let job={state:'queued'};
+ for(let i=0;i<tries&&['queued','running','retry_wait'].includes(job.state)&&!working.cancelled;i++){
+  await sleep(i?700:300);job=await call('GET','/v1/jobs/'+jobId);
+  if(job.progress){working.text=job.progress.text;working.done=base+job.progress.done}
+  else if(job.state==='queued'){working.text='Waiting for the worker...'}
+  paintBusy();
+ }
+ if(working.cancelled)throw Error('Stopped waiting. The search may still finish in the background.');
+ return job;
+}
+let lastSearch=null;
+// the "Show more" bar: stores that stopped at the first page and can say where the next one starts
+function moreBar(id){
+ if(id!=='search-result'||!lastSearch)return '';
+ const more=lastSearch.coverage.filter(c=>c.next_skip);if(!more.length)return '';
+ const name=s=>(stores.find(x=>x.id===s)||{}).name||'a store';
+ return `<p class="morebar small"><button type="button" class="btn-sm" data-more-results>Show more results</button> <span class="muted">Showing the best matches first from ${more.map(c=>esc(name(c.store_id))).join(', ')}. Add a brand, a size or a word like "drink" to narrow a broad search.</span></p>`;
+}
+async function runSearch(text,ids,narrow={},skips=null,fresh=false){
  const out=$('search-result');
  if(!ids.length){out.textContent=mine.size?'Pick at least one store to search in.':'Choose your stores first (the Your stores tab).';return}
  const digits=text.replace(/[\s-]/g,'');const isCode=/^\d{8,14}$/.test(digits);
  if(isCode){const bad=barcodeProblem(digits);if(bad){out.textContent=bad;return}}
- const items=[],coverage=[],problems=[];let done=0,alsoAs=null;resultBrand='';resultSize='';
+ const prior=skips&&lastSearch?lastSearch:null;
+ const items=prior?[...prior.items]:[],coverage=prior?prior.coverage.filter(c=>!(c.store_id in skips)):[],problems=[];let done=0,alsoAs=prior?prior.alsoAs:null;if(!prior){resultBrand='';resultSize='';lastSearch=null}
+ const go=$('search-form').querySelector('button.primary');if(go)go.disabled=true;
+ showBusy(`Searching ${isCode?'barcode '+digits:'"'+text+'"'}...`,ids.length);
  try{
   for(let i=0;i<ids.length;i+=5){          // a search job covers up to 5 stores
    const chunk=ids.slice(i,i+5);
-   out.textContent=`Searching ${isCode?'barcode '+digits:'"'+text+'"'} in ${ids.length} store(s)${ids.length>5?' ('+done+' done)':''}...`;
-   const first=await call('POST','/v1/search/jobs',isCode?{gtin:digits,store_ids:chunk}:{query:text,store_ids:chunk,...narrow});
-   const job=await waitJob(first.job_id,120);const r=job.result||{};
+   out.textContent='';working.done=done;working.text=`Searching ${isCode?'barcode '+digits:'"'+text+'"'}...`;
+   const first=await call('POST','/v1/search/jobs',isCode?{gtin:digits,store_ids:chunk,...(fresh?{fresh:true}:{})}:{query:text,store_ids:chunk,...narrow,...(skips?{skip:Object.fromEntries(chunk.map(s=>[s,skips[s]||0]))}:{}),...(fresh?{fresh:true}:{})});
+   const job=await waitSearch(first.job_id,done);const r=job.result||{};
    if(['queued','running','retry_wait'].includes(job.state))
     problems.push(`${chunk.length} store(s): the search is still waiting for the worker (${job.state}). It has not failed, so try again in a minute.`);
    else if(job.state==='failed'&&!(r.coverage||[]).length)problems.push(`${chunk.length} store(s): the search failed on the server. Try again; if it keeps failing, look at the worker log.`);
-   items.push(...(r.items||[]));coverage.push(...(r.coverage||[]));done+=chunk.length;if(r.query&&r.query.also_searched_as)alsoAs=r.query.also_searched_as;
+   {const have=new Set(items.map(i=>i.listing_id));items.push(...(r.items||[]).filter(i=>!have.has(i.listing_id)))}coverage.push(...(r.coverage||[]));done+=chunk.length;if(r.query&&r.query.also_searched_as)alsoAs=r.query.also_searched_as;
   }
   problems.push(...coverageProblems(coverage));
-  showResults({result:{items,coverage}},'search-result',`Searched ${done} store(s) by ${isCode?'barcode':'name'}${isCode?'':narrowNote(narrow)}${alsoAs?`, also as "${alsoAs}"`:''}.${isCode&&Object.keys(narrow).length?' (Narrowing does not apply to a barcode search.)':''}`,problems);
+  lastSearch={text,ids:prior?prior.ids:ids,isCode,narrow,items,coverage,alsoAs,searched:prior?prior.searched:done};
+  showResults({result:{items,coverage}},'search-result',`Searched ${lastSearch.searched} store(s) by ${isCode?'barcode':'name'}${isCode?'':narrowNote(narrow)}${alsoAs?`, also as "${alsoAs}"`:''}.${isCode&&Object.keys(narrow).length?' (Narrowing does not apply to a barcode search.)':''}`,problems);
  }catch(err){
   if(items.length||problems.length)showResults({result:{items,coverage}},'search-result',`Stopped after ${done} of ${ids.length} stores: ${err.message}`,[...problems,...coverageProblems(coverage)]);
   else out.textContent=err.message}
+ finally{hideBusy();if(go)go.disabled=false}
 }
 const shortCode=g=>g.replace(/^0+/,'');
 // 15.5 is shown as 15.50, with the currency small and grey so it never competes with the number
@@ -748,6 +821,7 @@ function editBox(i){
   <div class="editrow"><input data-newname="${esc(i.listing_id)}" placeholder="Also called…"> <button type="button" class="btn-sm" data-add-name="${esc(i.listing_id)}">Add name</button></div>
   ${i.barcode?'':`<div class="editrow"><input data-newcode="${esc(i.listing_id)}" placeholder="Barcode" inputmode="numeric"> <button type="button" class="btn-sm" data-add-code="${esc(i.listing_id)}">Save barcode</button></div>`}</details>`;
 }
+const openRows=new Set();   // results whose details are unfolded (a phone folds them away)
 const lastResults={},lastNotes={},lastProblems={};let resultSort='match',resultBrand='',resultSize='';
 const priceOf=i=>Number(i.current_price);
 const sname=id=>(stores.find(s=>s.id===id)||{}).name||'';
@@ -782,7 +856,12 @@ function productTitle(i){
 function offersCell(i){
  return (i.offers||[]).map(o=>{
   const member=o.eligibility==='member',until=o.valid_to?` until ${esc(dateShort(parseT(o.valid_to)))}`:'';
-  return `<span class="badge ${member?'warn':'ok'}" title="${esc(o.title||'')}${member?' (members only)':''}">${esc(o.terms)}${member?' · members':''}${until}</span>`}).join('');
+  return `<span class="badge ${member?'warn':'ok'}" title="${esc(o.title||'')}${member?' (members only)':''}">${esc(o.terms)}<span class="pextra">${member?' · members':''}${until}</span></span>`}).join('');
+}
+// the same offers in words, for the folded-away details on a phone
+function offersDetail(i){
+ const lines=(i.offers||[]).filter(o=>o.eligibility==='member'||o.valid_to).map(o=>`${esc(o.terms)}${o.eligibility==='member'?': members only':''}${o.valid_to?' · until '+esc(dateShort(parseT(o.valid_to))):''}`);
+ return lines.length?`<div class="mobonly small muted">${lines.join('<br>')}</div>`:'';
 }
 function stockCell(i){
  if(i.availability==='in_stock')return `<span class="badge ok">In stock${i.stock_quantity!=null?' ('+esc(i.stock_quantity)+')':''}</span>`;
@@ -795,7 +874,7 @@ function showResults(job,target,note,problems){
  if(!all.length){
   const answered=((job.result&&job.result.coverage)||[]).filter(c=>['complete','not_found'].includes(c.status)).length;
   const head=(lastProblems[id]||[]).length?(answered?`No match in the ${answered} store(s) that answered.`:'No store could be searched.'):`No products found in ${answered||'the'} store(s) searched.`;
-  out.innerHTML=(lastNotes[id]?`<p class="muted small">${esc(lastNotes[id])}</p>`:'')+`<p class="muted">${esc(head)}</p>`+trouble;return}
+  out.innerHTML=(lastNotes[id]?`<p class="muted small">${esc(lastNotes[id])}</p>`:'')+`<p class="muted">${esc(head)}</p>`+trouble+moreBar(id);return}
  const brands=facet(all,i=>i.brand,i=>i.brand_key||i.brand),sizes=facet(all,i=>i.size);
  const items=all.filter(i=>(!resultBrand||(i.brand_key||i.brand||'').toLowerCase()===resultBrand)&&(!resultSize||(i.size||'').toLowerCase()===resultSize));
  const groups=groupsOf(items);
@@ -804,7 +883,8 @@ function showResults(job,target,note,problems){
  const bar=`<div class="toolbar">`+
   `<label class="small">Sort by <select data-sort>${[['match','Same item'],['offers','Offers'],['name','Name'],['store','Store']].map(([k,l])=>`<option value="${k}"${k===resultSort?' selected':''}>${l}</option>`).join('')}</select></label>`+
   (brands.length>1?select('brand','Brand',brands,resultBrand):'')+(sizes.length>1?select('size','Size',sizes,resultSize):'')+
-  `<span class="muted small">${items.length===all.length?all.length+' result(s)':items.length+' of '+all.length+' shown'}</span></div>`;
+  `<span class="muted small">${items.length===all.length?all.length+' result(s)':items.length+' of '+all.length+' shown'}</span>`+
+  (id==='search-result'&&lastSearch?`<button type="button" class="btn-sm" data-refresh-results title="Ask the stores again now. Without this, an answer a store gave in the last hour is reused.">Refresh prices</button>`:'')+`</div>`;
  const seen=new Set();
  const sorted=sortedItems(items,groups);
  const offerCount=items.filter(i=>offerRank(i)<2).length;
@@ -831,15 +911,28 @@ function showResults(job,target,note,problems){
      :`<button type="button" data-watch-group="${esc(i.like_key)}">${watchedStores.size?`Watch in the other ${todo.length} store${todo.length>1?'s':''}`:`Watch in all ${n} stores`}</button>`;
     head=`<tr class="grouphead"><td colspan="6"><b>Same item in ${n} stores</b> <span class="muted small">${basis}${cheapest}</span> ${all}</td></tr>`}}
   const w=watched.has(i.listing_id);
-  return head+`<tr><td class="c-pic">${pictureCell(i.image,i.product_id,64)}</td>
+  const isOpen=openRows.has(i.listing_id);
+  const detail=[i.brand,i.size,i.pack].filter(Boolean).join(' · ');
+  return head+`<tr${isOpen?' class="open"':''}><td class="c-pic">${pictureCell(i.image,i.product_id,64)}</td>
    <td class="c-prod" title="${esc(i.name)}"><div class="ptitle">${productTitle(i)}${i.via?' <span class="badge" title="The store words it differently; found through another of its names.">found via another name</span>':''}</div>
-    <div class="meta">${storeLogo(i.store_id,16)} <span>${esc(sname(i.store_id))}</span></div><div class="mobmeta">${esc([i.brand,i.size,i.pack].filter(Boolean).join(' · '))}</div>${refLine(i)}${alsoLine(i)}${barcodeLine(i)}${suggestBlock(i)}${editBox(i)}</td>
+    <div class="meta storeline">${storeLogo(i.store_id,16)} <span>${esc(sname(i.store_id))}</span></div>
+    <div class="mobmeta">${esc(detail)}</div>
+    <div class="moreinfo">${refLine(i)}${alsoLine(i)}${barcodeLine(i)}${suggestBlock(i)}${offersDetail(i)}<div class="mobonly mobstock">${stockCell(i)}</div>${editBox(i)}
+     <div class="mobtools"><button type="button" class="btn-sm" data-open-history="${esc(i.product_id)}">Price history</button>${photoControl(i.product_id,i.image)}</div></div>
+    <div class="moreline"><span class="mobstoreline">${storeLogo(i.store_id,16)} <span>${esc(sname(i.store_id))}</span></span><button type="button" class="more-toggle" data-more="${esc(i.listing_id)}" aria-expanded="${isOpen}"><span class="chev">${isOpen?'▴':'▾'}</span> ${isOpen?'Less':'Details'}</button></div></td>
    <td class="c-brandcell">${esc(i.brand||'')}</td><td class="c-sizecell">${esc([i.size,i.pack].filter(Boolean).join(' · '))}</td>
-   <td class="num c-pricecell"><div class="pr">${priceText(i)}</div><div class="pills">${offersCell(i)}${stockCell(i)}</div></td>
+   <td class="num c-pricecell"><div class="pr">${priceText(i)}</div><div class="pills">${offersCell(i)}<span class="stockwrap">${stockCell(i)}</span></div></td>
    <td class="act"><button class="watch" data-watch="${esc(i.listing_id)}" data-store-id="${esc(i.store_id)}" data-name="${esc(i.name)}"${watched.has(i.listing_id)?' disabled':''}>${watched.has(i.listing_id)?'Watching':'Watch'}</button><button type="button" class="linkbtn" data-open-history="${esc(i.product_id)}">Price history</button></td></tr>`}).join('');
- out.innerHTML=(lastNotes[id]?`<p class="muted small">${esc(lastNotes[id])}</p>`:'')+trouble+bar+`<table><colgroup><col class="c-pic"><col><col class="c-brand"><col class="c-size"><col class="c-price"><col class="c-act"></colgroup><tr><th></th><th>Product</th><th>Brand</th><th>Size</th><th class="num">Price</th><th></th></tr>`+rows+'</table>';
+ out.innerHTML=(lastNotes[id]?`<p class="muted small">${esc(lastNotes[id])}</p>`:'')+trouble+bar+`<table><colgroup><col class="c-pic"><col><col class="c-brand"><col class="c-size"><col class="c-price"><col class="c-act"></colgroup><tr><th></th><th>Product</th><th>Brand</th><th>Size</th><th class="num">Price</th><th></th></tr>`+rows+'</table>'+moreBar(id);
 }
 const reshow=()=>{if(lastResults['search-result']&&lastResults['search-result'].length)showResults({result:{items:lastResults['search-result']}},'search-result')};
+document.addEventListener('click',e=>{
+ if(e.target.closest('[data-more-results]')&&lastSearch){
+  const ls=lastSearch,skips=Object.fromEntries(ls.coverage.filter(c=>c.next_skip).map(c=>[c.store_id,c.next_skip]));
+  runSearch(ls.text,Object.keys(skips),ls.narrow,skips).catch(err=>{$('search-result').textContent=err.message});return}
+ const t=e.target.closest('[data-more]');if(!t)return;
+ const id=t.dataset.more,row=t.closest('tr');openRows.has(id)?openRows.delete(id):openRows.add(id);const open=openRows.has(id);
+ row.classList.toggle('open',open);t.setAttribute('aria-expanded',open);t.innerHTML=`<span class="chev">${open?'▴':'▾'}</span> ${open?'Less':'Details'}`});
 document.addEventListener('change',e=>{const el=e.target;
  if(el.matches('[data-sort]')){resultSort=el.value;reshow()}
  else if(el.matches('[data-brand]')){resultBrand=el.value;reshow()}

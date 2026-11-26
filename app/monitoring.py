@@ -125,7 +125,8 @@ def process_scan(db: Session, job: Job) -> dict:
     request = scan_request(db, monitor)
     if request is None:
         return {"status": "cancelled"}
-    snapshot, skipped = fetch(db, store, connector, monitor.channel, request)
+    snapshot, skipped = fetch(db, store, connector, monitor.channel, request,
+                              fresh=bool((job.payload or {}).get("fresh")))
     if skipped:
         return skipped
     status = snapshot.effective_status

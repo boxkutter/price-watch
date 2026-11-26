@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     reference_recheck_days_found: int = 90
     reference_recheck_days_missing: int = 30
     max_image_upload_bytes: int = 8_000_000
+    # Searching: how many results one store gives at first, when to also ask in Swedish, and how long
+    # one search may take before it hands back what it has.
+    search_page_size: int = 30
+    search_translate_below: int = 8
+    search_time_budget_seconds: int = 45
+    search_max_parallel: int = 6
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

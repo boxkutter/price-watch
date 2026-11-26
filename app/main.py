@@ -54,6 +54,7 @@ from app.models import (
     IdempotencyRecord,
     Invitation,
     Job,
+    JobProgress,
     Listing,
     LoginAttempt,
     Monitor,
@@ -297,6 +298,10 @@ class SearchRequest(BaseModel):
     weight_min: str | None = None
     weight_max: str | None = None
     weight_unit: str = "g"
+    # Where each store's results start (its `next_skip` from an earlier answer): asks for the next page
+    skip: dict[str, int] | None = Field(default=None, max_length=5)
+    # Ask the stores now instead of using an answer they gave in the last hour
+    fresh: bool = False
 
     @model_validator(mode="after")
     def narrowing(self):
@@ -999,6 +1004,9 @@ def create_search_job(body: SearchRequest, db: Session = Depends(get_db),
     for store_id in body.store_ids:
         if not db.get(Store, store_id):
             raise HTTPException(404, "Store not found")
+    if body.skip and (not set(body.skip) <= set(body.store_ids) or
+                      any(not 0 <= n <= 1000 for n in body.skip.values())):
+        raise HTTPException(422, "skip must name searched stores, with a position from 0 to 1000")
     digest = request_digest(body.model_dump())
     existing_id = idempotent_resource(db, p.user.id, "search_job", idempotency_key, digest)
     if existing_id:
@@ -1950,7 +1958,7 @@ def check_monitor(monitor_id: str, db: Session = Depends(get_db),
         if wait > 0:
             raise HTTPException(429, "This monitor was checked very recently",
                                 headers={"Retry-After": str(int(wait) + 1)})
-    job = Job(monitor_id=row.id, kind="scan")
+    job = Job(monitor_id=row.id, kind="scan", payload={"fresh": True})    # a person asked: not from the cache
     db.add(job)
     db.flush()
     remember_request(db, p.user.id, "check_monitor", idempotency_key, digest, job.id)
@@ -1974,7 +1982,10 @@ def get_job(job_id: str, db: Session = Depends(get_db), p: Principal = Depends(p
     if not job or (job.owner_id != p.user.id and (not monitor or monitor.owner_id != p.user.id)):
         raise HTTPException(404, "Job not found")
     p.require("catalogue:read" if job.kind in LIVE_LOOKUP_KINDS else "monitors:read")
+    # what a running job is doing now ("Searching City Gross Höör"), when it says
+    now = db.get(JobProgress, job.id) if job.state == "running" else None
     return {"id": job.id, "state": job.state, "result": job.result,
+            "progress": ({"text": now.text, "done": now.done, "total": now.total} if now else None),
             "attempts": job.attempts, "created_at": job.created_at}
 
 

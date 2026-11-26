@@ -40,5 +40,5 @@ minimum_request_interval_seconds: 10
 minimum_monitor_interval_minutes: 60
 max_requests_per_scan: 6
 max_requests_per_day: 300
-cache_seconds: 600
+cache_seconds: 3600
 scheduled_window_utc: "04:00-08:45"
