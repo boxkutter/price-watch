@@ -116,7 +116,7 @@ def test_the_real_name_wins_over_the_category_and_a_size_is_added_once():
 
 @pytest.mark.parametrize("text, terms, amount", [
     ("2 för 35", "2 för 35 kr", Decimal(35)), ("3 för 20 kr", "3 för 20 kr", Decimal(20)),
-    ("2 FOR 12,50", "2 för 12.5 kr", Decimal("12.5")), ("Köp 2 betala för 1", "Köp 2 betala för 1", None)])
+    ("2 FOR 12,50", "2 för 12.50 kr", Decimal("12.50")), ("Köp 2 betala för 1", "Köp 2 betala för 1", None)])
 def test_offer_wording_is_read_when_it_has_an_amount_and_kept_as_text_when_it_does_not(text, terms, amount):
     offer = parse_offer("x1", "T", text, LINK)
     assert (offer.terms, offer.price) == (terms, amount)
@@ -284,7 +284,7 @@ def test_a_search_shows_the_offer_and_the_stock_at_each_store(shop):
                                    "eligibility": "public", "valid_to": None}]
         assert (item["availability"], item["stock_quantity"]) == ("in_stock", quantity)
         assert (item["display_name"], item["brand"], item["size"]) == ("iKaffe", "Oatly", "1 L")
-        assert item["current_price"] == "20" and item["url"] == LINK
+        assert item["current_price"] == "20.00" and item["url"] == LINK
 
 
 def test_willys_offers_reach_the_search_results_too():

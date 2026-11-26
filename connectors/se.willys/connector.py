@@ -30,7 +30,8 @@ BY_WEIGHT = "_KG"
 
 
 def _money(value: Decimal) -> str:
-    return format(value.normalize(), "f")
+    """A whole number as is ("99"), anything else with two decimals ("12.50")."""
+    return format(value.quantize(Decimal(1)) if value == value.to_integral_value() else value.quantize(Decimal("0.01")), "f")
 
 
 def _datetime(millis) -> datetime | None:

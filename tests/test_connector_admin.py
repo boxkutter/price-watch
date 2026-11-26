@@ -362,3 +362,57 @@ def test_uploads_expire_and_cannot_be_installed_twice_or_guessed(lab):
     token = upload(lab, build(TEMPLATE)).json()["upload_id"]
     assert lab.client.post(f"/v1/admin/connector-packages/{token}/install").status_code == 201
     assert lab.client.post(f"/v1/admin/connector-packages/{token}/install").status_code == 422
+
+
+# ---- removing stores ------------------------------------------------------------------------------
+
+def test_unused_stores_can_be_removed_but_never_ones_with_data_or_declared_by_the_connector(cg):
+    from app.models import UserStore
+    from tests.test_politeness import AXA
+
+    with SessionLocal.begin() as db:
+        extra = [Store(retailer_id="se.citygross", external_id=f"90{n}", name=f"City Gross {n}")
+                 for n in range(3)]
+        db.add_all(extra)
+        db.flush()
+        ids = [s.id for s in extra]
+        db.add(UserStore(user_id=cg.client.get("/v1/me").json()["id"], store_id=ids[1]))
+    assert cg.client.post("/v1/search/jobs", json={"gtin": AXA, "store_ids": [cg.store_id]}).status_code == 202
+    from app.worker import run_job
+    assert run_job()                                       # the original store now has price history
+
+    card = next(c for c in cg.client.get("/v1/admin/connectors").json()["items"] if c["id"] == "se.citygross")
+    assert card["stores"] == 4 and card["removable_stores"] == 3
+    assert card["store_names"] == ["City Gross 0", "City Gross 1", "City Gross 2", "City Gross Borås"]
+
+    assert cg.client.delete(f"/v1/admin/stores/{ids[0]}").status_code == 204
+    assert cg.client.delete(f"/v1/admin/stores/{ids[0]}").status_code == 404
+    refused = cg.client.delete(f"/v1/admin/stores/{cg.store_id}")
+    assert refused.status_code == 409 and "price history" in refused.json()["message"]
+
+    assert [s["store_id"] for s in cg.client.get("/v1/me/stores").json()["items"]] == [ids[1]]
+    done = cg.client.post("/v1/admin/connectors/se.citygross/stores/remove-unused")
+    assert done.status_code == 200 and done.json() == {"removed": 2, "kept": 1}
+    assert [s["id"] for s in cg.client.get("/v1/stores").json()["items"]
+            if s["retailer_id"] == "se.citygross"] == [cg.store_id]
+    assert cg.client.get("/v1/me/stores").json()["items"] == []          # its tick went with it
+    again = cg.client.post("/v1/admin/connectors/se.citygross/stores/remove-unused").json()
+    assert again == {"removed": 0, "kept": 1}
+
+
+def test_a_store_the_connector_declares_is_never_removed(fresh_db):
+    admin = admin_client()
+    willys = next(s for s in admin.get("/v1/stores").json()["items"] if s["retailer_id"] == "se.willys")
+    assert admin.delete(f"/v1/admin/stores/{willys['id']}").status_code == 409
+    assert admin.post("/v1/admin/connectors/se.willys/stores/remove-unused").json()["removed"] == 0
+    assert any(s["id"] == willys["id"] for s in admin.get("/v1/stores").json()["items"])
+
+
+def test_the_admin_page_names_only_the_first_few_connected_stores(fresh_db):
+    admin = admin_client()
+    with SessionLocal.begin() as db:
+        db.add_all([Store(retailer_id="se.coop", external_id=f"7{n}", name=f"Coop {name}")
+                    for n, name in enumerate(["Vimmerby", "Alvesta", "Höör", "Boden", "Kiruna", "Arboga", "Luleå"])])
+    card = next(c for c in admin.get("/v1/admin/connectors").json()["items"] if c["id"] == "se.coop")
+    assert card["stores"] == 7 and card["store_names"] == [
+        "Coop Alvesta", "Coop Arboga", "Coop Boden", "Coop Höör", "Coop Kiruna"]

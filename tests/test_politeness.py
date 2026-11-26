@@ -220,6 +220,7 @@ def test_store_discovery_is_a_deduplicated_worker_job(cg):
     assert run_job()
     result = cg.client.get(f"/v1/jobs/{first.json()['job_id']}").json()["result"]
     assert result["status"] == "success" and result["stores"] == 3 and result["created"] == 2
+    assert len(result["names"]) == 3 and "City Gross Borås" in result["names"]    # the result names them
     with SessionLocal() as db:
         assert db.scalar(select(func.count()).select_from(Store).where(
             Store.retailer_id == "se.citygross")) == 3

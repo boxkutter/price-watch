@@ -2,7 +2,7 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Retail Monitor: example client</title>
+<title>Price Watch: example client</title>
 <style>
 body{font:16px system-ui,sans-serif;max-width:1600px;margin:1rem auto;padding:0 1.5rem;color:#18212b}
 header{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;justify-content:space-between;margin-bottom:.4rem}
@@ -46,6 +46,7 @@ tr.grouphead td{background:#eef6f0;border-bottom:1px solid #cfe3d5}div.pic{displ
 .ptitle{font-weight:650;font-size:1.05rem;line-height:1.3}.ptitle a{color:inherit;text-decoration:underline;text-decoration-color:#b9c3cf;text-underline-offset:3px}.ptitle a:hover{color:#0b6b3a;text-decoration-color:#0b6b3a}
 .meta .chip{padding:0 .4rem;font-size:.8rem;line-height:1.3}.meta a{color:#0b57a8}
 .meta{color:#5c6874;font-size:.85rem;display:flex;align-items:center;gap:.4rem;margin-top:.2rem;flex-wrap:wrap}
+.pr .cur{font-size:.72rem;font-weight:500;color:#8a95a1;margin-left:.25rem;letter-spacing:.02em}
 .pr{font-size:1.2rem;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.2}
 .pills{display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;margin-top:.35rem}.pills .badge{white-space:nowrap}
 .suggest{margin-top:.45rem;padding:.45rem .65rem;background:#fff8e6;border:1px solid #f1deaa;border-radius:8px;font-size:.85rem;display:flex;gap:.4rem .6rem;align-items:center;flex-wrap:wrap}
@@ -63,7 +64,7 @@ details.group{border:1px solid #dce1e7;border-radius:8px;margin:.4rem 0;padding:
 label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid #dce1e7;border-radius:8px;margin:.6rem 0}
 </style>
 <header>
- <div><h1>Retail Monitor: example client</h1>
+ <div><h1>Price Watch</h1>
  <div class="muted small" id="who">Signing in as the example user...</div></div>
  <div class="row"><a href="/admin">Admin page</a><a href="/docs" target="_blank" rel="noopener">API reference</a>
   <button id="reset">Reset example data</button></div>
@@ -422,7 +423,7 @@ function card(m){
  const code=m.barcode?`Barcode ${esc(m.barcode.gtin14.replace(/^0+/,''))} ${m.barcode.source!=='retailer'?`<span class="muted">(${esc(m.barcode.source==='user'?'added by a user':m.barcode.source)})</span>`:''}${m.barcode.source!=='retailer'?` <button data-unlink="${id}">Unlink</button>`:''}`:'No barcode';
  const link=m.type==='exact_product'&&!(m.barcode&&m.barcode.source==='retailer')?` <input data-code="${id}" placeholder="scan barcode" size="13" inputmode="numeric"> <button data-link="${id}">Link</button>`:'';
  return `<div class="card" data-id="${id}"><div class="row" style="justify-content:space-between"><div class="row" style="flex-wrap:nowrap;gap:.7rem">${pictureCell(m.image,m.product_id,64)}<div><b>${esc(m.name)}</b><div class="muted small">${m.retailer_id?logoOf(m.retailer_id,16)+' ':''}${esc(m.store_name||'')}${alert?` &middot; alert at ≤ ${esc(alert)} kr`:''}</div></div></div>
-  <div style="text-align:right"><span class="price">${l?esc(l.current_price)+' '+esc(l.currency):'<span class="muted">no price yet</span>'}</span>${delta}${hit}
+  <div style="text-align:right"><span class="price">${l?esc(Number(l.current_price).toFixed(2))+'<span class="cur" style="font-size:.8rem;font-weight:500;color:#8a95a1;margin-left:.3rem">'+esc(l.currency)+'</span>':'<span class="muted">no price yet</span>'}</span>${delta}${hit}
   ${l&&l.unit_price?`<div class="muted small">${esc(l.unit_price.amount)} per ${esc(l.unit_price.unit)}</div>`:''}</div></div>
   <div class="muted small">Checked ${ago(m.last_success_at)} &middot; next check ${until(m.next_due_at)} &middot; ${code}${link}</div>
   <div class="row"><button data-check="${id}">Check now</button>${m.product_id?`<button data-open-history="${esc(m.product_id)}">Price history</button>`:''}<button data-remove="${id}">Remove</button></div></div>`;
@@ -558,7 +559,8 @@ async function runSearch(text,ids,narrow={}){
   else out.textContent=err.message}
 }
 const shortCode=g=>g.replace(/^0+/,'');
-const priceText=i=>i.currency&&i.currency!=='SEK'?`${i.current_price} ${i.currency}`:String(i.current_price);
+// 15.5 is shown as 15.50, with the currency small and grey so it never competes with the number
+const priceText=i=>`${esc(Number(i.current_price).toFixed(2))}<span class="cur">${esc(i.currency||'SEK')}</span>`;
 function barcodeLine(i){
  if(i.barcode)return `<div class="meta">Barcode ${esc(shortCode(i.barcode.gtin14))}${i.barcode.source!=='retailer'?` <span>(${esc(i.barcode.source==='user'?'added by a user':i.barcode.source)})</span>`:''}</div>`;
  return '<div class="meta">No barcode known</div>';
@@ -668,9 +670,9 @@ function showResults(job,target,note,problems){
    <td title="${esc(i.name)}"><div class="ptitle">${productTitle(i)}${i.via?' <span class="badge" title="The store words it differently; found through another of its names.">found via another name</span>':''}</div>
     <div class="meta">${storeLogo(i.store_id,16)} <span>${esc(sname(i.store_id))}</span></div>${refLine(i)}${alsoLine(i)}${barcodeLine(i)}${suggestBlock(i)}${editBox(i)}</td>
    <td>${esc(i.brand||'')}</td><td>${esc([i.size,i.pack].filter(Boolean).join(' · '))}</td>
-   <td class="num"><div class="pr">${esc(priceText(i))}</div><div class="pills">${offersCell(i)}${stockCell(i)}</div></td>
+   <td class="num"><div class="pr">${priceText(i)}</div><div class="pills">${offersCell(i)}${stockCell(i)}</div></td>
    <td class="act"><button class="watch" data-watch="${esc(i.listing_id)}" data-store-id="${esc(i.store_id)}" data-name="${esc(i.name)}"${watched.has(i.listing_id)?' disabled':''}>${watched.has(i.listing_id)?'Watching':'Watch'}</button><button type="button" class="linkbtn" data-open-history="${esc(i.product_id)}">Price history</button></td></tr>`}).join('');
- out.innerHTML=(lastNotes[id]?`<p class="muted small">${esc(lastNotes[id])}</p>`:'')+trouble+bar+`<table><colgroup><col class="c-pic"><col><col class="c-brand"><col class="c-size"><col class="c-price"><col class="c-act"></colgroup><tr><th></th><th>Product</th><th>Brand</th><th>Size</th><th class="num">${items.every(i=>!i.currency||i.currency==='SEK')?'Price (SEK)':'Price'}</th><th></th></tr>`+rows+'</table>';
+ out.innerHTML=(lastNotes[id]?`<p class="muted small">${esc(lastNotes[id])}</p>`:'')+trouble+bar+`<table><colgroup><col class="c-pic"><col><col class="c-brand"><col class="c-size"><col class="c-price"><col class="c-act"></colgroup><tr><th></th><th>Product</th><th>Brand</th><th>Size</th><th class="num">Price</th><th></th></tr>`+rows+'</table>';
 }
 const reshow=()=>{if(lastResults['search-result']&&lastResults['search-result'].length)showResults({result:{items:lastResults['search-result']}},'search-result')};
 document.addEventListener('change',e=>{const el=e.target;

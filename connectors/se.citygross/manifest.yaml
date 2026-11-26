@@ -19,6 +19,12 @@ capabilities:
   online_prices: supported
   physical_store_prices: unsupported
   store_offers: unsupported
+# Optional: blank adds every store in the directory; a town, name or postcode adds just those.
+store_discovery_inputs:
+  - name: place
+    label: Town or postcode (blank for every store)
+    pattern: '^[A-Za-zÅÄÖåäöÉé0-9 .-]{1,40}$'
+    required: false
 allowed_hosts: [www.citygross.se]
 # The id is the `-p<ID>` at the end of the page address (ids ending _ST are packaged, _KG are
 # sold by weight). The page itself is never fetched.

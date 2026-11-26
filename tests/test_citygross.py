@@ -6,7 +6,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from app.connectors.base import ConnectorError, ScanRequest, TransientError
+from app.connectors.base import ConnectorError, ExtractionError, ScanRequest, TransientError
 from app.connectors.http import PoliteClient, RateLimiter, host_allowed
 from app.pricing import parse_size
 from tests.connector_modules import module_of
@@ -271,3 +271,15 @@ def test_store_directory_is_one_request_and_uses_store_numbers():
     assert len(site.calls) == 1 and dict(site.calls[0].url.params) == {"siteTypeId": "3"}
     assert (stores[0].external_id, stores[0].name) == ("3204", "City Gross Borås")
     assert stores[0].address == "Göteborgsvägen 181, Borås"
+
+
+@pytest.mark.parametrize("place, numbers", [("Borås", {"3204"}), ("borås", {"3204"}), ("falun", {"3207"}),
+                                            ("eskil", {"3206"}), ("  ", None)])
+def test_a_town_or_name_narrows_the_store_directory(place, numbers):
+    found = {s.external_id for s in connector(FakeSite()).discover_stores(place=place)}
+    assert found >= {"3204", "3206", "3207"} if numbers is None else found == numbers
+
+
+def test_no_matching_store_is_an_error_not_an_empty_success():
+    with pytest.raises(ExtractionError, match="zzz"):
+        connector(FakeSite()).discover_stores(place="zzz")

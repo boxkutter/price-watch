@@ -50,4 +50,5 @@ def process_discovery(db: Session, job: Job) -> dict:
             db.add(Store(retailer_id=retailer_id, external_id=info.external_id, name=info.name))
             created += 1
     connector_state.record_success(db, retailer_id)
-    return {"status": "success", "stores": len(stores), "created": created, "updated": updated}
+    return {"status": "success", "stores": len(stores), "created": created, "updated": updated,
+            "names": [info.name for info in stores[:5]]}

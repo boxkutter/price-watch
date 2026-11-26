@@ -1,4 +1,5 @@
 from dataclasses import replace
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -25,6 +26,11 @@ from app.naming import (
 )
 from app.reference import best_image, reference_info
 from app.retrieval import fetch
+
+
+def money(value: Decimal) -> str:
+    """A price with at least two decimals: 15.5 is shown as 15.50."""
+    return format(value.quantize(Decimal("0.01")) if value.as_tuple().exponent > -2 else value, "f")
 
 
 def process_search(db: Session, job: Job) -> dict:
@@ -167,7 +173,7 @@ def process_search(db: Session, job: Job) -> dict:
                                       "valid_to": o.valid_to.isoformat() if o.valid_to else None}
                                      for o in offers_of.get(item.sku, [])],
                           "store_id": store.id, "channel": channel, "name": item.name,
-                          "current_price": str(item.current_price), "currency": item.currency})
+                          "current_price": money(item.current_price), "currency": item.currency})
     suggest_same(db, items, described)
     complete = all(scope["status"] in ("complete", "not_found") for scope in coverage)
     return {"status": "success" if complete else "partial", "complete": complete,

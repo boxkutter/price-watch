@@ -874,6 +874,110 @@
         "x-admin-only": true
       }
     },
+    "/v1/admin/clients": {
+      "get": {
+        "description": "Client applications (the apps people sign in through) and how many users have let each in.",
+        "operationId": "admin_clients_v1_admin_clients_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Admin Clients",
+        "tags": [
+          "Administration"
+        ],
+        "x-admin-only": true
+      }
+    },
     "/v1/admin/connector-packages/inspect": {
       "post": {
         "description": "Upload a connector zip (as the request body). Nothing is executed or installed; the\nresponse is a preview to review, with an `upload_id` to install it with.",
@@ -2423,6 +2527,129 @@
         "x-admin-only": true
       }
     },
+    "/v1/admin/connectors/{retailer_id}/stores/remove-unused": {
+      "post": {
+        "description": "Remove a connector's stores that nothing uses: no price history, offers or monitors, and not a\nstore the connector itself declares. Their entries in people's \"my stores\" go with them. Use it to\nstart over before running \"Find stores\" again for particular places.",
+        "operationId": "remove_unused_stores_v1_admin_connectors__retailer_id__stores_remove_unused_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "retailer_id",
+            "required": true,
+            "schema": {
+              "title": "Retailer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Remove Unused Stores",
+        "tags": [
+          "Administration"
+        ],
+        "x-admin-only": true
+      }
+    },
     "/v1/admin/example-user": {
       "post": {
         "description": "Open a session as the example user (a regular, non-admin user with a scoped API client) for\nthe /demo page. Creates the user the first time, revokes the previous example client credential\nand returns a fresh user token and client token, both shown only here.",
@@ -2632,6 +2859,108 @@
       }
     },
     "/v1/admin/invitations": {
+      "get": {
+        "description": "Invitations and what became of them: `pending`, `used` (someone registered) or `expired`.",
+        "operationId": "admin_invitations_v1_admin_invitations_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Admin Invitations",
+        "tags": [
+          "Administration"
+        ],
+        "x-admin-only": true
+      },
       "post": {
         "operationId": "invite_v1_admin_invitations_post",
         "parameters": [
@@ -2738,6 +3067,124 @@
           }
         ],
         "summary": "Invite",
+        "tags": [
+          "Administration"
+        ],
+        "x-admin-only": true
+      }
+    },
+    "/v1/admin/invitations/{invitation_id}": {
+      "delete": {
+        "description": "Withdraw an invitation that has not been used yet; its token stops working.",
+        "operationId": "revoke_invitation_v1_admin_invitations__invitation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Revoke Invitation",
         "tags": [
           "Administration"
         ],
@@ -3239,6 +3686,464 @@
           }
         ],
         "summary": "Discover Stores",
+        "tags": [
+          "Administration"
+        ],
+        "x-admin-only": true
+      }
+    },
+    "/v1/admin/stores/{store_id}": {
+      "delete": {
+        "description": "Remove one store. Refused (409) when it has price history, offers or monitors, or when its\nconnector declares it.",
+        "operationId": "remove_store_v1_admin_stores__store_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "store_id",
+            "required": true,
+            "schema": {
+              "title": "Store Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Remove Store",
+        "tags": [
+          "Administration"
+        ],
+        "x-admin-only": true
+      }
+    },
+    "/v1/admin/users": {
+      "get": {
+        "description": "Everyone with an account: when they joined and last signed in, whether they can sign in, how\nmany active sessions they have and what they use (monitors, stores, apps they granted access).",
+        "operationId": "admin_users_v1_admin_users_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Admin Users",
+        "tags": [
+          "Administration"
+        ],
+        "x-admin-only": true
+      }
+    },
+    "/v1/admin/users/{user_id}/disable": {
+      "post": {
+        "description": "Stop a user from signing in and end their sessions. Their data is kept; enable them again to\nlet them back in. You cannot disable yourself.",
+        "operationId": "disable_user_v1_admin_users__user_id__disable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Disable User",
+        "tags": [
+          "Administration"
+        ],
+        "x-admin-only": true
+      }
+    },
+    "/v1/admin/users/{user_id}/enable": {
+      "post": {
+        "description": "Let a disabled user sign in again.",
+        "operationId": "enable_user_v1_admin_users__user_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Enable User",
         "tags": [
           "Administration"
         ],

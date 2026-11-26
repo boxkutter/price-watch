@@ -2,7 +2,7 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Retail Monitor admin</title>
+<title>Price Watch admin</title>
 <style>
 body{font:16px system-ui,sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;color:#18212b}
 section{border:1px solid #ccd3db;border-radius:8px;padding:1rem;margin:1rem 0}
@@ -14,11 +14,13 @@ input,button{font:inherit;padding:.45rem}button{cursor:pointer}pre{overflow:auto
 .warn{color:#8a1c10}.card{border:1px solid #dce1e7;border-radius:8px;padding:.8rem;margin:.6rem 0}
 .card h3{margin:.1rem 0}.row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.4rem 0}.small{font-size:.85rem}
 label.inline{display:flex;gap:.4rem;align-items:center}.logo{display:inline-flex;align-items:center;justify-content:center;border-radius:6px;color:#fff;font-weight:700;vertical-align:middle;flex:none;letter-spacing:-.02em}img.logo{background:#fff;border:1px solid #dce1e7;padding:1px}
+.storecount{font-size:1.1rem;margin:.1rem 0 .3rem}
+.nw{white-space:nowrap}
 code{background:#f1f4f7;padding:0 .25rem;border-radius:3px}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.5rem;border-bottom:1px solid #dce1e7}
 </style>
-<h1>Retail Monitor</h1>
+<h1>Price Watch</h1>
 <input type="file" id="logo-input" accept="image/*" hidden>
-<p class="muted">Local administration. Connectors are installed, enabled and configured below. <a href="/demo">Open the example client</a> (a regular user working through the public API) &middot; <a href="/docs" target="_blank" rel="noopener">API reference</a></p>
+<p class="muted">Setup and management. Connectors are installed, enabled and configured below; people use the app in the example client. <a href="/demo">Open the example client</a> (a regular user working through the public API) &middot; <a href="/docs" target="_blank" rel="noopener">API reference</a></p>
 <section id="login-section"><h2>Sign in</h2>
 <form id="login-form"><label>Email<input name="email" type="email" required></label>
 <label>Password<input name="password" type="password" required></label><button>Sign in</button></form></section>
@@ -29,33 +31,14 @@ code{background:#f1f4f7;padding:0 .25rem;border-radius:3px}table{border-collapse
 <p class="muted small">Upload a connector package (a zip built with <code>python -m app.connectors.build</code>). You review it before anything is installed, and a new connector starts disabled. Connector code runs inside this service with its privileges, so install only packages you trust.</p>
 <div class="row"><input type="file" id="package-file" accept=".zip,application/zip"><button id="package-inspect">Review package</button></div>
 <div id="package-preview" hidden></div></section>
-<section><h2>Stores</h2><div id="stores"></div></section>
-<section><h2>Compare prices by barcode</h2>
-<p class="muted small">In a shop, scan or type the barcode. Tick the stores you compare across in the Stores list. Prices the catalogue already knows appear at once; live prices follow.</p>
-<form id="compare-form"><label>Barcode<input name="gtin" inputmode="numeric" size="16" required placeholder="e.g. 7310130321085"></label>
-<label>I am in<select id="compare-here"></select></label><button>Compare</button></form>
-<div id="compare-result" role="status"></div></section>
-<section><h2>Add a product by link</h2>
-<p class="muted small">Paste a product page address from a supported store (City Gross, Coop, Willys or Lidl). The page is not fetched; only the product id is read from the link, then the store is asked for that one product.</p>
-<form id="link-form"><label>Product page link<input name="url" size="60" required placeholder="https://www.citygross.se/matvaror/..."></label>
-<label>Store<select id="link-store" name="store_id"></select></label>
-<label>Alert at or below (kr)<input name="maximum_price" size="6" inputmode="decimal"></label>
-<button>Add product</button></form><p id="link-result" role="status"></p></section>
-<section><h2>Monitors</h2><label class="small inline"><input type="checkbox" id="show-removed"> Show removed</label><div id="monitors"></div>
-<form id="monitor-form"><label>Name<input name="name" required></label>
-<label>Type<select name="type"><option value="store">Store offers</option><option value="generic_product">Generic product</option><option value="exact_product">Exact listing</option></select></label>
-<label>Store<select id="store-select" name="store_id"></select></label>
-<label>Conditions JSON<input name="conditions" value="{}"></label>
-<label><input type="checkbox" name="notify_existing_offers"> Notify on first scan</label>
-<button>Create monitor</button></form></section>
-<section><h2>Recent jobs</h2><div id="jobs"></div></section>
-<section><h2>Recent events</h2><div id="events"></div></section>
+<section><h2>Users</h2><div id="users"></div></section>
 <section><h2>Invite a user</h2><form id="invite-form">
 <label>Email<input name="email" type="email" required></label><button>Create invitation</button></form>
-<pre id="invitation" hidden></pre><p class="muted">Share the token securely; it appears only here.</p></section>
-<section><h2>Client application</h2><form id="client-form">
+<pre id="invitation" hidden></pre><p class="muted">Share the token securely; it appears only here.</p><div id="invitations"></div></section>
+<section><h2>Client applications</h2><form id="client-form">
 <label>Name<input name="name" required></label><button>Create client</button></form>
-<pre id="client-secret" hidden></pre><p class="muted">Save the client token securely; it appears only here.</p></section>
+<pre id="client-secret" hidden></pre><p class="muted">Save the client token securely; it appears only here.</p><div id="clients"></div></section>
+<section><h2>Recent jobs</h2><div id="jobs"></div></section>
 </main><p id="message" role="status"></p>
 <script>
 let token=sessionStorage.getItem('retailToken');
@@ -68,57 +51,36 @@ async function api(path,options={}){
  if(!response.ok){const error=Error(data.message||data.detail||`HTTP ${response.status}`);error.status=response.status;error.data=data;throw error}return data;
 }
 async function refresh(){
- const [me,connectors,stores,monitors,jobs,events,mine]=await Promise.all([
-  api('/v1/me'),api('/v1/admin/connectors'),api('/v1/stores'),api('/v1/monitors'+($('show-removed')&&$('show-removed').checked?'?include_removed=true':'')),
-  api('/v1/admin/jobs'),api('/v1/events'),api('/v1/me/stores')]);
- const mineIds=new Set(mine.items.map(x=>x.store_id));
+ const [me,connectors,jobs,users,invitations,clients]=await Promise.all([api('/v1/me'),api('/v1/admin/connectors'),api('/v1/admin/jobs'),api('/v1/admin/users'),api('/v1/admin/invitations'),api('/v1/admin/clients')]);
  if(!me.is_admin)throw Error('Admin account required');
  $('login-section').hidden=true;$('dashboard').hidden=false;
  renderConnectors(connectors);
- const logoById=Object.fromEntries(connectors.items.map(c=>[c.id,c.logo_url])),nameById=Object.fromEntries(connectors.items.map(c=>[c.id,c.name]));
- $('stores').innerHTML='<table><tr><th>Compare</th><th>Store</th><th>Retailer</th><th>ID</th></tr>'+
-  stores.items.map(x=>`<tr><td><input type="checkbox" data-mine="${escaped(x.id)}" ${mineIds.has(x.id)?'checked':''} aria-label="Compare prices in ${escaped(x.name)}"></td><td>${escaped(x.name)}</td><td>${retailerLogo(x.retailer_id,nameById[x.retailer_id]||x.retailer_id,(logoById[x.retailer_id]||null),18)} ${escaped(x.retailer_id)}</td><td>${escaped(x.id)}</td></tr>`).join('')+'</table>';
- $('stores').querySelectorAll('[data-mine]').forEach(box=>box.onchange=async()=>{
-  try{await api('/v1/me/stores/'+box.dataset.mine,{method:box.checked?'PUT':'DELETE'});await refresh()}
-  catch(error){box.checked=!box.checked;$('message').textContent=error.message}});
- const hereNow=$('compare-here').value;
- $('compare-here').innerHTML='<option value="">(not specified)</option>'+stores.items.filter(x=>x.retailer_id!=='test.fixture').map(x=>`<option value="${escaped(x.id)}">${escaped(x.name)}</option>`).join('');
- $('compare-here').value=hereNow;
- $('link-store').innerHTML='<option value="">(the only store of that retailer)</option>'+stores.items.map(x=>`<option value="${escaped(x.id)}">${escaped(x.name)} (${escaped(x.retailer_id)})</option>`).join('');
- $('store-select').innerHTML=stores.items.map(x=>`<option value="${escaped(x.id)}">${escaped(x.name)}</option>`).join('');
- $('monitors').innerHTML='<table><tr><th>Name</th><th>Type</th><th>Next check</th><th>Actions</th></tr>'+
-  monitors.items.map(x=>{const id=escaped(x.id);
-   const barcode=x.type!=='exact_product'?'':(x.barcode?`<div class="muted small">Barcode ${escaped(x.barcode.gtin14.replace(/^0+/,''))} (${escaped(x.barcode.source)})${x.barcode.source!=='retailer'?` <button data-unlink="${id}">Unlink</button>`:''}</div>`:`<div class="muted small">No barcode</div>`);
-   const linker=x.type==='exact_product'&&!x.removed_at&&!(x.barcode&&x.barcode.source==='retailer')?` <input data-barcode-input="${id}" placeholder="barcode" size="14" inputmode="numeric"> <button data-barcode="${id}">Link barcode</button>`:'';
-   const actions=x.removed_at?`<span class="muted small">Removed ${escaped(x.removed_at)}</span> <button data-purge="${id}">Delete permanently</button>`
-    :`<button data-check="${id}">Check</button> <button data-remove="${id}">Remove</button> <button data-purge="${id}">Delete permanently</button>${linker}`;
-   return `<tr${x.removed_at?' class="muted"':''}><td>${escaped(x.name)}${barcode}</td><td>${escaped(x.type)}</td><td>${x.removed_at?'':escaped(x.next_due_at)}</td><td>${actions}</td></tr>`}).join('')+'</table>';
- $('monitors').querySelectorAll('[data-check]').forEach(button=>button.onclick=async()=>{
-  try{await api('/v1/monitors/'+button.dataset.check+'/check',{method:'POST'});$('message').textContent='Check queued'}
-  catch(error){$('message').textContent=error.message}});
- $('monitors').querySelectorAll('[data-remove]').forEach(button=>button.onclick=async()=>{
-  try{await api('/v1/monitors/'+button.dataset.remove,{method:'DELETE'});$('message').textContent='Removed. Its history is kept; use "Show removed" to see it.';await refresh()}
-  catch(error){$('message').textContent=error.message}});
- $('monitors').querySelectorAll('[data-purge]').forEach(button=>button.onclick=async()=>{
-  if(!confirm('Delete this monitor and all of its events permanently? The product price history is kept.'))return;
-  try{await api('/v1/monitors/'+button.dataset.purge+'?permanent=true',{method:'DELETE'});$('message').textContent='Deleted permanently';await refresh()}
-  catch(error){$('message').textContent=error.message}});
+ renderPeople(me,users,invitations,clients);
  $('jobs').innerHTML='<table><tr><th>Kind</th><th>State</th><th>Created</th><th>Action</th></tr>'+
   jobs.items.map(x=>`<tr><td>${escaped(x.kind)}</td><td>${escaped(x.state)}</td><td>${escaped(x.created_at)}</td><td>${['failed','partial','paused','rate_limited','access_blocked','extraction_failed','not_found','invalid_data','auth_required'].includes(x.state)?`<button data-retry="${escaped(x.id)}">Retry</button>`:''}</td></tr>`).join('')+'</table>';
  $('jobs').querySelectorAll('[data-retry]').forEach(button=>button.onclick=async()=>{
   try{await api('/v1/admin/jobs/'+button.dataset.retry+'/retry',{method:'POST'});await refresh()}
   catch(error){$('message').textContent=error.message}});
- $('events').innerHTML='<table><tr><th>Event</th><th>When</th></tr>'+
-  events.items.map(x=>`<tr><td>${escaped(x.type)}</td><td>${escaped(x.created_at)}</td></tr>`).join('')+'</table>';
 }
 
+const when=d=>d?new Date(/Z|[+-]\d\d:?\d\d$/.test(d)?d:d+'Z').toLocaleString('sv-SE',{dateStyle:'short',timeStyle:'short'}):'never';
+function renderPeople(me,users,invitations,clients){
+ $('users').innerHTML='<table><tr><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th>Last signed in</th><th>Sessions</th><th>Monitors</th><th>Stores</th><th>Apps</th><th></th></tr>'+
+  users.items.map(u=>`<tr${u.enabled?'':' class="muted"'}><td>${escaped(u.email)}${u.id===me.id?' <span class="badge">you</span>':''}</td><td>${u.is_admin?'Administrator':'User'}</td><td>${u.enabled?'Active':'<span class="warn">Disabled</span>'}</td><td class="nw">${escaped(when(u.created_at))}</td><td class="nw">${escaped(when(u.last_signed_in_at))}</td><td>${u.active_sessions}</td><td>${u.monitors}</td><td>${u.stores}</td><td>${u.apps}</td><td>${u.id===me.id?'':u.enabled?`<button data-user-disable="${escaped(u.id)}" data-email="${escaped(u.email)}">Disable</button>`:`<button data-user-enable="${escaped(u.id)}">Enable</button>`}</td></tr>`).join('')+'</table>'
+  +'<p class="muted small">Sessions are sign-ins that are still valid. Apps are client applications the user has let in. Disabling a user ends their sessions; their data is kept.</p>';
+ $('invitations').innerHTML=invitations.items.length?'<table><tr><th>Email</th><th>Status</th><th>Expires</th><th>Invited by</th><th></th></tr>'+invitations.items.map(i=>`<tr${i.status==='pending'?'':' class="muted"'}><td>${escaped(i.email)}</td><td>${i.status==='used'?'Registered '+escaped(when(i.used_at)):i.status==='expired'?'Expired':'<b>Waiting</b>'}</td><td>${escaped(when(i.expires_at))}</td><td>${escaped(i.invited_by||'')}</td><td>${i.status==='pending'?`<button data-invite-revoke="${escaped(i.id)}">Withdraw</button>`:''}</td></tr>`).join('')+'</table>':'<p class="muted small">No invitations yet.</p>';
+ $('clients').innerHTML=clients.items.length?'<table><tr><th>Name</th><th>Permissions</th><th>Users</th><th>Created</th><th></th></tr>'+clients.items.map(c=>`<tr${c.revoked_at?' class="muted"':''}><td>${escaped(c.name)}</td><td class="small">${escaped((c.scopes||[]).join(', '))}</td><td>${c.users}</td><td>${escaped(when(c.created_at))}</td><td>${c.revoked_at?'Revoked':`<button data-client-revoke="${escaped(c.id)}" data-name="${escaped(c.name)}">Revoke</button>`}</td></tr>`).join('')+'</table>':'<p class="muted small">No client applications yet.</p>';
+}
 function discoveryLine(c){
  const d=c.last_discovery;if(!d||!c.capabilities||c.capabilities.store_discovery!=='supported')return '';
  const inputs=Object.values(d.inputs||{}).join(', ');const what='Last store lookup'+(inputs?` (${escaped(inputs)})`:'');
  const when=d.created_at?' <span class="muted small">'+escaped(d.created_at)+'</span>':'';
  if(['queued','running','retry_wait'].includes(d.state))return `<div class="small">${what}: working on it...${when}</div>`;
  const r=d.result||{};
- if(d.state==='succeeded')return `<div class="small">${what}: found ${r.stores} store(s), ${r.created} new, ${r.updated} renamed. They are now listed for every user.${when}</div>`;
+ if(d.state==='succeeded'){
+  const names=(r.names||[]).map(n=>escaped(n)).join(', ')+((r.stores||0)>(r.names||[]).length?` and ${r.stores-(r.names||[]).length} more`:'');
+  const outcome=r.created?`${r.created} new${r.updated?`, ${r.updated} renamed`:''}. They are listed for every user.`:r.updated?`${r.updated} renamed; none new.`:`nothing new: ${r.stores===1?'it is':'they are'} already connected.`;
+  return `<div class="small">${what}: found ${r.stores} store${r.stores===1?'':'s'}${names?` (${names})`:''}, ${outcome}${when}</div>`}
  return `<div class="warn small">${what} failed (${escaped(d.state)}): ${escaped(r.detail||'no details')}${when}</div>`;
 }
 const statusText={ready:'Ready',disabled:'Disabled',paused:'Paused',needs_configuration:'Needs configuration',error:'Error',not_installable:'Not installable'};
@@ -145,21 +107,26 @@ function retailerLogo(id,name,url,size){
 let logoTarget=null;
 function connectorCard(c){
  const id=escaped(c.id);
+ // a retailer with no choice of location (one national store) just says the store is connected
+ const one=c.stores===1&&!(c.capabilities&&c.capabilities.store_discovery==='supported');
  const canDiscover=c.capabilities&&c.capabilities.store_discovery==='supported'&&c.enabled;
- const inputs=(c.store_discovery_inputs||[]).map(i=>`<input placeholder="${escaped(i.label||i.name)}" data-discover-input="${id}|${escaped(i.name)}" size="10">`).join('');
+ const inputs=(c.store_discovery_inputs||[]).map(i=>`<input placeholder="${escaped(i.label||i.name)}" data-discover-input="${id}|${escaped(i.name)}" size="${Math.min(30,Math.max(10,String(i.label||i.name).length))}">`).join('');
  return `<div class="card"><div class="row">${retailerLogo(c.id,c.name,c.logo_url,36)}<h3>${escaped(c.name)}</h3><code>${id}</code>
   <span class="badge ${escaped(c.status)}">${escaped(statusText[c.status]||c.status)}</span>
   <span class="badge">${escaped(c.source)}</span><span class="muted small">v${escaped(c.connector_version)}</span></div>
+  <div class="storecount"><b>${one?'Store connected':c.stores===0?'No stores connected':c.stores+(c.stores===1?' store connected':' stores connected')}</b>${c.removable_stores>0&&c.removable_stores<c.stores?` <span class="muted small">(${c.removable_stores} unused)</span>`:''}</div>
+  ${c.stores&&!one?`<div class="small muted">${(c.store_names||[]).map(n=>escaped(n.startsWith(c.name+' ')?n.slice(c.name.length+1):n)).join(', ')}${c.stores>(c.store_names||[]).length?` and ${c.stores-(c.store_names||[]).length} more`:''}</div>`:''}
   ${c.description?`<div class="muted">${escaped(c.description)}</div>`:''}
   ${c.load_error?`<div class="warn">Failed to load: ${escaped(c.load_error)}</div>`:''}
   ${c.paused?`<div class="warn">Paused: ${escaped(c.pause_reason||'')}</div>`:''}
   ${c.access_note?`<div class="muted small">${escaped(c.access_note)}</div>`:''}
   ${discoveryLine(c)}
-  <div class="muted small">${c.stores} store(s) listed for users, ${c.active_monitors} active monitor(s). Contacts: ${escaped((c.allowed_hosts||[]).join(', ')||'nothing')}.${c.overridden?' Enabled state set by an administrator.':''}</div>
+  <div class="muted small">${c.active_monitors} active monitor(s). Stores are listed for every user. Contacts: ${escaped((c.allowed_hosts||[]).join(', ')||'nothing')}.${c.overridden?' Enabled state set by an administrator.':''}</div>
   <div class="row">
    ${c.installable&&!c.load_error?(c.enabled?`<button data-act="disable" data-id="${id}">Disable</button>`:`<button data-act="enable" data-id="${id}">Enable</button>`):''}
    ${c.installable&&c.enabled?(c.paused?`<button data-act="resume" data-id="${id}">Resume</button>`:`<button data-act="pause" data-id="${id}">Pause</button>`):''}
    ${canDiscover?`${inputs}<button data-act="discover" data-id="${id}">Find stores</button>`:''}
+   ${c.removable_stores>0?`<button data-act="prune" data-id="${id}" data-count="${c.removable_stores}" title="Removes the stores nothing uses (no price history, offers or monitors), so you can run Find stores again for particular places">Remove unused stores (${c.removable_stores})</button>`:''}
    ${c.source==='installed'?`<button data-act="remove" data-id="${id}">Remove</button>`:''}
    ${c.enabled?`<button data-act="logo-fetch" data-id="${id}" title="Looks for the touch icon or favicon on the retailer's own website">Fetch logo from website</button>`:''}<button data-act="logo" data-id="${id}">${c.logo_url?'Change logo':'Upload logo'}</button>${c.logo_url?`<button data-act="logo-remove" data-id="${id}">Remove logo</button>`:''}</div>
   ${(c.settings||[]).map(x=>settingRow(c,x)).join('')}</div>`;
@@ -187,6 +154,9 @@ $('connectors').addEventListener('click',async event=>{
     say(job.state==='succeeded'?`Logo fetched from ${res.source_url} (${res.width}×${res.height} px).${res.small?' It is small; upload a better one if it looks poor.':''}`
      :['queued','running','retry_wait'].includes(job.state)?'Still waiting for the worker; the logo will appear when it finishes.':`No logo fetched (${job.state}): ${res.detail||'no details'}`)}
    else if(act==='logo-remove'){await api(`/v1/admin/connectors/${id}/logo`,{method:'DELETE'});say(`Removed the logo of ${id}`)}
+   else if(act==='prune'){
+    if(!confirm(`Remove ${b.dataset.count} store(s) of ${id} that have no price history, offers or monitors? Stores that are in use are kept. You can find stores again afterwards.`))return;
+    const r=await api(`/v1/admin/connectors/${id}/stores/remove-unused`,{method:'POST'});say(`Removed ${r.removed} unused store(s); ${r.kept} kept (in use or declared by the connector).`)}
    else if(act==='discover'){
     const body={};document.querySelectorAll(`[data-discover-input^="${CSS.escape(id)}|"]`).forEach(i=>{if(i.value.trim())body[i.dataset.discoverInput.split('|')[1]]=i.value.trim()});
     const r=await api(`/v1/admin/retailers/${id}/stores/discover`,{method:'POST',body:JSON.stringify(body)});say('Store lookup queued; waiting for the worker...');
@@ -218,6 +188,17 @@ $('logo-input').onchange=async event=>{const file=event.target.files[0];if(!file
   const data=await res.json().catch(()=>({}));if(!res.ok)throw Error(data.message||('HTTP '+res.status));
   say(`Logo saved for ${logoTarget}`);await refresh();
  }catch(error){say(error.message)}};
+document.addEventListener('click',async event=>{
+ const b=event.target.closest('[data-user-disable],[data-user-enable],[data-invite-revoke],[data-client-revoke]');if(!b)return;
+ try{
+  if(b.dataset.userDisable){if(!confirm(`Disable ${b.dataset.email}? They are signed out and cannot sign in until you enable them again. Their data is kept.`))return;
+   await api('/v1/admin/users/'+b.dataset.userDisable+'/disable',{method:'POST'});say('User disabled.')}
+  else if(b.dataset.userEnable){await api('/v1/admin/users/'+b.dataset.userEnable+'/enable',{method:'POST'});say('User enabled.')}
+  else if(b.dataset.inviteRevoke){await api('/v1/admin/invitations/'+b.dataset.inviteRevoke,{method:'DELETE'});say('Invitation withdrawn.')}
+  else if(b.dataset.clientRevoke){if(!confirm(`Revoke the application "${b.dataset.name}"? It stops working for everyone who let it in.`))return;
+   await api('/v1/clients/'+b.dataset.clientRevoke,{method:'DELETE'});say('Application revoked.')}
+  await refresh();
+ }catch(error){say(error.message)}});
 let staged=null;
 function renderPreview(r){
  const p=r.package;staged=r.upload_id;
@@ -248,62 +229,6 @@ $('package-preview').addEventListener('click',async event=>{
 });
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const age=sec=>sec<90?'just now':sec<5400?Math.round(sec/60)+' min ago':sec<172800?Math.round(sec/3600)+' h ago':Math.round(sec/86400)+' days ago';
-const statusText2={unknown:'not checked yet',not_found:'does not sell it',unknown_mapping:'cannot search by barcode here',paused:'paused',disabled:'disabled',rate_limited:'busy, try again later',unsupported:'unavailable',access_blocked:'blocked',extraction_failed:'unreadable response'};
-function renderCompare(data,live,note){
- const rows=live?live.rows:data.known;const sum=live||data;
- const head=data.product?`<p><b>${escaped(rows.find(r=>r.status==='found')?.product_name||data.product.name)}</b> <span class="muted small">barcode ${escaped(data.gtin14.replace(/^0+/,''))}</span></p>`:'';
- const saving=sum.saving_vs_here?`<p class="${Number(sum.saving_vs_here.amount)<0?'':'warn'}"><b>${escaped(sum.cheapest.store_name)}</b> is ${Math.abs(Number(sum.saving_vs_here.amount)).toFixed(2)} kr (${Math.abs(Number(sum.saving_vs_here.percent))}%) cheaper than where you are.</p>`:(sum.cheapest&&data.here_store_id?'<p>Where you are is already the cheapest we know.</p>':'');
- const body=rows.map(r=>{const here=r.store_id===data.here_store_id?' <span class="badge">here</span>':'';
-  if(r.status!=='found')return `<tr class="muted"><td>${escaped(r.store_name)}${here}</td><td colspan="4">${escaped(statusText2[r.status]||r.status)}${r.detail&&r.status!=='unknown'?' &middot; '+escaped(r.detail):''}</td></tr>`;
-  const vs=r.is_cheapest?'cheapest':(r.vs_cheapest?'+'+Number(r.vs_cheapest.amount).toFixed(2)+' kr':'');
-  return `<tr${r.is_cheapest?' style="font-weight:600"':''}><td>${escaped(r.store_name)}${here}</td><td>${escaped(r.current_price)} ${escaped(r.currency)}</td><td>${r.unit_price?escaped(r.unit_price.amount)+' /'+escaped(r.unit_price.unit):''}</td><td>${escaped(vs)}</td><td class="muted small">${r.source==='live'?'live':'catalogue, '+age(r.age_seconds)}</td></tr>`}).join('');
- $('compare-result').innerHTML=head+saving+`<table><tr><th>Store</th><th>Price</th><th>Unit price</th><th>vs cheapest</th><th>Source</th></tr>${body}</table>`+(note?`<p class="muted small">${escaped(note)}</p>`:'');
-}
-$('compare-form').onsubmit=async event=>{event.preventDefault();
- try{
-  const form=new FormData(event.target);const body={gtin:form.get('gtin').trim()};
-  if($('compare-here').value)body.here_store_id=$('compare-here').value;
-  $('compare-result').textContent='Looking...';
-  const first=await api('/v1/compare/barcode',{method:'POST',body:JSON.stringify(body)});
-  renderCompare(first,null,'Known prices shown; checking each store live...');
-  let job={state:first.status};
-  for(let i=0;i<60&&['queued','running','retry_wait'].includes(job.state);i++){await sleep(1500);job=await api('/v1/jobs/'+first.job_id)}
-  if(job.result&&job.result.rows)renderCompare(first,job.result,job.result.complete?'Live prices.':'Some stores could not be checked.');
-  else renderCompare(first,null,'Live check did not finish ('+job.state+').');
- }catch(error){$('compare-result').textContent=error.message}};
-$('monitors').addEventListener('click',async event=>{
- const b=event.target.closest('button');if(!b||!(b.dataset.barcode||b.dataset.unlink))return;
- try{
-  if(b.dataset.unlink){await api('/v1/monitors/'+b.dataset.unlink+'/barcode',{method:'DELETE'});$('message').textContent='Barcode removed';await refresh();return}
-  const id=b.dataset.barcode;const input=document.querySelector(`[data-barcode-input="${CSS.escape(id)}"]`);
-  if(!input.value.trim()){$('message').textContent='Enter the barcode first';return}
-  const path='/v1/monitors/'+id+'/barcode';
-  try{const r=await api(path,{method:'POST',body:JSON.stringify({gtin:input.value.trim()})});$('message').textContent='Barcode linked ('+r.outcome+')'}
-  catch(error){
-   const existing=error.status===409&&error.data&&error.data.details&&error.data.details[0]&&error.data.details[0].existing_product;
-   if(!existing)throw error;
-   if(!confirm(`That barcode already belongs to "${existing.name}" (${existing.retailers.join(', ')||'no store'}). Are they the same item? Merging links your product to it.`))return;
-   const r=await api(path,{method:'POST',body:JSON.stringify({gtin:input.value.trim(),merge:true})});$('message').textContent='Merged ('+r.merged_listings+' listing moved)'}
-  await refresh();
- }catch(error){$('message').textContent=error.message}});
-$('show-removed').onchange=()=>refresh().catch(error=>{$('message').textContent=error.message});
-$('link-form').onsubmit=async event=>{event.preventDefault();const out=$('link-result');
- try{
-  const form=new FormData(event.target);const body={url:form.get('url').trim()};
-  if(form.get('store_id'))body.store_id=form.get('store_id');
-  if(form.get('maximum_price').trim())body.maximum_price=form.get('maximum_price').trim().replace(',','.');
-  out.textContent='Looking the product up...';
-  const first=await api('/v1/monitors/from-url',{method:'POST',body:JSON.stringify(body)});
-  if(first.already_monitored){out.textContent='You already monitor this product: '+first.monitor.name;return}
-  let job={state:first.status};
-  for(let i=0;i<40&&['queued','running','retry_wait'].includes(job.state);i++){await sleep(1500);job=await api('/v1/jobs/'+first.job_id)}
-  const r=job.result||{};
-  if(job.state==='succeeded'){const p=r.product;
-   out.textContent=(r.already_monitored?'Already monitored: ':'Added: ')+p.name+', '+p.current_price+' '+p.currency+(p.unit_price?' ('+p.unit_price.amount+' per '+p.unit_price.unit+')':'');
-   event.target.reset();await refresh()}
-  else if(['queued','running','retry_wait'].includes(job.state))out.textContent='Still working; check the monitor list shortly.';
-  else out.textContent='Could not add it ('+job.state+'): '+(r.detail||'no details');
- }catch(error){out.textContent=error.message}};
 $('login-form').onsubmit=async event=>{event.preventDefault();try{
  const body=Object.fromEntries(new FormData(event.target));
  const result=await api('/v1/auth/login',{method:'POST',body:JSON.stringify(body)});
@@ -312,20 +237,14 @@ $('login-form').onsubmit=async event=>{event.preventDefault();try{
 $('logout').onclick=async()=>{try{await api('/v1/auth/logout',{method:'POST'})}catch(_){}
  sessionStorage.removeItem('retailToken');token=null;
  $('dashboard').hidden=true;$('login-section').hidden=false};
-$('monitor-form').onsubmit=async event=>{event.preventDefault();try{
- const form=new FormData(event.target);const body={name:form.get('name'),type:form.get('type'),
-  store_id:form.get('store_id'),conditions:JSON.parse(form.get('conditions')),
-  notify_existing_offers:form.has('notify_existing_offers')};
- await api('/v1/monitors',{method:'POST',body:JSON.stringify(body)});await refresh();
-}catch(error){$('message').textContent=error.message}};
 $('invite-form').onsubmit=async event=>{event.preventDefault();try{
  const result=await api('/v1/admin/invitations',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(event.target)))});
- $('invitation').hidden=false;$('invitation').textContent=JSON.stringify(result,null,2);
+ $('invitation').hidden=false;$('invitation').textContent=JSON.stringify(result,null,2);event.target.reset();await refresh();
 }catch(error){$('message').textContent=error.message}};
 $('client-form').onsubmit=async event=>{event.preventDefault();try{
  const result=await api('/v1/clients',{method:'POST',body:JSON.stringify({
  name:new FormData(event.target).get('name'),scopes:['catalogue:read','monitors:read','monitors:write','events:read','webhooks:manage']})});
- $('client-secret').hidden=false;$('client-secret').textContent=JSON.stringify(result,null,2);
+ $('client-secret').hidden=false;$('client-secret').textContent=JSON.stringify(result,null,2);event.target.reset();await refresh();
 }catch(error){$('message').textContent=error.message}};
 if(token)refresh().catch(error=>{$('message').textContent=error.message;
  sessionStorage.removeItem('retailToken');token=null});

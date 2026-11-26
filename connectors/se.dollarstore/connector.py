@@ -92,7 +92,7 @@ def parse_offer(sku: str, title: str, mix_match: str, url: str) -> OfferData | N
     bundle = _BUNDLE.match(terms)
     price = to_decimal(bundle.group(2).replace(",", ".")) if bundle else None
     if bundle and price is not None:
-        terms = f"{int(bundle.group(1))} för {format(price.normalize(), 'f')} kr"
+        terms = f"{int(bundle.group(1))} för {format(price, 'f') if price == price.to_integral_value() else format(price.quantize(Decimal('0.01')), 'f')} kr"
     return OfferData(identity_key=f"{sku}:mixmatch", title=title, terms=terms, price=price,
                      currency="SEK", channel="online", source_url=url, eligibility="public",
                      skus=(sku,))

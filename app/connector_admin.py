@@ -3,7 +3,7 @@ import os
 from functools import lru_cache
 
 from dotenv import dotenv_values
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app import connector_state
@@ -12,9 +12,12 @@ from app.models import (
     ConnectorPackage,
     ConnectorSetting,
     Job,
+    Listing,
     Monitor,
+    Offer,
     RetailerLogo,
     Store,
+    UserStore,
     aware,
     utcnow,
 )
@@ -117,8 +120,51 @@ def last_discoveries(db: Session) -> dict[str, dict]:
     return latest
 
 
+def stores_in_use(db: Session) -> set[str]:
+    """Stores that have price history, offers or monitors: removing them would lose data."""
+    used: set[str] = set()
+    for column in (Listing.store_id, Offer.store_id, Monitor.store_id):
+        used |= set(db.scalars(select(column).distinct()))
+    return used
+
+
+def removable_stores(db: Session, retailer_id: str, used: set[str] | None = None) -> list[Store]:
+    """A retailer's stores that can go: none of them has price history, offers or monitors, and the
+    connector does not declare it (a declared store is put back at start-up)."""
+    used = stores_in_use(db) if used is None else used
+    info = registry.retailer(retailer_id) or {}
+    declared = {spec["external_id"] for spec in info.get("stores") or []}
+    return [s for s in db.scalars(select(Store).where(Store.retailer_id == retailer_id))
+            if s.id not in used and s.external_id not in declared]
+
+
+def delete_stores(db: Session, stores: list[Store]) -> int:
+    """Remove stores, and the 'my stores' ticks that pointed at them."""
+    for store in stores:
+        db.execute(delete(UserStore).where(UserStore.store_id == store.id))
+        db.delete(store)
+    db.flush()
+    return len(stores)
+
+
+SHOWN_STORES = 5
+
+
+def store_samples(db: Session) -> dict[str, list[str]]:
+    """The first few store names of each retailer (alphabetical), so the admin page can say which
+    locations are connected without listing all of them."""
+    found: dict[str, list[str]] = {}
+    for retailer_id, name in db.execute(select(Store.retailer_id, Store.name).order_by(Store.retailer_id, Store.name)):
+        names = found.setdefault(retailer_id, [])
+        if len(names) < SHOWN_STORES:
+            names.append(name)
+    return found
+
+
 def admin_view(db: Session) -> dict:
     discoveries = last_discoveries(db)
+    used = stores_in_use(db)
+    samples = store_samples(db)
     logos = {row.retailer_id: row.updated_at for row in db.execute(
         select(RetailerLogo.retailer_id, RetailerLogo.updated_at))}
     stores = dict(db.execute(select(Store.retailer_id, func.count()).group_by(Store.retailer_id)).all())
@@ -147,6 +193,8 @@ def admin_view(db: Session) -> dict:
             # `v` changes when the logo does, so a replaced logo is not served from a browser cache
             "logo_url": (f"/logos/{info['id']}?v={int(aware(logos[info['id']]).timestamp())}"
                          if info["id"] in logos else None),
+            "removable_stores": len(removable_stores(db, info["id"], used)),
+            "store_names": samples.get(info["id"], []),
             "stores": stores.get(info["id"], 0), "active_monitors": monitors.get(info["id"], 0),
             "installed_at": package.installed_at if package else None,
         })

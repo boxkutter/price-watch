@@ -496,6 +496,93 @@ def invite(body: InviteRequest, db: Session = Depends(get_db), p: Principal = De
     return {"id": row.id, "invitation_token": token, "expires_at": row.expires_at}
 
 
+@app.get("/v1/admin/users")
+def admin_users(db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Everyone with an account: when they joined and last signed in, whether they can sign in, how
+    many active sessions they have and what they use (monitors, stores, apps they granted access)."""
+    now = utcnow()
+    sessions = db.execute(select(Credential.owner_id, func.count(), func.max(Credential.created_at))
+                          .where(Credential.kind == "user").group_by(Credential.owner_id)).all()
+    last_seen = {owner: seen for owner, _count, seen in sessions}
+    active = dict(db.execute(select(Credential.owner_id, func.count()).where(
+        Credential.kind == "user", Credential.revoked_at.is_(None),
+        (Credential.expires_at.is_(None)) | (Credential.expires_at > now)).group_by(Credential.owner_id)).all())
+    monitors = dict(db.execute(select(Monitor.owner_id, func.count()).where(
+        Monitor.enabled.is_(True)).group_by(Monitor.owner_id)).all())
+    stores = dict(db.execute(select(UserStore.user_id, func.count()).group_by(UserStore.user_id)).all())
+    apps = dict(db.execute(select(ClientGrant.user_id, func.count()).where(
+        ClientGrant.revoked_at.is_(None)).group_by(ClientGrant.user_id)).all())
+    rows = db.scalars(select(User).order_by(User.created_at)).all()
+    return {"items": [{"id": u.id, "email": u.email, "is_admin": u.is_admin, "enabled": u.enabled,
+                       "created_at": u.created_at, "last_signed_in_at": last_seen.get(u.id),
+                       "active_sessions": active.get(u.id, 0), "monitors": monitors.get(u.id, 0),
+                       "stores": stores.get(u.id, 0), "apps": apps.get(u.id, 0)} for u in rows]}
+
+
+@app.post("/v1/admin/users/{user_id}/disable", status_code=204)
+def disable_user(user_id: str, db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Stop a user from signing in and end their sessions. Their data is kept; enable them again to
+    let them back in. You cannot disable yourself."""
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.id == p.user.id:
+        raise HTTPException(409, "You cannot disable your own account")
+    user.enabled = False
+    for row in db.scalars(select(Credential).where(
+            Credential.owner_id == user.id, Credential.kind == "user", Credential.revoked_at.is_(None))):
+        row.revoked_at = utcnow()
+    audit(db, p.user.id, "user.disabled", "user", user.id)
+    db.commit()
+
+
+@app.post("/v1/admin/users/{user_id}/enable", status_code=204)
+def enable_user(user_id: str, db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Let a disabled user sign in again."""
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    user.enabled = True
+    audit(db, p.user.id, "user.enabled", "user", user.id)
+    db.commit()
+
+
+@app.get("/v1/admin/invitations")
+def admin_invitations(db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Invitations and what became of them: `pending`, `used` (someone registered) or `expired`."""
+    now = utcnow()
+    emails = dict(db.execute(select(User.id, User.email)).all())
+    rows = db.scalars(select(Invitation).order_by(Invitation.expires_at.desc())).all()
+    return {"items": [{"id": r.id, "email": r.email, "expires_at": r.expires_at, "used_at": r.used_at,
+                       "invited_by": emails.get(r.created_by),
+                       "status": "used" if r.used_at else "expired" if aware(r.expires_at) < now else "pending"}
+                      for r in rows]}
+
+
+@app.delete("/v1/admin/invitations/{invitation_id}", status_code=204)
+def revoke_invitation(invitation_id: str, db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Withdraw an invitation that has not been used yet; its token stops working."""
+    row = db.get(Invitation, invitation_id)
+    if not row:
+        raise HTTPException(404, "Invitation not found")
+    if row.used_at:
+        raise HTTPException(409, "That invitation was already used")
+    row.expires_at = utcnow()
+    audit(db, p.user.id, "invitation.revoked", "invitation", row.id)
+    db.commit()
+
+
+@app.get("/v1/admin/clients")
+def admin_clients(db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Client applications (the apps people sign in through) and how many users have let each in."""
+    grants = dict(db.execute(select(ClientGrant.client_id, func.count()).where(
+        ClientGrant.revoked_at.is_(None)).group_by(ClientGrant.client_id)).all())
+    rows = db.scalars(select(Credential).where(Credential.kind == "client")
+                      .order_by(Credential.created_at)).all()
+    return {"items": [{"id": c.id, "name": c.name, "scopes": c.scopes, "created_at": c.created_at,
+                       "revoked_at": c.revoked_at, "users": grants.get(c.id, 0)} for c in rows]}
+
+
 @app.get("/v1/admin/audit")
 def audit_log(db: Session = Depends(get_db), p: Principal = Depends(admin)):
     rows = db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc())
@@ -1210,6 +1297,34 @@ def fetch_retailer_logo(retailer_id: str, db: Session = Depends(get_db), p: Prin
     audit(db, p.user.id, "connector.logo_fetch_queued", "connector", retailer_id)
     db.commit()
     return {"job_id": job.id, "status": job.state}
+
+
+@app.post("/v1/admin/connectors/{retailer_id}/stores/remove-unused")
+def remove_unused_stores(retailer_id: str, db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Remove a connector's stores that nothing uses: no price history, offers or monitors, and not a
+    store the connector itself declares. Their entries in people's "my stores" go with them. Use it to
+    start over before running "Find stores" again for particular places."""
+    keep = db.scalar(select(func.count()).select_from(Store).where(Store.retailer_id == retailer_id)) or 0
+    gone = connector_admin.removable_stores(db, retailer_id)
+    removed = connector_admin.delete_stores(db, gone)
+    audit(db, p.user.id, "stores.removed_unused", "connector", retailer_id, {"removed": removed})
+    db.commit()
+    return {"removed": removed, "kept": keep - removed}
+
+
+@app.delete("/v1/admin/stores/{store_id}", status_code=204)
+def remove_store(store_id: str, db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Remove one store. Refused (409) when it has price history, offers or monitors, or when its
+    connector declares it."""
+    store = db.get(Store, store_id)
+    if not store:
+        raise HTTPException(404, "Store not found")
+    if not any(s.id == store.id for s in connector_admin.removable_stores(db, store.retailer_id)):
+        raise HTTPException(409, "This store has price history, offers or monitors, or its connector "
+                                 "declares it, so it cannot be removed")
+    connector_admin.delete_stores(db, [store])
+    audit(db, p.user.id, "store.removed", "store", store_id, {"name": store.name})
+    db.commit()
 
 
 @app.delete("/v1/admin/connectors/{retailer_id}/logo", status_code=204)

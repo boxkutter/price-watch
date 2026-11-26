@@ -116,17 +116,25 @@ class CityGrossConnector(HttpJsonConnector):
     def source_for(self, store: str) -> str:
         return f"{SEARCH_URL}?store={store}"
 
-    def discover(self, **inputs) -> list[StoreInfo]:
+    def discover(self, place: str | None = None, **_ignored) -> list[StoreInfo]:
+        """The stores in City Gross' directory (one request). With `place`, only the ones whose name
+        or town contains it, or whose postcode starts with its digits."""
         data = self.client.get_json(SITES_URL, {"siteTypeId": 3})
+        wanted = " ".join(str(place or "").split()).casefold()
+        digits = "".join(ch for ch in wanted if ch.isdigit())
         stores = []
         for site in data.get("sites") if isinstance(data, dict) else []:
             number, name = site.get("storeNumber"), site.get("name")
-            if number and name:
-                address = ", ".join(str(part) for part in (site.get("streetAddress"), site.get("city"))
-                                    if part)
-                stores.append(StoreInfo(str(number), str(name), address or None))
+            if not (number and name):
+                continue
+            if wanted and not (wanted in str(name).casefold() or wanted in str(site.get("city") or "").casefold()
+                               or (len(digits) >= 2 and "".join(
+                                   ch for ch in str(site.get("zipcode") or "") if ch.isdigit()).startswith(digits))):
+                continue
+            address = ", ".join(str(part) for part in (site.get("streetAddress"), site.get("city")) if part)
+            stores.append(StoreInfo(str(number), str(name), address or None))
         if not stores:
-            raise ExtractionError("Store directory was empty")
+            raise ExtractionError("Store directory was empty" if not wanted else f"No stores found for '{place}'")
         return stores
 
     def _search(self, store: str, text: str, skip: int, take: int) -> dict:

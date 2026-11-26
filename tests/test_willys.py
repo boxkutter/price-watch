@@ -120,7 +120,7 @@ def test_a_public_single_item_campaign_lowers_the_price_and_keeps_the_regular_on
                                    "price": {"value": 14.9}, "rewardLabel": "14,90"}]
     price, (offer,) = parse_product(raw)
     assert (price.current_price, price.regular_price) == (Decimal("14.9"), Decimal("17.9"))
-    assert offer.eligibility == "public" and offer.terms == "14.9 kr"
+    assert offer.eligibility == "public" and offer.terms == "14.90 kr"
 
 
 @pytest.mark.parametrize("change", [

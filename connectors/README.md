@@ -5,7 +5,7 @@ To add a store, add a folder. To remove one, delete its folder. The application 
 
 | Folder | Connector | State |
 |---|---|---|
-| [`se.citygross/`](se.citygross/) | City Gross | Working. No key needed |
+| [`se.citygross/`](se.citygross/) | City Gross | Working. No key needed. "Find stores" takes an optional town or postcode |
 | [`se.coop/`](se.coop/) | Coop | Working. Needs the `COOP_API_KEY` setting (enter it in the admin page) |
 | [`se.willys/`](se.willys/) | Willys | Working. No key needed. Search and links; member offers; one national online store; background checks only 04:00-08:45 UTC as Willys asks |
 | [`se.lidl/`](se.lidl/) | Lidl | Working, narrow. Add a product by its lidl.se page link (no search); covers only the online shop, not grocery prices, which Lidl does not publish |

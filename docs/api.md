@@ -577,6 +577,14 @@ Not available to client tokens; listed so the full surface is documented.
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/v1/admin/invitations` | Invite a user |
+| GET | `/v1/admin/invitations` | Invitations and their status (`pending`, `used`, `expired`) |
+| DELETE | `/v1/admin/invitations/{invitation_id}` | Withdraw an unused invitation |
+| GET | `/v1/admin/users` | Everyone with an account: joined, last sign-in, sessions, monitors, stores, apps |
+| POST | `/v1/admin/users/{user_id}/disable` | Stop a user signing in and end their sessions (not yourself) |
+| POST | `/v1/admin/users/{user_id}/enable` | Let a disabled user sign in again |
+| GET | `/v1/admin/clients` | Client applications and how many users have let each in |
+| POST | `/v1/admin/connectors/{retailer_id}/stores/remove-unused` | Remove a connector's stores that nothing uses (no price history, offers or monitors; not declared by the connector) |
+| DELETE | `/v1/admin/stores/{store_id}` | Remove one store; refused with 409 when it has data or is declared by its connector |
 | PUT | `/v1/admin/connectors/{retailer_id}/logo` | Set a retailer's logo (the body is the image) |
 | POST | `/v1/admin/connectors/{retailer_id}/logo/fetch` | Fetch the logo from the retailer's own website (a worker job) |
 | DELETE | `/v1/admin/connectors/{retailer_id}/logo` | Remove it; clients draw a coloured badge again |
