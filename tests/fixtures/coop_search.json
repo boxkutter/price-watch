@@ -1,0 +1,114 @@
+{
+ "results": {
+  "count": 4,
+  "facets": [],
+  "items": [
+   {
+    "id": "7300156599452",
+    "type": "Product",
+    "ean": "7300156599452",
+    "name": "Havregryn",
+    "manufacturerName": "Coop",
+    "packageSize": 1500.0,
+    "packageSizeInformation": "1500 g",
+    "packageSizeUnit": "Gram",
+    "salesPriceData": {
+     "b2cPrice": 18.88,
+     "b2bPrice": 17.81
+    },
+    "comparativePriceData": {
+     "b2cPrice": 12.59,
+     "b2bPrice": 11.88
+    },
+    "comparativePriceUnit": {
+     "unit": "kg",
+     "text": "kr/kg"
+    },
+    "salesUnit": "Styck",
+    "availablePromotions": [
+     "MULTI_BUY_FIXED_PRICE"
+    ],
+    "availableOnline": true,
+    "displayLowerPrice": false,
+    "articleSold": false
+   },
+   {
+    "id": "7310865067883",
+    "type": "Product",
+    "ean": "7310865067883",
+    "name": "Laktosfri Mellanmjölk",
+    "manufacturerName": "Arla Ko®",
+    "packageSize": 1000.0,
+    "packageSizeInformation": "1 liter",
+    "packageSizeUnit": "Milliliter",
+    "salesPriceData": {
+     "b2cPrice": 18.38,
+     "b2bPrice": 17.34
+    },
+    "comparativePriceData": {
+     "b2cPrice": 18.38,
+     "b2bPrice": 17.34
+    },
+    "comparativePriceUnit": {
+     "unit": "liter",
+     "text": "kr/lit"
+    },
+    "salesUnit": "Styck",
+    "availableOnline": true,
+    "displayLowerPrice": false,
+    "articleSold": false
+   },
+   {
+    "id": "7310074715087",
+    "type": "Product",
+    "ean": "7310074715087",
+    "name": "Pepsi Max 4-pack",
+    "manufacturerName": "Pepsi",
+    "packageSize": 6000.0,
+    "packageSizeInformation": "4x1.5L",
+    "packageSizeUnit": "Milliliter",
+    "salesPriceData": {
+     "b2cPrice": 61.95,
+     "b2bPrice": 58.44
+    },
+    "comparativePriceData": {
+     "b2cPrice": 10.33,
+     "b2bPrice": 9.75
+    },
+    "comparativePriceUnit": {
+     "unit": "liter",
+     "text": "kr/lit"
+    },
+    "salesUnit": "Styck",
+    "availableOnline": true,
+    "displayLowerPrice": true,
+    "articleSold": false
+   },
+   {
+    "id": "255700_2097825700008",
+    "type": "Product",
+    "ean": "2097825700008",
+    "name": "Kaffemjölk Eko 2cl 100st/kartong",
+    "manufacturerName": "Arla",
+    "packageSize": 2000.0,
+    "packageSizeInformation": "2000 gram ungefärlig vikt",
+    "salesPriceData": {
+     "b2cPrice": 148.01,
+     "b2bPrice": 139.63
+    },
+    "comparativePriceData": {
+     "b2cPrice": 148.01,
+     "b2bPrice": 139.63
+    },
+    "comparativePriceUnit": {
+     "unit": "styck",
+     "text": "kr/st"
+    },
+    "salesUnit": "Styck",
+    "availableOnline": true,
+    "displayLowerPrice": false,
+    "articleSold": false
+   }
+  ]
+ }
+}

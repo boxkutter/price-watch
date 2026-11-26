@@ -20,7 +20,7 @@ capabilities:
 """)
     retailers, connectors = load_registry(tmp_path)
     assert retailers[0]["id"] == "test.fourth"
-    assert connectors["test.fourth"].scan("demo", "online").complete
+    assert connectors["test.fourth"].scan("demo", "online", None).complete
 
     (tmp_path / "fourth.yaml").write_text((tmp_path / "fourth.yaml").read_text().replace(
         "access_review: approved", "access_review: unverified"))

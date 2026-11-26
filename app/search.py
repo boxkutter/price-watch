@@ -1,17 +1,21 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.connectors.base import ScanRequest
 from app.connectors.registry import connector_for
-from app.models import Job, Listing, PriceObservation, Product, Store, new_id, utcnow
-from app.pricing import unit_price
+from app.gtin import normalize_gtin
+from app.ingest import add_price, ensure_listing
+from app.models import Job, Listing, Product, Store, new_id, utcnow
+from app.retrieval import fetch
 
 
 def process_search(db: Session, job: Job) -> dict:
     payload = job.payload or {}
     query = str(payload.get("query") or "").casefold().strip()
-    gtin14 = str(payload.get("gtin") or "").zfill(14)
+    gtin = str(payload.get("gtin") or "")
+    gtin14 = normalize_gtin(gtin) if gtin else None
     known_skus = set()
-    if payload.get("gtin"):
+    if gtin14:
         product = db.scalar(select(Product).where(Product.gtin14 == gtin14,
                                                    Product.verified.is_(True)))
         if product:
@@ -19,56 +23,57 @@ def process_search(db: Session, job: Job) -> dict:
                 Listing.product_id == product.id)).all())
     channel = payload.get("channel", "online")
     run_id = new_id()  # per execution, so an admin retry cannot collide with the first run
+    request = ScanRequest(query=query or None, gtins=(gtin,) if gtin else ())
     items = []
     coverage = []
+    barcode_found = False
     for store_id in payload.get("store_ids", []):
         store = db.get(Store, store_id)
         connector = connector_for(store.retailer_id) if store else None
         if not connector:
             coverage.append({"store_id": store_id, "status": "unsupported"})
             continue
-        snapshot = connector.scan(store.external_id, channel)
-        if not snapshot.complete:
-            coverage.append({"store_id": store_id, "status": "partial", "source": snapshot.source})
+        snapshot, skipped = fetch(db, store, connector, channel, request)
+        if skipped:
+            coverage.append({"store_id": store_id, "status": skipped["status"],
+                             "detail": skipped.get("detail")})
             continue
-        coverage.append({"store_id": store_id, "status": "complete", "source": snapshot.source})
+        if snapshot.effective_status not in ("success", "not_found"):
+            coverage.append({"store_id": store_id, "status": snapshot.effective_status,
+                             "source": snapshot.source, "detail": snapshot.detail})
+            continue
+        # not_found is a complete answer for a barcode/ID search: the retailer was asked and
+        # returned nothing. It says nothing about whether the product exists elsewhere.
+        coverage.append({"store_id": store_id,
+                         "status": "complete" if snapshot.effective_status == "success" else "not_found",
+                         "source": snapshot.source, "detail": snapshot.detail,
+                         "truncated": snapshot.truncated})
         seen_skus: set[str] = set()
         for item in snapshot.prices:
             if item.sku in seen_skus:
                 continue
             seen_skus.add(item.sku)
-            matches = ((bool(query) and query in item.name.casefold()) or
-                       (store.retailer_id, item.sku) in known_skus)
+            # A connector that honours the request has already filtered; others return a full
+            # snapshot that is matched here by name or by a verified barcode mapping.
+            matches = snapshot.targeted or (
+                (bool(query) and query in item.name.casefold()) or
+                (store.retailer_id, item.sku) in known_skus)
             if (not matches or item.channel != channel or
                 item.currency != "SEK" or not item.current_price.is_finite() or
                 item.current_price < 0):
                 continue
-            listing = db.scalar(select(Listing).where(Listing.retailer_id == store.retailer_id,
-                Listing.sku == item.sku, Listing.store_id == store.id,
-                Listing.channel == channel))
-            if not listing:
-                product = Product(name=item.name, brand=item.brand,
-                                  package_value=item.package_value,
-                                  package_unit=item.package_unit, verified=False)
-                db.add(product)
-                db.flush()
-                listing = Listing(retailer_id=store.retailer_id, sku=item.sku,
-                                  store_id=store.id, channel=channel,
-                                  product_id=product.id, name=item.name)
-                db.add(listing)
-                db.flush()
-            unit = unit_price(item.current_price, item.package_value, item.package_unit)
-            db.add(PriceObservation(listing_id=listing.id, run_id=run_id,
-                                    current_price=item.current_price,
-                                    regular_price=item.regular_price,
-                                    unit_price=unit[0] if unit else None,
-                                    unit_price_unit=unit[1] if unit else None,
-                                    currency=item.currency, availability=item.availability,
-                                    source_url=item.source_url, observed_at=utcnow()))
+            listing = ensure_listing(db, store, item)
+            add_price(db, listing, item, run_id, utcnow())
+            if gtin14 and item.gtin:
+                try:
+                    barcode_found = barcode_found or normalize_gtin(item.gtin) == gtin14
+                except ValueError:
+                    pass
             items.append({"product_id": listing.product_id, "listing_id": listing.id,
                           "store_id": store.id, "channel": channel, "name": item.name,
                           "current_price": str(item.current_price), "currency": item.currency})
-    complete = all(scope["status"] == "complete" for scope in coverage)
+    complete = all(scope["status"] in ("complete", "not_found") for scope in coverage)
     return {"status": "success" if complete else "partial", "complete": complete,
             "items": items, "coverage": coverage,
-            "barcode_mapping": "verified" if known_skus else "unknown" if payload.get("gtin") else None}
+            "barcode_mapping": ("verified" if known_skus or barcode_found
+                                else "unknown" if gtin else None)}

@@ -1,12 +1,15 @@
 import hashlib
 import json
+import random
 from datetime import timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.connectors.base import ScanRequest
 from app.connectors.registry import connector_for
+from app.ingest import add_price, ensure_listing
 from app.models import (
     Delivery,
     EvaluationState,
@@ -16,14 +19,19 @@ from app.models import (
     Monitor,
     Offer,
     OfferObservation,
-    PriceObservation,
-    Product,
     Store,
     Webhook,
     new_id,
     utcnow,
 )
-from app.pricing import base_quantity, unit_price
+from app.pricing import base_quantity
+from app.retrieval import fetch
+
+
+def next_due(interval_minutes: int):
+    """Next check time with up to 10% jitter, so monitors do not all fire at the same instant."""
+    jitter = random.uniform(0, interval_minutes * 6)  # seconds: 10% of the interval
+    return utcnow() + timedelta(minutes=interval_minutes, seconds=jitter)
 
 
 def enqueue(db: Session, monitor: Monitor) -> Job:
@@ -96,6 +104,16 @@ def _availability_event(db: Session, monitor: Monitor, listing: Listing,
     state.last_observed_at = observed_at
 
 
+def scan_request(db: Session, monitor: Monitor) -> ScanRequest | None:
+    """The targeted request a monitor needs. Live connectors refuse the empty (store) request."""
+    if monitor.type == "exact_product":
+        listing = db.get(Listing, str(monitor.conditions.get("listing_id")))
+        return ScanRequest(skus=(listing.sku,)) if listing else None
+    if monitor.type == "generic_product":
+        return ScanRequest(query=str(monitor.conditions.get("query", "")).strip())
+    return ScanRequest()
+
+
 def process_scan(db: Session, job: Job) -> dict:
     monitor = db.get(Monitor, job.monitor_id)
     if not monitor or not monitor.enabled:
@@ -104,19 +122,25 @@ def process_scan(db: Session, job: Job) -> dict:
     connector = connector_for(store.retailer_id) if store else None
     if not connector:
         return {"status": "unsupported", "complete": False}
-    snapshot = connector.scan(store.external_id, monitor.channel)
-    if not snapshot.complete:
-        return {"status": "partial", "complete": False, "source": snapshot.source}
+    request = scan_request(db, monitor)
+    if request is None:
+        return {"status": "cancelled"}
+    snapshot, skipped = fetch(db, store, connector, monitor.channel, request)
+    if skipped:
+        return skipped
+    status = snapshot.effective_status
+    if status != "success":
+        # Failed, refused or partial scans never create price, stock or offer transitions.
+        return {"status": status, "complete": False, "source": snapshot.source,
+                "detail": snapshot.detail, "missing": list(snapshot.missing),
+                "requests": snapshot.requests}
     now = utcnow()
-    # A fresh run ID per execution: an admin retry of a partial job re-runs the same job row,
-    # and observations from the first run are already stored under (listing, run_id).
-    run_id = new_id()
+    run_id = new_id()  # per execution; an admin retry re-runs the same job row
     baseline = not monitor.baseline_complete
-    price_count = 0
-    offer_count = 0
-    invalid_count = 0
+    price_count = offer_count = invalid_count = 0
     seen_skus: set[str] = set()
     seen_offers: set[str] = set()
+    matched: set[str] = set()  # SKUs this monitor cares about, for product-level offers
     for item in snapshot.prices:
         if (item.currency != "SEK" or not item.current_price.is_finite() or
             item.current_price < 0 or item.channel != monitor.channel or
@@ -124,25 +148,8 @@ def process_scan(db: Session, job: Job) -> dict:
             invalid_count += 1
             continue
         seen_skus.add(item.sku)
-        listing = db.scalar(select(Listing).where(Listing.retailer_id == store.retailer_id,
-            Listing.sku == item.sku, Listing.store_id == store.id, Listing.channel == item.channel))
-        if not listing:
-            product = Product(name=item.name, brand=item.brand, verified=False,
-                              package_value=item.package_value, package_unit=item.package_unit)
-            db.add(product)
-            db.flush()
-            listing = Listing(retailer_id=store.retailer_id, sku=item.sku, store_id=store.id,
-                              channel=item.channel, product_id=product.id, name=item.name)
-            db.add(listing)
-            db.flush()
-        calculated_unit_price = unit_price(item.current_price, item.package_value,
-                                           item.package_unit)
-        db.add(PriceObservation(listing_id=listing.id, run_id=run_id, current_price=item.current_price,
-                                regular_price=item.regular_price, currency=item.currency,
-                                unit_price=calculated_unit_price[0] if calculated_unit_price else None,
-                                unit_price_unit=calculated_unit_price[1] if calculated_unit_price else None,
-                                availability=item.availability, source_url=item.source_url,
-                                observed_at=now))
+        listing = ensure_listing(db, store, item)
+        calculated_unit_price = add_price(db, listing, item, run_id, now)
         price_count += 1
         if monitor.type == "exact_product" and monitor.conditions.get("listing_id") != listing.id:
             continue
@@ -180,6 +187,7 @@ def process_scan(db: Session, job: Job) -> dict:
                 if not baseline:
                     emit(db, monitor, discovery_key, "product.discovered", listing.id,
                          {"listing_id": listing.id, "name": listing.name})
+        matched.add(item.sku)
         if monitor.type in ("exact_product", "generic_product"):
             _price_event(db, monitor, listing, item.current_price, now, baseline)
             _availability_event(db, monitor, listing, item.availability, now, baseline)
@@ -190,9 +198,14 @@ def process_scan(db: Session, job: Job) -> dict:
             invalid_count += 1
             continue
         seen_offers.add(item.identity_key)
-        content = json.dumps({"title": item.title, "terms": item.terms,
-                              "price": str(item.price), "eligibility": item.eligibility}, sort_keys=True)
-        content_hash = hashlib.sha256(content.encode()).hexdigest()
+        content_fields = {"title": item.title, "terms": item.terms, "price": str(item.price),
+                          "eligibility": item.eligibility}
+        # Dates join the hash only when known, so offers stored before dates existed keep their hash.
+        if item.valid_from:
+            content_fields["valid_from"] = item.valid_from.isoformat()
+        if item.valid_to:
+            content_fields["valid_to"] = item.valid_to.isoformat()
+        content_hash = hashlib.sha256(json.dumps(content_fields, sort_keys=True).encode()).hexdigest()
         offer = db.scalar(select(Offer).where(Offer.retailer_id == store.retailer_id,
             Offer.store_id == store.id, Offer.channel == item.channel,
             Offer.identity_key == item.identity_key).with_for_update())
@@ -203,19 +216,25 @@ def process_scan(db: Session, job: Job) -> dict:
                           title=item.title, terms=item.terms, price=item.price,
                           currency=item.currency, eligibility=item.eligibility,
                           content_hash=content_hash, source_url=item.source_url,
-                          first_seen=now, last_seen=now)
+                          first_seen=now, last_seen=now,
+                          valid_from=item.valid_from, valid_to=item.valid_to)
             db.add(offer)
             db.flush()
         else:
             offer.title, offer.terms, offer.price = item.title, item.terms, item.price
+            offer.eligibility = item.eligibility
+            offer.valid_from, offer.valid_to = item.valid_from, item.valid_to
             offer.content_hash, offer.last_seen = content_hash, now
         db.add(OfferObservation(offer_id=offer.id, run_id=run_id,
                                 content_hash=content_hash, title=item.title, terms=item.terms,
                                 price=item.price, currency=item.currency,
                                 eligibility=item.eligibility, source_url=item.source_url,
+                                valid_from=item.valid_from, valid_to=item.valid_to,
                                 observed_at=now))
         offer_count += 1
-        if monitor.type == "store":
+        # Store monitors follow every offer in a bounded feed; product monitors only the
+        # promotions attached to the products they match.
+        if monitor.type == "store" or set(item.skus) & matched:
             subject = "offer:" + offer.id
             state = db.scalar(select(EvaluationState).where(EvaluationState.monitor_id == monitor.id,
                 EvaluationState.subject_key == subject).with_for_update())
@@ -224,21 +243,24 @@ def process_scan(db: Session, job: Job) -> dict:
                 state = EvaluationState(monitor_id=monitor.id, subject_key=subject)
                 db.add(state)
             if not baseline or monitor.notify_existing_offers:
+                payload = {"offer_id": offer.id, "title": offer.title, "store_id": store.id,
+                           "terms": offer.terms, "eligibility": offer.eligibility,
+                           "valid_to": offer.valid_to.isoformat() if offer.valid_to else None}
                 if previous_hash is None:
-                    emit(db, monitor, subject, "offer.detected", offer.id,
-                         {"offer_id": offer.id, "title": offer.title, "store_id": store.id})
+                    emit(db, monitor, subject, "offer.detected", offer.id, payload)
                 elif previous_hash != content_hash:
                     # Timestamp keeps a revision that returns to an earlier state (A, B, A, B)
                     # distinct; the evaluation state above already prevents repeats.
                     emit(db, monitor, subject, "offer.changed",
-                         f"{content_hash[:16]}:{now.isoformat()}",
-                         {"offer_id": offer.id, "title": offer.title, "store_id": store.id})
+                         f"{content_hash[:16]}:{now.isoformat()}", payload)
             state.last_value = content_hash
             state.last_observed_at = now
     if invalid_count == 0:
         monitor.baseline_complete = True
         monitor.last_success_at = now
-    monitor.next_due_at = now + timedelta(minutes=monitor.interval_minutes)
+    monitor.next_due_at = next_due(monitor.interval_minutes)
     return {"status": "success" if invalid_count == 0 else "partial",
             "complete": invalid_count == 0, "prices": price_count,
-            "offers": offer_count, "invalid_items": invalid_count, "source": snapshot.source}
+            "offers": offer_count, "invalid_items": invalid_count, "source": snapshot.source,
+            "truncated": snapshot.truncated, "detail": snapshot.detail,
+            "requests": snapshot.requests}

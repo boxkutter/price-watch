@@ -17,13 +17,16 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app import connector_state
 from app.audit import record as audit
+from app.config import settings
 from app.connectors.registry import RETAILERS
 from app.db import get_db
 from app.gtin import normalize_gtin
 from app.models import (
     AuditLog,
     ClientGrant,
+    ConnectorState,
     Credential,
     Delivery,
     Event,
@@ -43,6 +46,7 @@ from app.models import (
     aware,
     utcnow,
 )
+from app.ratelimit import SlidingWindow
 from app.security import (
     Principal,
     admin,
@@ -57,11 +61,25 @@ from app.security import (
 from app.webhooks import validate_destination
 
 app = FastAPI(title="Retail Monitor", version="0.1.0")
+# Per-credential (or per-address, when unauthenticated) request cap. It is a backstop: the
+# expensive operations that can reach retailers also have their own quotas below.
+api_limiter = SlidingWindow(settings.api_rate_limit_per_minute)
 
 
 @app.middleware("http")
 async def attach_request_id(request: Request, call_next):
     request.state.request_id = str(uuid.uuid4())
+    if not request.url.path.startswith("/health"):
+        auth = request.headers.get("authorization")
+        key = ("t:" + hashlib.sha256(auth.encode()).hexdigest()[:16] if auth
+               else "ip:" + (request.client.host if request.client else "unknown"))
+        wait = api_limiter.check(key)
+        if wait:
+            return JSONResponse(status_code=429, headers={"Retry-After": str(wait),
+                                                         "X-Request-ID": request.state.request_id},
+                                content={"code": "rate_limited", "message": "Too many requests",
+                                         "details": [], "request_id": request.state.request_id,
+                                         "retry_after": wait})
     response = await call_next(request)
     response.headers["X-Request-ID"] = request.state.request_id
     return response
@@ -96,6 +114,8 @@ def admin_page():
     return FileResponse(ADMIN_PAGE)
 
 
+RETRYABLE_JOB_STATES = {"failed", "partial", "paused", "rate_limited", "access_blocked",
+                        "extraction_failed", "not_found", "invalid_data", "auth_required"}
 USER_SCOPES = ["catalogue:read", "monitors:read", "monitors:write", "events:read",
                "webhooks:manage", "clients:manage"]
 
@@ -146,6 +166,10 @@ class MonitorRequest(BaseModel):
         if value not in {"online", "physical"}:
             raise ValueError("Unsupported channel")
         return value
+
+
+class DiscoverRequest(BaseModel):
+    postcode: str | None = Field(default=None, pattern=r"^\d{3}\s?\d{2}$")
 
 
 class WebhookRequest(BaseModel):
@@ -214,7 +238,8 @@ def offer_dict(row: Offer) -> dict:
             "channel": row.channel, "title": row.title, "terms": row.terms,
             "eligibility": row.eligibility, "price": str(row.price) if row.price is not None else None,
             "currency": row.currency, "status": row.status, "source_url": row.source_url,
-            "first_seen": row.first_seen, "last_seen": row.last_seen}
+            "first_seen": row.first_seen, "last_seen": row.last_seen,
+            "valid_from": row.valid_from, "valid_to": row.valid_to}
 
 
 def event_dict(row: Event) -> dict:
@@ -436,7 +461,7 @@ def connectors(p: Principal = Depends(principal)):
 
 @app.get("/v1/connectors/{retailer_id}/health")
 def connector_health(retailer_id: str, db: Session = Depends(get_db),
-                           p: Principal = Depends(principal)):
+                     p: Principal = Depends(principal)):
     p.require("catalogue:read")
     retailer = next((item for item in RETAILERS if item["id"] == retailer_id), None)
     if not retailer:
@@ -445,12 +470,65 @@ def connector_health(retailer_id: str, db: Session = Depends(get_db),
         .join(Store, Monitor.store_id == Store.id)
         .where(Store.retailer_id == retailer_id)
         .order_by(Job.created_at.desc()).limit(1))
+    state = db.get(ConnectorState, retailer_id)
+    paused = bool(state and state.state == "paused")
     return {"id": retailer_id, "enabled": retailer["enabled"],
-            "access_review": retailer["access_review"],
-            "status": "disabled" if not retailer["enabled"] else (
+            "access_review": retailer["access_review"], "paused": paused,
+            "pause_reason": state.reason if paused else None,
+            "cooldown_until": state.cooldown_until if state else None,
+            "requests_in_window": state.requests_in_window if state else 0,
+            "daily_request_limit": retailer["max_requests_per_day"],
+            "status": "disabled" if not retailer["enabled"] else "paused" if paused else (
                 last_job.state if last_job else "no_checks"),
             "last_job_id": last_job.id if last_job else None,
             "last_result": last_job.result if last_job else None}
+
+
+@app.post("/v1/admin/connectors/{retailer_id}/pause", status_code=204)
+def pause_connector(retailer_id: str, db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    if not any(item["id"] == retailer_id for item in RETAILERS):
+        raise HTTPException(404, "Connector not found")
+    connector_state.pause(db, retailer_id, "Paused by an administrator")
+    audit(db, p.user.id, "connector.paused", "connector", retailer_id)
+    db.commit()
+
+
+@app.post("/v1/admin/connectors/{retailer_id}/resume", status_code=204)
+def resume_connector(retailer_id: str, db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    if not any(item["id"] == retailer_id for item in RETAILERS):
+        raise HTTPException(404, "Connector not found")
+    connector_state.resume(db, retailer_id)
+    audit(db, p.user.id, "connector.resumed", "connector", retailer_id)
+    db.commit()
+
+
+@app.post("/v1/admin/retailers/{retailer_id}/stores/discover", status_code=202)
+def discover_stores(retailer_id: str, body: DiscoverRequest | None = None,
+                    db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Queue a store lookup (one small request, run by the worker).
+
+    Retailers that resolve stores from a postcode (Coop) require `{"postcode": "11120"}`.
+    """
+    retailer = next((item for item in RETAILERS if item["id"] == retailer_id), None)
+    if not retailer or not retailer["enabled"]:
+        raise HTTPException(404, "Connector not found or not enabled")
+    if retailer["capabilities"].get("store_discovery") != "supported":
+        raise HTTPException(422, "This connector does not support store discovery")
+    postcode = body.postcode.replace(" ", "") if body and body.postcode else None
+    if retailer["store_discovery_requires_postcode"] and not postcode:
+        raise HTTPException(422, "This retailer resolves stores from a postcode; send {\"postcode\": \"11120\"}")
+    payload = {"retailer_id": retailer_id, "postcode": postcode}
+    in_flight = db.scalars(select(Job).where(Job.kind == "discover_stores",
+        Job.state.in_(["queued", "running"]))).all()
+    pending = next((job for job in in_flight if job.payload == payload), None)
+    if pending:
+        return {"job_id": pending.id, "status": pending.state}
+    job = Job(owner_id=p.user.id, kind="discover_stores", payload=payload)
+    db.add(job)
+    db.flush()
+    audit(db, p.user.id, "stores.discovery_queued", "connector", retailer_id)
+    db.commit()
+    return {"job_id": job.id, "status": job.state}
 
 
 @app.get("/v1/stores")
@@ -504,6 +582,15 @@ def create_search_job(body: SearchRequest, db: Session = Depends(get_db),
         job = db.get(Job, existing_id)
         return {"job_id": job.id, "status": job.state,
                 "status_url": f"/v1/jobs/{job.id}"}
+    pending = db.scalar(select(func.count()).select_from(Job).where(
+        Job.owner_id == p.user.id, Job.kind == "search", Job.state.in_(["queued", "running"])))
+    if pending >= settings.max_pending_searches_per_user:
+        raise HTTPException(429, "Too many searches in progress", headers={"Retry-After": "60"})
+    recent = db.scalar(select(func.count()).select_from(Job).where(
+        Job.owner_id == p.user.id, Job.kind == "search",
+        Job.created_at >= utcnow() - timedelta(hours=1)))
+    if recent >= settings.max_searches_per_hour:
+        raise HTTPException(429, "Search limit reached for this hour", headers={"Retry-After": "600"})
     job = Job(owner_id=p.user.id, kind="search", payload=body.model_dump())
     db.add(job)
     db.flush()
@@ -636,6 +723,7 @@ def store_offer_history(store_id: str, db: Session = Depends(get_db),
                        "title": observation.title, "terms": observation.terms,
                        "price": str(observation.price) if observation.price is not None else None,
                        "currency": observation.currency, "eligibility": observation.eligibility,
+                       "valid_from": observation.valid_from, "valid_to": observation.valid_to,
                        "source_url": observation.source_url,
                        "observed_at": observation.observed_at} for observation, offer in rows],
             "coverage": "observed_only"}
@@ -677,6 +765,14 @@ def create_monitor(body: MonitorRequest, db: Session = Depends(get_db),
     retailer = next((item for item in RETAILERS if item["id"] == store.retailer_id), None)
     if not retailer or not retailer["enabled"]:
         raise HTTPException(422, "Retailer connector has no verified enabled capability")
+    if body.interval_minutes < retailer["minimum_monitor_interval_minutes"]:
+        raise HTTPException(
+            422, f"The minimum check interval for this retailer is "
+                 f"{retailer['minimum_monitor_interval_minutes']} minutes")
+    active_monitors = db.scalar(select(func.count()).select_from(Monitor).where(
+        Monitor.owner_id == p.user.id, Monitor.enabled.is_(True)))
+    if active_monitors >= settings.max_monitors_per_user:
+        raise HTTPException(429, "Monitor limit reached; disable one before adding another")
     required = ("physical_store_offers" if body.channel == "physical" else "store_offers") if body.type == "store" else (
         "physical_store_prices" if body.channel == "physical" else "online_prices")
     if retailer["capabilities"].get(required) != "supported":
@@ -689,6 +785,8 @@ def create_monitor(body: MonitorRequest, db: Session = Depends(get_db),
             raise HTTPException(422, "Listing is not in the selected store and channel")
     if body.type == "generic_product" and not str(body.conditions.get("query", "")).strip():
         raise HTTPException(422, "query required")
+    if len(str(body.conditions.get("query", ""))) > 100:
+        raise HTTPException(422, "query must be at most 100 characters")
     allowed_conditions = {
         "store": set(),
         "exact_product": {"listing_id", "maximum_price"},
@@ -807,6 +905,13 @@ def check_monitor(monitor_id: str, db: Session = Depends(get_db),
         remember_request(db, p.user.id, "check_monitor", idempotency_key, digest, pending.id)
         db.commit()
         return {"job_id": pending.id, "status": pending.state}
+    last = db.scalar(select(Job.created_at).where(Job.monitor_id == row.id)
+                     .order_by(Job.created_at.desc()).limit(1))
+    if last:
+        wait = settings.min_manual_check_interval_seconds - (utcnow() - aware(last)).total_seconds()
+        if wait > 0:
+            raise HTTPException(429, "This monitor was checked very recently",
+                                headers={"Retry-After": str(int(wait) + 1)})
     job = Job(monitor_id=row.id, kind="scan")
     db.add(job)
     db.flush()
@@ -850,8 +955,8 @@ def admin_retry_job(job_id: str, db: Session = Depends(get_db),
     row = db.get(Job, job_id)
     if not row:
         raise HTTPException(404, "Job not found")
-    if row.state not in {"failed", "partial"}:
-        raise HTTPException(409, "Only failed or partial jobs can be retried")
+    if row.state not in RETRYABLE_JOB_STATES:
+        raise HTTPException(409, "Only finished jobs that did not succeed can be retried")
     row.state = "queued"
     row.attempts = 0
     row.lease_until = None

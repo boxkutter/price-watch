@@ -43,7 +43,7 @@ class Scripted:
     def __init__(self):
         self.snapshot = Snapshot([], [], True, "fixture://scripted")
 
-    def scan(self, external_store_id, channel):
+    def scan(self, external_store_id, channel, request=None):
         return self.snapshot
 
 

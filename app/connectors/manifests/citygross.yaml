@@ -2,14 +2,24 @@ id: se.citygross
 name: City Gross
 country: SE
 protocol_version: 1
-connector_version: 0.0.0
-enabled: false
-access_review: unverified
+connector_version: 0.1.0
+enabled: true
+# Owner decision 2026-11-26: private, targeted use of what a normal visitor can see.
+access_review: approved
+access_note: >-
+  Public JSON API used by citygross.se itself. Answers a plain HTTP client; targeted
+  search and lookup only, spaced requests, no circumvention.
+implementation: app.connectors.citygross:CityGrossConnector
 capabilities:
-  store_discovery: unverified
-  product_search: unverified
-  online_prices: unverified
-  physical_store_prices: unverified
-  store_offers: unverified
-allowed_hosts: []
-minimum_request_interval_seconds: 60
+  store_discovery: supported
+  product_search: supported
+  barcode_search: supported
+  online_prices: supported
+  physical_store_prices: unsupported
+  store_offers: unsupported
+allowed_hosts: [www.citygross.se]
+minimum_request_interval_seconds: 3
+minimum_monitor_interval_minutes: 60
+max_requests_per_scan: 6
+max_requests_per_day: 400
+cache_seconds: 600

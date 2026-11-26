@@ -1,0 +1,330 @@
+{
+ "searchResults": {
+  "products": [
+   {
+    "id": "100132321_ST",
+    "gtin": "7310130321085",
+    "sellable": true,
+    "url": "/matvaror/skafferiet/flingor-musli-och-gryner/axa-havregryn-p100132321_ST",
+    "name": "Havregryn",
+    "subtitle": "1,5KG AXA",
+    "brand": "AXA",
+    "descriptiveSize": "1,5KG",
+    "netContent": {
+     "unitOfMeasure": 0,
+     "value": 1500
+    },
+    "productStoreDetails": {
+     "p_has_price": true,
+     "p_availablefrom": "2026-11-26",
+     "p_availableto": "9999-12-30",
+     "p_has_current_week_only_discount": false,
+     "p_has_long_time_discount": false,
+     "p_has_members_only_price": false,
+     "prices": {
+      "currentPrice": {
+       "price": 19.95,
+       "unit": "PCE",
+       "comparativePrice": 13.3,
+       "comparativePriceUnit": "KGM"
+      },
+      "ordinaryPrice": {
+       "price": 19.95,
+       "unit": "PCE",
+       "comparativePrice": 13.3,
+       "comparativePriceUnit": "KGM"
+      },
+      "memberPrice": null,
+      "promotions": [],
+      "activePromotion": null,
+      "hasDiscount": false,
+      "hasPromotion": false,
+      "displayLowestPriceLast30Days": false,
+      "lowestPriceLast30Days": null
+     },
+     "stockStatus": 1,
+     "availableFrom": null,
+     "availableTo": null,
+     "id": "3204"
+    }
+   },
+   {
+    "id": "101231503_ST",
+    "gtin": "6408432087868",
+    "sellable": true,
+    "url": "/matvaror/mejeri-ost-och-agg/mjolk-och-dryck/valio-mjölk-vitamin-d-p101231503_ST",
+    "name": "Mjölk Vitamin D",
+    "subtitle": "1,5L LAKTOSFRI 3% VALIO",
+    "brand": "VALIO",
+    "descriptiveSize": "1,5L",
+    "netContent": {
+     "unitOfMeasure": 0,
+     "value": 1500
+    },
+    "productStoreDetails": {
+     "p_has_price": true,
+     "p_availablefrom": "2026-11-26",
+     "p_availableto": "9999-12-30",
+     "p_has_current_week_only_discount": true,
+     "p_has_long_time_discount": false,
+     "p_has_members_only_price": false,
+     "prices": {
+      "currentPrice": {
+       "price": 19.5,
+       "unit": "PCE",
+       "comparativePrice": 13,
+       "comparativePriceUnit": "LTR"
+      },
+      "ordinaryPrice": {
+       "price": 19.5,
+       "unit": "PCE",
+       "comparativePrice": 13,
+       "comparativePriceUnit": "LTR"
+      },
+      "memberPrice": null,
+      "promotions": [
+       {
+        "id": "1698770,2500326698",
+        "type": "1",
+        "campaignTypeId": "0",
+        "name": "2500326698",
+        "couponId": null,
+        "effectType": "ItemsTotal",
+        "membersOnly": false,
+        "from": "2026-11-23T00:00:00+01:00",
+        "to": "2026-11-29T23:59:00+01:00",
+        "minAmount": null,
+        "minQuantity": 2,
+        "value": 32,
+        "maxAppliedPerReceipt": 0,
+        "displayLowestPriceLast30Days": false,
+        "priceDetails": {
+         "price": 16,
+         "unit": "PCE",
+         "comparativePrice": 10.67,
+         "comparativePriceUnit": "LTR"
+        }
+       }
+      ],
+      "activePromotion": {
+       "id": "1698770,2500326698",
+       "type": "1",
+       "campaignTypeId": "0",
+       "name": "2500326698",
+       "couponId": null,
+       "effectType": "ItemsTotal",
+       "membersOnly": false,
+       "from": "2026-11-23T00:00:00+01:00",
+       "to": "2026-11-29T23:59:00+01:00",
+       "minAmount": null,
+       "minQuantity": 2,
+       "value": 32,
+       "maxAppliedPerReceipt": 0,
+       "displayLowestPriceLast30Days": false,
+       "priceDetails": {
+        "price": 16,
+        "unit": "PCE",
+        "comparativePrice": 10.67,
+        "comparativePriceUnit": "LTR"
+       }
+      },
+      "hasDiscount": true,
+      "hasPromotion": true,
+      "displayLowestPriceLast30Days": false,
+      "lowestPriceLast30Days": null
+     },
+     "stockStatus": 1,
+     "availableFrom": null,
+     "availableTo": null,
+     "id": "3204"
+    }
+   },
+   {
+    "id": "100132394_ST",
+    "gtin": "7310130321283",
+    "sellable": true,
+    "url": "/matvaror/skafferiet/flingor-musli-och-gryner/gyllenhamars-havregryn-p100132394_ST",
+    "name": "Havregryn",
+    "subtitle": "1KG GYLLENHAMARS",
+    "brand": "GYLLENHAMARS",
+    "descriptiveSize": "1KG",
+    "netContent": {
+     "unitOfMeasure": 0,
+     "value": 1000
+    },
+    "productStoreDetails": {
+     "p_has_price": true,
+     "p_availablefrom": "2026-11-26",
+     "p_availableto": "9999-12-30",
+     "p_has_current_week_only_discount": true,
+     "p_has_long_time_discount": false,
+     "p_has_members_only_price": false,
+     "prices": {
+      "currentPrice": {
+       "price": 20.75,
+       "unit": "PCE",
+       "comparativePrice": 20.75,
+       "comparativePriceUnit": "KGM"
+      },
+      "ordinaryPrice": {
+       "price": 20.75,
+       "unit": "PCE",
+       "comparativePrice": 20.75,
+       "comparativePriceUnit": "KGM"
+      },
+      "memberPrice": null,
+      "promotions": [
+       {
+        "id": "1698765,2500326692",
+        "type": "1",
+        "campaignTypeId": "0",
+        "name": "2500326692",
+        "couponId": null,
+        "effectType": "ItemsTotal",
+        "membersOnly": false,
+        "from": "2026-11-23T00:00:00+01:00",
+        "to": "2026-11-29T23:59:00+01:00",
+        "minAmount": null,
+        "minQuantity": 1,
+        "value": 17.95,
+        "maxAppliedPerReceipt": 0,
+        "displayLowestPriceLast30Days": true,
+        "priceDetails": {
+         "price": 17.95,
+         "unit": "PCE",
+         "comparativePrice": 17.95,
+         "comparativePriceUnit": "KGM"
+        }
+       }
+      ],
+      "activePromotion": {
+       "id": "1698765,2500326692",
+       "type": "1",
+       "campaignTypeId": "0",
+       "name": "2500326692",
+       "couponId": null,
+       "effectType": "ItemsTotal",
+       "membersOnly": false,
+       "from": "2026-11-23T00:00:00+01:00",
+       "to": "2026-11-29T23:59:00+01:00",
+       "minAmount": null,
+       "minQuantity": 1,
+       "value": 17.95,
+       "maxAppliedPerReceipt": 0,
+       "displayLowestPriceLast30Days": true,
+       "priceDetails": {
+        "price": 17.95,
+        "unit": "PCE",
+        "comparativePrice": 17.95,
+        "comparativePriceUnit": "KGM"
+       }
+      },
+      "hasDiscount": true,
+      "hasPromotion": true,
+      "displayLowestPriceLast30Days": false,
+      "lowestPriceLast30Days": 20.75
+     },
+     "stockStatus": 1,
+     "availableFrom": null,
+     "availableTo": null,
+     "id": "3204"
+    }
+   },
+   {
+    "id": "101892451_ST",
+    "gtin": "7310070009753",
+    "sellable": true,
+    "url": "/matvaror/dryck/lask/pepsi-max-p101892451_ST",
+    "name": "Pepsi Max",
+    "subtitle": "1,5L LÄSK PET PEPSI",
+    "brand": "PEPSI",
+    "descriptiveSize": "1,5L",
+    "netContent": {
+     "unitOfMeasure": 0,
+     "value": 1500
+    },
+    "productStoreDetails": {
+     "p_has_price": true,
+     "p_availablefrom": "2026-11-26",
+     "p_availableto": "9999-12-30",
+     "p_has_current_week_only_discount": true,
+     "p_has_long_time_discount": false,
+     "p_has_members_only_price": false,
+     "prices": {
+      "currentPrice": {
+       "price": 18.5,
+       "unit": "PCE",
+       "comparativePrice": 12.33,
+       "comparativePriceUnit": "LTR"
+      },
+      "ordinaryPrice": {
+       "price": 18.5,
+       "unit": "PCE",
+       "comparativePrice": 12.33,
+       "comparativePriceUnit": "LTR"
+      },
+      "memberPrice": null,
+      "promotions": [
+       {
+        "id": "1698788,2500326798",
+        "type": "1",
+        "campaignTypeId": "0",
+        "name": "2500326798",
+        "couponId": null,
+        "effectType": "ItemsTotal",
+        "membersOnly": false,
+        "from": "2026-11-23T00:00:00+01:00",
+        "to": "2026-11-29T23:59:00+01:00",
+        "minAmount": null,
+        "minQuantity": 9,
+        "value": 99,
+        "maxAppliedPerReceipt": 2,
+        "displayLowestPriceLast30Days": false,
+        "priceDetails": {
+         "price": 11,
+         "unit": "PCE",
+         "comparativePrice": 7.33,
+         "comparativePriceUnit": "LTR"
+        }
+       }
+      ],
+      "activePromotion": {
+       "id": "1698788,2500326798",
+       "type": "1",
+       "campaignTypeId": "0",
+       "name": "2500326798",
+       "couponId": null,
+       "effectType": "ItemsTotal",
+       "membersOnly": false,
+       "from": "2026-11-23T00:00:00+01:00",
+       "to": "2026-11-29T23:59:00+01:00",
+       "minAmount": null,
+       "minQuantity": 9,
+       "value": 99,
+       "maxAppliedPerReceipt": 2,
+       "displayLowestPriceLast30Days": false,
+       "priceDetails": {
+        "price": 11,
+        "unit": "PCE",
+        "comparativePrice": 7.33,
+        "comparativePriceUnit": "LTR"
+       }
+      },
+      "hasDiscount": true,
+      "hasPromotion": true,
+      "displayLowestPriceLast30Days": false,
+      "lowestPriceLast30Days": null
+     },
+     "stockStatus": 1,
+     "availableFrom": null,
+     "availableTo": null,
+     "id": "3204"
+    }
+   }
+  ],
+  "totalCount": 4,
+  "pageSize": 40,
+  "currentPage": 0,
+  "totalPages": 1
+ }
+}

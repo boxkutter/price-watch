@@ -1,4 +1,5 @@
 import importlib
+import inspect
 from pathlib import Path
 from typing import Literal
 
@@ -22,6 +23,13 @@ class Manifest(BaseModel):
     capabilities: dict[str, Literal["supported", "unsupported", "unverified"]] = Field(default_factory=dict)
     allowed_hosts: list[str] = Field(default_factory=list)
     minimum_request_interval_seconds: int = Field(default=60, ge=1)
+    # Politeness limits. Live connectors must stay well inside what a person could do by hand.
+    minimum_monitor_interval_minutes: int = Field(default=15, ge=1)
+    max_requests_per_scan: int = Field(default=6, ge=1)
+    max_requests_per_day: int = Field(default=500, ge=1)
+    cache_seconds: int = Field(default=0, ge=0)
+    access_note: str | None = None
+    store_discovery_requires_postcode: bool = False
 
 
 def load_registry(directory: Path | None = None) -> tuple[list[dict], dict[str, Connector]]:
@@ -42,7 +50,11 @@ def load_registry(directory: Path | None = None) -> tuple[list[dict], dict[str, 
             module_name, separator, class_name = manifest.implementation.partition(":")
             if not separator:
                 raise ValueError(f"Invalid connector import path: {manifest.id}")
-            instance = getattr(importlib.import_module(module_name), class_name)()
+            factory = getattr(importlib.import_module(module_name), class_name)
+            # Connectors that take a `manifest` receive their own validated manifest (limits,
+            # allowed hosts); simple test connectors need no arguments.
+            takes_manifest = "manifest" in inspect.signature(factory).parameters
+            instance = factory(manifest=manifest.model_dump()) if takes_manifest else factory()
             if instance.id != manifest.id:
                 raise ValueError(f"Connector ID mismatch: {manifest.id}")
             connectors[manifest.id] = instance
@@ -50,7 +62,12 @@ def load_registry(directory: Path | None = None) -> tuple[list[dict], dict[str, 
                           "country": manifest.country, "enabled": manifest.enabled,
                           "access_review": manifest.access_review,
                           "capabilities": manifest.capabilities,
-                          "connector_version": manifest.connector_version})
+                          "connector_version": manifest.connector_version,
+                          "minimum_monitor_interval_minutes": manifest.minimum_monitor_interval_minutes,
+                          "max_requests_per_day": manifest.max_requests_per_day,
+                          "cache_seconds": manifest.cache_seconds,
+                          "access_note": manifest.access_note,
+                          "store_discovery_requires_postcode": manifest.store_discovery_requires_postcode})
     return retailers, connectors
 
 

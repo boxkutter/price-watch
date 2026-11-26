@@ -5,8 +5,9 @@ from datetime import timedelta
 from sqlalchemy import select
 
 from app.db import SessionLocal
+from app.discovery import process_discovery
 from app.models import Job, Monitor, utcnow
-from app.monitoring import process_scan
+from app.monitoring import next_due, process_scan
 from app.search import process_search
 from app.webhooks import due_delivery, send_delivery
 
@@ -21,7 +22,7 @@ def schedule_due() -> None:
             .limit(20).with_for_update(skip_locked=True)).all()
         for monitor in due:
             db.add(Job(monitor_id=monitor.id, kind="scan"))
-            monitor.next_due_at = utcnow() + timedelta(minutes=monitor.interval_minutes)
+            monitor.next_due_at = next_due(monitor.interval_minutes)
 
 
 def claim_job(db):
@@ -44,7 +45,12 @@ def run_job() -> bool:
     try:
         with SessionLocal.begin() as db:
             job = db.get(Job, job_id, with_for_update=True)
-            result = process_search(db, job) if job.kind == "search" else process_scan(db, job)
+            if job.kind == "search":
+                result = process_search(db, job)
+            elif job.kind == "discover_stores":
+                result = process_discovery(db, job)
+            else:
+                result = process_scan(db, job)
             job.result = result
             job.state = "succeeded" if result["status"] == "success" else result["status"]
             job.lease_until = None

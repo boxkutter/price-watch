@@ -7,7 +7,7 @@ from app.connectors.base import OfferData, PriceData, Snapshot
 class FixtureConnector:
     id = "test.fixture"
 
-    def scan(self, external_store_id: str, channel: str) -> Snapshot:
+    def scan(self, external_store_id: str, channel: str, request=None) -> Snapshot:
         if external_store_id != "demo" or channel != "online":
             return Snapshot([], [], False, "fixture://unsupported-scope")
         return Snapshot(

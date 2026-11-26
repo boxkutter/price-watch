@@ -2,9 +2,9 @@
 
 > Self-hosted retail discovery, price history and promotion monitoring service.
 
-**Specification:** v1.0 | **Status:** implementation in progress; fixture-backed service available, live retailer connectors disabled | **Initial market:** Sweden (SE)
+**Specification:** v1.0 | **Status:** implementation in progress; City Gross and Coop live connectors working, ICA blocked | **Initial market:** Sweden (SE)
 
-The code currently implements invitation-based users, scoped client credentials with per-user grants, a fixture-backed store, basic catalogue/prices/offers, three public monitor types, database-backed jobs, signed webhook delivery, a small admin page, and a Docker image. It does **not** yet meet the full MVP checklist below. In particular, ICA, City Gross and Coop access and coverage are unverified. See [Implementation status](docs/implementation-status.md) for setup and remaining work.
+The code currently implements invitation-based users, scoped client credentials with per-user grants, a fixture-backed store, basic catalogue/prices/offers, three public monitor types, database-backed jobs, signed webhook delivery, a small admin page, and a Docker image. It does **not** yet meet the full MVP checklist below, and City Gross and Coop have live retrieval (ICA is blocked). See the [access policy](#access-policy) and [Implementation status](docs/implementation-status.md) for setup and remaining work.
 
 ## 1. Purpose
 
@@ -26,7 +26,15 @@ Retail Monitor is an always-on, API-first FastAPI service for individuals and ho
 
 ### Non-goals
 
-Purchasing, cart modification, coupon activation, account changes, payment handling, checkout automation, access-control bypass, guaranteed coverage of unpublished offers, guaranteed first-in-market alerts, and commercial-scale harvesting are out of scope. A user account does not itself establish permission to automate access. Review each retailer's terms and permitted access methods before enabling live connectors.
+Purchasing, cart modification, coupon activation, account changes, payment handling, checkout automation, access-control bypass, guaranteed coverage of unpublished offers, guaranteed first-in-market alerts, and commercial-scale harvesting are out of scope. 
+### Access policy
+
+*Owner decision, 2026-11-26.* Retail Monitor is a private, single-household tool. It retrieves what a normal visitor can see on a retailer's public website (and, later, what the owner's own retailer account can see), automated on the owner's behalf. Two limits define that scope:
+
+- **Targeted, not bulk.** It searches for and monitors specific products the owner chose. It does not crawl or harvest a retailer's catalogue, categories or full offer lists.
+- **No circumvention.** It requests pages at human-scale volume and does not defeat CAPTCHAs, bot detection, rate limits or login controls, and it does not disguise what it is. If a site refuses the client, the connector stops, reports `access_blocked` and stays paused until the owner reviews it.
+
+A per-retailer terms review is therefore not a gate for enabling a connector; the owner is responsible for their own use.
 
 ## 2. Architecture
 
@@ -216,7 +224,7 @@ Use bounded navigation timeouts, host allowlists, TLS verification, rate limitin
 
 ### Connector onboarding
 
-1. Review permitted access, data retention and redistribution conditions; record decision and date.
+1. Record the access decision and date (see [Access policy](#access-policy)); confirm retrieval stays targeted to monitored products.
 2. Identify store selection, channels, product search, SKU/GTIN availability and offer sources.
 3. Capture sanitised fixtures and create normalisers and parsers.
 4. Verify store context, currencies, price/offer semantics and pagination completeness.
@@ -298,6 +306,8 @@ Four monitor types share the same scheduler, retrieval planner, rule evaluator a
 Monitor configuration: owner, optional household, name, type, retailer/store/country scope, channel, eligibility, account (where applicable), conditions, triggers, requested interval, enabled/paused status, first-scan policy, notification destinations, immediate/digest mode and quiet hours. Persist effective interval, last attempt, last successful check and next due time. Require explicit store scope or a saved store preference when prices are store-specific; do not silently choose a store.
 
 ### Store-wide monitoring
+
+Under the [access policy](#access-policy), live connectors do not scan a store's whole offer list. `store` monitors apply only to connectors that expose a bounded offers feed (today, only the fixture connector). For live retailers the target is that exact and generic monitors also report promotions attached to the products they match.
 
 Store monitoring is first-class and independent of individual watched products. Check published weekly offers, digital leaflets, campaign pages, online promotions, membership offers and clearance listings when accessible. Default to all categories with no product filter. Optional filters: keywords, categories, excluded categories, minimum discount, maximum price, offer type, membership eligibility and channel.
 

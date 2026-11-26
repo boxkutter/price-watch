@@ -1,0 +1,34 @@
+{
+ "sites": [
+  {
+   "id": 21,
+   "type": 3,
+   "no": "City Gross Borås",
+   "name": "City Gross Borås",
+   "streetAddress": "Göteborgsvägen 181",
+   "zipcode": "50463",
+   "city": "Borås",
+   "storeNumber": "3204"
+  },
+  {
+   "id": 46,
+   "type": 3,
+   "no": "City Gross Eskilstuna",
+   "name": "City Gross Eskilstuna",
+   "streetAddress": "Albertina Nyströms väg 8",
+   "zipcode": "63222",
+   "city": "Eskilstuna",
+   "storeNumber": "3206"
+  },
+  {
+   "id": 34,
+   "type": 3,
+   "no": "City Gross Falun",
+   "name": "City Gross Falun",
+   "streetAddress": "Stortallsvägen 3",
+   "zipcode": "79155",
+   "city": "Falun",
+   "storeNumber": "3207"
+  }
+ ]
+}

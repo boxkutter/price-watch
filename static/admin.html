@@ -65,7 +65,7 @@ async function refresh(){
   try{await api('/v1/monitors/'+button.dataset.disable,{method:'DELETE'});await refresh()}
   catch(error){$('message').textContent=error.message}});
  $('jobs').innerHTML='<table><tr><th>Kind</th><th>State</th><th>Created</th><th>Action</th></tr>'+
-  jobs.items.map(x=>`<tr><td>${escaped(x.kind)}</td><td>${escaped(x.state)}</td><td>${escaped(x.created_at)}</td><td>${['failed','partial'].includes(x.state)?`<button data-retry="${escaped(x.id)}">Retry</button>`:''}</td></tr>`).join('')+'</table>';
+  jobs.items.map(x=>`<tr><td>${escaped(x.kind)}</td><td>${escaped(x.state)}</td><td>${escaped(x.created_at)}</td><td>${['failed','partial','paused','rate_limited','access_blocked','extraction_failed','not_found','invalid_data','auth_required'].includes(x.state)?`<button data-retry="${escaped(x.id)}">Retry</button>`:''}</td></tr>`).join('')+'</table>';
  $('jobs').querySelectorAll('[data-retry]').forEach(button=>button.onclick=async()=>{
   try{await api('/v1/admin/jobs/'+button.dataset.retry+'/retry',{method:'POST'});await refresh()}
   catch(error){$('message').textContent=error.message}});

@@ -173,7 +173,7 @@ def test_invitation_delegation_scan_and_partial_snapshot(monkeypatch):
 
             original = CONNECTORS["test.fixture"]
             class CheaperConnector:
-                def scan(self, external_store_id, channel):
+                def scan(self, external_store_id, channel, request=None):
                     base = original.scan(external_store_id, channel)
                     return Snapshot([PriceData("oats-1kg", "Demo oats 1 kg", Decimal("19.90"),
                                                Decimal("29.90"), "SEK", "online", "fixture://oats",
@@ -191,7 +191,7 @@ def test_invitation_delegation_scan_and_partial_snapshot(monkeypatch):
             assert "price.threshold_reached" in event_types
 
             class OutOfStockConnector:
-                def scan(self, external_store_id, channel):
+                def scan(self, external_store_id, channel, request=None):
                     base = original.scan(external_store_id, channel)
                     return Snapshot([PriceData("oats-1kg", "Demo oats 1 kg", Decimal("19.90"),
                                                Decimal("29.90"), "SEK", "online", "fixture://oats",
@@ -208,7 +208,7 @@ def test_invitation_delegation_scan_and_partial_snapshot(monkeypatch):
             assert "product.unavailable" in event_types
 
             class RevisedOfferConnector:
-                def scan(self, external_store_id, channel):
+                def scan(self, external_store_id, channel, request=None):
                     base = original.scan(external_store_id, channel)
                     revised = OfferData("oats-week", "Demo oats offer", "2 kg minimum",
                                         Decimal("21.90"), "SEK", "online", "fixture://offer")
@@ -227,7 +227,7 @@ def test_invitation_delegation_scan_and_partial_snapshot(monkeypatch):
             assert "offer.changed" in event_types
 
             class PartialConnector:
-                def scan(self, external_store_id, channel):
+                def scan(self, external_store_id, channel, request=None):
                     return Snapshot([], [], False, "fixture://partial")
 
             old = CONNECTORS["test.fixture"]
