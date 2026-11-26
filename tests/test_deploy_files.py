@@ -88,11 +88,11 @@ def test_the_image_the_compose_file_builds_contains_what_the_service_serves():
         assert f"COPY {needed} " in dockerfile, needed
     assert not {"connectors", "static", "migrations", "app"} & set(ignored)
     assert "!docs/api.md" in ignored and ".env" in ignored    # the guide ships; secrets never do
-    assert COMPOSE["x-app"]["build"] == {"context": "../..", "dockerfile": "Dockerfile"}
+    assert COMPOSE["x-app"]["image"] == "desertlee/price-watch:latest"
 
 
 def test_the_guide_names_every_file_and_command_it_relies_on():
     guide = (DEPLOY / "README.md").read_text()
-    for needle in ("docker compose up -d --build", ".env.example", "/admin", "/demo", "/api-guide",
+    for needle in ("docker compose up -d", ".env.example", "/admin", "/demo", "/api-guide",
                    "pg_dump", "04:00-08:45", "APP_SECRET", "PUBLIC_BASE_URL", "BIND_ADDRESS"):
         assert needle in guide, needle

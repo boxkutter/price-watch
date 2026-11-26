@@ -1,7 +1,7 @@
 # Retail Monitor for Unraid: one compose file, one env file (.env next to this file).
 #
 #   1. cp .env.example .env   and fill in the four required values (see the comments in it)
-#   2. docker compose up -d --build
+#   2. docker compose up -d
 #   3. open http://<server-ip>:8085/admin and sign in with ADMIN_EMAIL / ADMIN_PASSWORD
 #
 # Works from the Unraid terminal or the "Docker Compose Manager" plugin (point the stack at this
@@ -9,10 +9,8 @@
 name: retail-monitor
 
 x-app: &app
-  # Built from this repository (the build context is the repo root, two folders up). To use a
-  # prebuilt image instead, set RETAIL_IMAGE in .env and run `docker compose pull`.
-  build: {context: ../.., dockerfile: Dockerfile}
-  image: ${RETAIL_IMAGE:-retail-monitor:local}
+  # Pulled from Docker Hub; `docker compose pull` fetches a newer image.
+  image: desertlee/price-watch:latest
   # Run as Unraid's nobody:users so files in appdata belong to the usual owner.
   user: "${PUID:-99}:${PGID:-100}"
   env_file: .env

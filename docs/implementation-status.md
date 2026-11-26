@@ -78,7 +78,7 @@ Lidl is deliberately narrow, and the limits are Lidl's: lidl.se publishes no sea
 
 ## Deploying on Unraid (Docker)
 
-[deploy/unraid/](../deploy/unraid/) is one `docker-compose.yml` and one `.env.example` plus a guide: PostgreSQL, API, worker and a one-shot init that prepares `/mnt/user/appdata/retail-monitor` for Unraid's `nobody:users`. Four values are required (database password, `APP_SECRET`, admin email and password); the database URL is derived so it cannot disagree. It listens on the LAN (`BIND_ADDRESS`, `HTTP_PORT`), rotates logs, carries Unraid WebUI labels, and is built from the repository on the server (no registry image exists; `RETAIL_IMAGE` can point at one). Tested by building the image and starting the stack from this file, signing in, and making live Willys and Lidl lookups through it. `tests/test_deploy_files.py` keeps the files in step with the application's settings.
+[deploy/unraid/](../deploy/unraid/) is one `docker-compose.yml` and one `.env.example` plus a guide: PostgreSQL, API, worker and a one-shot init that prepares `/mnt/user/appdata/retail-monitor` for Unraid's `nobody:users`. Four values are required (database password, `APP_SECRET`, admin email and password); the database URL is derived so it cannot disagree. It listens on the LAN (`BIND_ADDRESS`, `HTTP_PORT`), rotates logs, carries Unraid WebUI labels, and pulls `desertlee/price-watch:latest` from Docker Hub. Tested by building the image and starting the stack from this file, signing in, and making live Willys and Lidl lookups through it. `tests/test_deploy_files.py` keeps the files in step with the application's settings.
 
 ## Connectors
 

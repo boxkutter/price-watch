@@ -7,15 +7,16 @@ Nothing else is needed, and the service is private: you invite the people who ma
 
 ## Install
 
-You need Unraid 6.12 or newer with Docker enabled, and the repository on the server (the image is
-built on your server; there is no hosted image).
+You need Unraid 6.12 or newer with Docker enabled. The repository is not needed on the server: the
+image is pulled from Docker Hub (`desertlee/price-watch:latest`), and you only place two small
+files next to each other.
 
-**1. Put the code on the server** (Unraid terminal):
+**1. Put the two files on the server**: `docker-compose.yml` and `.env.example`, from this folder of
+the repository, into a new folder (Unraid terminal, from your computer: `scp` them there):
 
 ```bash
-mkdir -p /mnt/user/appdata/retail-monitor && cd /mnt/user/appdata/retail-monitor
-git clone <this repository's URL> src
-cd src/deploy/unraid
+mkdir -p /mnt/user/appdata/retail-monitor/stack && cd /mnt/user/appdata/retail-monitor/stack
+# copy docker-compose.yml and .env.example into this folder
 ```
 
 **2. Create the env file** and fill in the four required values:
@@ -33,15 +34,15 @@ message naming the setting (`docker compose logs api`).
 **3. Start it:**
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
-The first build takes a few minutes. When `docker compose ps` shows `api` and `postgres` as
+The first start pulls the image, which takes a minute. When `docker compose ps` shows `api` and `postgres` as
 `healthy`, open **`http://<server-ip>:8085/admin`** and sign in with `ADMIN_EMAIL` and
 `ADMIN_PASSWORD`.
 
 **Using the Docker Compose Manager plugin instead:** add a stack, set its folder to
-`/mnt/user/appdata/retail-monitor/src/deploy/unraid`, edit the env file there, and press **Compose
+`/mnt/user/appdata/retail-monitor/stack`, edit the env file there, and press **Compose
 Up**. The containers then show in the Docker tab with a WebUI shortcut to the admin page.
 
 ## First steps
@@ -61,7 +62,7 @@ Up**. The containers then show in the Docker tab with a WebUI shortcut to the ad
 |---|---|
 | Database | `${DATA_DIR}/postgres` (default `/mnt/user/appdata/retail-monitor/postgres`) |
 | Connectors installed from the admin page | `${DATA_DIR}/connectors` |
-| Bundled connectors | inside the image (`connectors/` in the repository) |
+| Bundled connectors | inside the image |
 | Configuration | `.env` next to the compose file |
 
 Both folders are created, and owned by Unraid's `nobody:users` (99:100), automatically. If you
@@ -79,9 +80,8 @@ makes outgoing requests to the stores you enable.
 ## Update
 
 ```bash
-cd /mnt/user/appdata/retail-monitor/src
-git pull
-cd deploy/unraid && docker compose up -d --build
+cd /mnt/user/appdata/retail-monitor/stack
+docker compose pull && docker compose up -d
 ```
 
 Database changes are applied automatically when the API starts. Read the notes of a new version
