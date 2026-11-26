@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=manifest.schema.json
 # Everything the service needs to know about this connector, as data.
 # Copy this folder, change the id, and describe your store. Unknown keys are rejected.
 id: ex.exampleshop            # <2-10 letters>.<name>; globally unique. "test." ids may skip allowed_hosts

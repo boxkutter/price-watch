@@ -8,6 +8,18 @@ without touching the core, in the admin page or by dropping a folder on the serv
 Built-in connectors (`app/connectors/builtin/`) and installed ones have exactly the same structure.
 Read `builtin/citygross/` for a real example and `docs/connector-template/` for one to copy.
 
+## Where to start
+
+| You are | Start with |
+|---|---|
+| A developer adding a store | [connector-guide.md](connector-guide.md): the steps, how to investigate a site, the pitfalls found on real stores |
+| An AI coding agent | [connector-template/AGENTS.md](connector-template/AGENTS.md): hard rules, workflow, commands, checklist |
+| Editing a manifest | [connector-template/manifest.schema.json](connector-template/manifest.schema.json) (JSON Schema, regenerate with `python -m app.connectors.build --schema`) and the table below |
+| An administrator | The [Administration](#administration) section |
+
+This page is the reference. The template folder is also what a package built with the build
+command contains, so `AGENTS.md` and `README.md` travel with it.
+
 ## Access policy
 
 Connectors follow the [access policy](../readme.md#access-policy): they fetch only what the owner

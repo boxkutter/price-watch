@@ -1,7 +1,9 @@
 name: CI
+# Disabled on purpose: this repository does not use GitHub Actions minutes. Nothing runs on push or
+# pull request. Run the same checks locally with scripts/check.sh. The workflow stays here only as
+# a manual (workflow_dispatch) recipe.
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   test:

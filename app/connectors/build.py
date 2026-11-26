@@ -1,15 +1,18 @@
 """Build an uploadable connector package from a folder.
 
     python -m app.connectors.build path/to/connector-folder [-o out.zip]
+    python -m app.connectors.build --schema          # JSON Schema for manifest.yaml
 
 The zip is validated with exactly the checks the admin upload applies, so problems show up here.
 """
 import argparse
 import io
+import json
 import sys
 import zipfile
 from pathlib import Path
 
+from app.connectors.manifest import Manifest
 from app.connectors.packages import ALLOWED_SUFFIXES, PackageError, inspect_zip
 
 
@@ -29,9 +32,16 @@ def build(folder: Path) -> bytes:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("folder", type=Path)
+    parser.add_argument("folder", type=Path, nargs="?")
     parser.add_argument("-o", "--output", type=Path)
+    parser.add_argument("--schema", action="store_true",
+                        help="print the JSON Schema of manifest.yaml and exit")
     args = parser.parse_args(argv)
+    if args.schema:
+        print(json.dumps(Manifest.model_json_schema(), indent=2))
+        return 0
+    if args.folder is None:
+        parser.error("a connector folder is required (or use --schema)")
     try:
         data = build(args.folder)
         info = inspect_zip(data)

@@ -64,7 +64,7 @@ The user-agent defaults to a generic browser string (`CONNECTOR_USER_AGENT`). It
 
 ## Testing
 
-`uv run pytest` runs the suite against SQLite. Set `TEST_DATABASE_URL=postgresql+psycopg://user:password@host:5432/db` to run it against PostgreSQL; use a scratch database, because the tests drop and recreate every table. SQLite ignores `FOR UPDATE SKIP LOCKED`, so the row-locking tests only run on PostgreSQL. CI runs both, and also applies the migrations to an empty PostgreSQL database and checks they match the models. `tests/test_live_citygross.py` and `tests/test_live_coop.py` talk to the real sites (a handful of spaced requests each) and are skipped unless `RUN_LIVE=1` (Coop also needs `COOP_API_KEY`); run them by hand, never in CI.
+`uv run pytest` runs the suite against SQLite. Set `TEST_DATABASE_URL=postgresql+psycopg://user:password@host:5432/db` to run it against PostgreSQL; use a scratch database, because the tests drop and recreate every table. SQLite ignores `FOR UPDATE SKIP LOCKED`, so the row-locking tests only run on PostgreSQL. `scripts/check.sh` runs lint, the SQLite suite, and then (in a throwaway Docker PostgreSQL) the suite again plus the migrations applied to an empty database and checked against the models; use `--fast` to skip the PostgreSQL part. GitHub Actions is deliberately not used (the workflow is manual-only). `tests/test_live_citygross.py` and `tests/test_live_coop.py` talk to the real sites (a handful of spaced requests each) and are skipped unless `RUN_LIVE=1` (Coop also needs `COOP_API_KEY`); run them by hand, never in CI.
 
 ## Implemented
 
@@ -77,7 +77,7 @@ The user-agent defaults to a generic browser string (`CONNECTOR_USER_AGENT`). It
 - Package quantities, normalized unit prices, generic brand/exclusion/weight/unit-price filters, and immutable offer revision details.
 - Database-backed due scheduling, job leases and recovery, retries, event keys, and webhook delivery history with manual retry of failed deliveries.
 - Pause-on-block and cooldown state in the database, connector health with budget use, admin pause/resume, and queued store discovery.
-- Admin page for initial setup, a locked Docker build, and CI checks for lint, tests, and migration.
+- Admin page for initial setup, a locked Docker build, and a local check script (`scripts/check.sh`) for lint, tests, and migrations.
 
 ## Remaining before the specified MVP
 
