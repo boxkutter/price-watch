@@ -13,9 +13,11 @@ input,button{font:inherit;padding:.45rem}button{cursor:pointer}pre{overflow:auto
 .badge.error,.badge.paused{background:#fde0dc;color:#8a1c10}.badge.needs_configuration{background:#fdf1cf;color:#7a5200}
 .warn{color:#8a1c10}.card{border:1px solid #dce1e7;border-radius:8px;padding:.8rem;margin:.6rem 0}
 .card h3{margin:.1rem 0}.row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.4rem 0}.small{font-size:.85rem}
-label.inline{display:flex;gap:.4rem;align-items:center}code{background:#f1f4f7;padding:0 .25rem;border-radius:3px}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.5rem;border-bottom:1px solid #dce1e7}
+label.inline{display:flex;gap:.4rem;align-items:center}.logo{display:inline-flex;align-items:center;justify-content:center;border-radius:6px;color:#fff;font-weight:700;vertical-align:middle;flex:none;letter-spacing:-.02em}img.logo{background:#fff;border:1px solid #dce1e7;padding:1px}
+code{background:#f1f4f7;padding:0 .25rem;border-radius:3px}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.5rem;border-bottom:1px solid #dce1e7}
 </style>
 <h1>Retail Monitor</h1>
+<input type="file" id="logo-input" accept="image/*" hidden>
 <p class="muted">Local administration. Connectors are installed, enabled and configured below. <a href="/demo">Open the example client</a> (a regular user working through the public API) &middot; <a href="/docs" target="_blank" rel="noopener">API reference</a></p>
 <section id="login-section"><h2>Sign in</h2>
 <form id="login-form"><label>Email<input name="email" type="email" required></label>
@@ -73,8 +75,9 @@ async function refresh(){
  if(!me.is_admin)throw Error('Admin account required');
  $('login-section').hidden=true;$('dashboard').hidden=false;
  renderConnectors(connectors);
+ const logoById=Object.fromEntries(connectors.items.map(c=>[c.id,c.logo_url])),nameById=Object.fromEntries(connectors.items.map(c=>[c.id,c.name]));
  $('stores').innerHTML='<table><tr><th>Compare</th><th>Store</th><th>Retailer</th><th>ID</th></tr>'+
-  stores.items.map(x=>`<tr><td><input type="checkbox" data-mine="${escaped(x.id)}" ${mineIds.has(x.id)?'checked':''} aria-label="Compare prices in ${escaped(x.name)}"></td><td>${escaped(x.name)}</td><td>${escaped(x.retailer_id)}</td><td>${escaped(x.id)}</td></tr>`).join('')+'</table>';
+  stores.items.map(x=>`<tr><td><input type="checkbox" data-mine="${escaped(x.id)}" ${mineIds.has(x.id)?'checked':''} aria-label="Compare prices in ${escaped(x.name)}"></td><td>${escaped(x.name)}</td><td>${retailerLogo(x.retailer_id,nameById[x.retailer_id]||x.retailer_id,(logoById[x.retailer_id]||null),18)} ${escaped(x.retailer_id)}</td><td>${escaped(x.id)}</td></tr>`).join('')+'</table>';
  $('stores').querySelectorAll('[data-mine]').forEach(box=>box.onchange=async()=>{
   try{await api('/v1/me/stores/'+box.dataset.mine,{method:box.checked?'PUT':'DELETE'});await refresh()}
   catch(error){box.checked=!box.checked;$('message').textContent=error.message}});
@@ -127,11 +130,24 @@ function settingRow(c,x){
   ${x.source==='admin'?`<button data-setting-clear="${escaped(c.id)}|${escaped(x.name)}">Clear</button>`:''}</div>
   ${x.description?`<div class="muted small">${escaped(x.description)}</div>`:''}`;
 }
+// A retailer's logo, or a coloured badge with its initials until one is uploaded.
+function retailerBadge(id,name,size){
+ const words=String(name||id).replace(/[^\p{L}\p{N} ]/gu,' ').trim().split(/\s+/).filter(Boolean);
+ const letters=words.length>1?(words[0][0]+words[1][0]).toUpperCase():(words[0]||'?').slice(0,2);
+ const initials=words.length>1?letters:letters[0].toUpperCase()+letters.slice(1).toLowerCase();
+ let hue=0;for(const c of String(id))hue=(hue*31+c.charCodeAt(0))%360;
+ return `<span class="logo" title="${escaped(name||id)}" style="width:${size}px;height:${size}px;background:hsl(${hue} 55% 38%);font-size:${Math.round(size*.42)}px">${escaped(initials)}</span>`;
+}
+function retailerLogo(id,name,url,size){
+ size=size||22;
+ return url?`<img class="logo" src="${escaped(url)}" width="${size}" height="${size}" alt="${escaped(name||id)}" title="${escaped(name||id)}" style="object-fit:contain">`:retailerBadge(id,name,size);
+}
+let logoTarget=null;
 function connectorCard(c){
  const id=escaped(c.id);
  const canDiscover=c.capabilities&&c.capabilities.store_discovery==='supported'&&c.enabled;
  const inputs=(c.store_discovery_inputs||[]).map(i=>`<input placeholder="${escaped(i.label||i.name)}" data-discover-input="${id}|${escaped(i.name)}" size="10">`).join('');
- return `<div class="card"><div class="row"><h3>${escaped(c.name)}</h3><code>${id}</code>
+ return `<div class="card"><div class="row">${retailerLogo(c.id,c.name,c.logo_url,36)}<h3>${escaped(c.name)}</h3><code>${id}</code>
   <span class="badge ${escaped(c.status)}">${escaped(statusText[c.status]||c.status)}</span>
   <span class="badge">${escaped(c.source)}</span><span class="muted small">v${escaped(c.connector_version)}</span></div>
   ${c.description?`<div class="muted">${escaped(c.description)}</div>`:''}
@@ -144,7 +160,8 @@ function connectorCard(c){
    ${c.installable&&!c.load_error?(c.enabled?`<button data-act="disable" data-id="${id}">Disable</button>`:`<button data-act="enable" data-id="${id}">Enable</button>`):''}
    ${c.installable&&c.enabled?(c.paused?`<button data-act="resume" data-id="${id}">Resume</button>`:`<button data-act="pause" data-id="${id}">Pause</button>`):''}
    ${canDiscover?`${inputs}<button data-act="discover" data-id="${id}">Find stores</button>`:''}
-   ${c.source==='installed'?`<button data-act="remove" data-id="${id}">Remove</button>`:''}</div>
+   ${c.source==='installed'?`<button data-act="remove" data-id="${id}">Remove</button>`:''}
+   ${c.enabled?`<button data-act="logo-fetch" data-id="${id}" title="Looks for the touch icon or favicon on the retailer's own website">Fetch logo from website</button>`:''}<button data-act="logo" data-id="${id}">${c.logo_url?'Change logo':'Upload logo'}</button>${c.logo_url?`<button data-act="logo-remove" data-id="${id}">Remove logo</button>`:''}</div>
   ${(c.settings||[]).map(x=>settingRow(c,x)).join('')}</div>`;
 }
 function renderConnectors(view){
@@ -162,6 +179,14 @@ $('connectors').addEventListener('click',async event=>{
    const id=b.dataset.id,act=b.dataset.act;
    if(act==='remove'){if(!confirm(`Remove connector ${id}? Its stores, prices and history are kept; its monitors will be disabled.`))return;
     await api(`/v1/admin/connector-packages/${id}?disable_monitors=true`,{method:'DELETE'});say(`Removed ${id}`)}
+   else if(act==='logo'){logoTarget=id;$('logo-input').value='';$('logo-input').click();return}
+   else if(act==='logo-fetch'){
+    const r=await api(`/v1/admin/connectors/${id}/logo/fetch`,{method:'POST'});say('Looking for the logo on the retailer\'s website...');
+    let job={state:'queued'};for(let i=0;i<40&&['queued','running','retry_wait'].includes(job.state);i++){await sleep(1500);job=await api('/v1/jobs/'+r.job_id)}
+    const res=job.result||{};
+    say(job.state==='succeeded'?`Logo fetched from ${res.source_url} (${res.width}×${res.height} px).${res.small?' It is small; upload a better one if it looks poor.':''}`
+     :['queued','running','retry_wait'].includes(job.state)?'Still waiting for the worker; the logo will appear when it finishes.':`No logo fetched (${job.state}): ${res.detail||'no details'}`)}
+   else if(act==='logo-remove'){await api(`/v1/admin/connectors/${id}/logo`,{method:'DELETE'});say(`Removed the logo of ${id}`)}
    else if(act==='discover'){
     const body={};document.querySelectorAll(`[data-discover-input^="${CSS.escape(id)}|"]`).forEach(i=>{if(i.value.trim())body[i.dataset.discoverInput.split('|')[1]]=i.value.trim()});
     const r=await api(`/v1/admin/retailers/${id}/stores/discover`,{method:'POST',body:JSON.stringify(body)});say('Store lookup queued; waiting for the worker...');
@@ -187,6 +212,12 @@ async function watchDiscovery(jobId){
   :['queued','running','retry_wait'].includes(job.state)?'The store lookup is still waiting for the worker.':`Store lookup failed (${job.state}): ${r.detail||'no details'}`);
  await refresh();
 }
+$('logo-input').onchange=async event=>{const file=event.target.files[0];if(!file||!logoTarget)return;
+ try{
+  const res=await fetch(`/v1/admin/connectors/${logoTarget}/logo`,{method:'PUT',headers:{'Content-Type':file.type||'application/octet-stream','Authorization':'Bearer '+token},body:file});
+  const data=await res.json().catch(()=>({}));if(!res.ok)throw Error(data.message||('HTTP '+res.status));
+  say(`Logo saved for ${logoTarget}`);await refresh();
+ }catch(error){say(error.message)}};
 let staged=null;
 function renderPreview(r){
  const p=r.package;staged=r.upload_id;

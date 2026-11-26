@@ -154,6 +154,30 @@
         ],
         "type": "object"
       },
+      "GlossaryRequest": {
+        "properties": {
+          "canonical": {
+            "description": "The word the shops use",
+            "maxLength": 80,
+            "minLength": 2,
+            "title": "Canonical",
+            "type": "string"
+          },
+          "term": {
+            "description": "The word as people (or other shops) say it",
+            "maxLength": 80,
+            "minLength": 2,
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "term",
+          "canonical"
+        ],
+        "title": "GlossaryRequest",
+        "type": "object"
+      },
       "GrantRequest": {
         "properties": {
           "client_id": {
@@ -282,6 +306,21 @@
         "title": "MonitorRequest",
         "type": "object"
       },
+      "NameRequest": {
+        "properties": {
+          "name": {
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "NameRequest",
+        "type": "object"
+      },
       "ProductLinkRequest": {
         "properties": {
           "interval_minutes": {
@@ -342,6 +381,19 @@
           "url"
         ],
         "title": "ProductLinkRequest",
+        "type": "object"
+      },
+      "SameAsRequest": {
+        "properties": {
+          "product_id": {
+            "title": "Product Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "product_id"
+        ],
+        "title": "SameAsRequest",
         "type": "object"
       },
       "SearchRequest": {
@@ -653,6 +705,67 @@
           }
         },
         "summary": "Product Image",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/logos/{retailer_id}": {
+      "get": {
+        "description": "A retailer's uploaded logo (WebP). No login, so a page can show it in an <img> tag; the logo\nis the same for everyone. The `v` in the link changes whenever the logo does.",
+        "operationId": "retailer_logo_logos__retailer_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "retailer_id",
+            "required": true,
+            "schema": {
+              "title": "Retailer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "summary": "Retailer Logo",
         "tags": [
           "Catalogue"
         ]
@@ -1448,6 +1561,368 @@
           }
         ],
         "summary": "Enable Connector",
+        "tags": [
+          "Administration"
+        ],
+        "x-admin-only": true
+      }
+    },
+    "/v1/admin/connectors/{retailer_id}/logo": {
+      "delete": {
+        "description": "Remove a retailer's uploaded logo (the coloured badge is used again).",
+        "operationId": "remove_retailer_logo_v1_admin_connectors__retailer_id__logo_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "retailer_id",
+            "required": true,
+            "schema": {
+              "title": "Retailer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Remove Retailer Logo",
+        "tags": [
+          "Administration"
+        ],
+        "x-admin-only": true
+      },
+      "put": {
+        "description": "Set the logo shown for a retailer (the request body is the image: PNG, JPEG, WebP, ...). It is\nreduced to at most 160 px and keeps its transparency. Without one, clients draw a coloured badge\nfrom the retailer's name.",
+        "operationId": "upload_retailer_logo_v1_admin_connectors__retailer_id__logo_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "retailer_id",
+            "required": true,
+            "schema": {
+              "title": "Retailer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Upload Retailer Logo",
+        "tags": [
+          "Administration"
+        ],
+        "x-admin-only": true
+      }
+    },
+    "/v1/admin/connectors/{retailer_id}/logo/fetch": {
+      "post": {
+        "description": "Fetch a retailer's logo from its own website (its touch icon or favicon), as a worker job.\nIt contacts only the retailer's website, a handful of requests, and keeps the largest usable\nicon; the job result says where it came from. The connector must be enabled and not paused.\nReplace or remove a poor result with the logo endpoints.",
+        "operationId": "fetch_retailer_logo_v1_admin_connectors__retailer_id__logo_fetch_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "retailer_id",
+            "required": true,
+            "schema": {
+              "title": "Retailer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Fetch Retailer Logo",
         "tags": [
           "Administration"
         ],
@@ -3663,6 +4138,337 @@
         "summary": "Events",
         "tags": [
           "Events"
+        ]
+      }
+    },
+    "/v1/glossary": {
+      "get": {
+        "description": "The English and Swedish words treated as the same in searches and comparisons: the ones people\nadded (`custom`, with an id) and the built-in list.",
+        "operationId": "glossary_list_v1_glossary_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Glossary List",
+        "tags": [
+          "Catalogue"
+        ]
+      },
+      "post": {
+        "description": "Add a word pair, for example `{\"term\": \"oat drink\", \"canonical\": \"havredryck\"}`. Shared by\neveryone: searches for the term are also asked in the shops' word, and names that use either are\ntreated as the same.",
+        "operationId": "glossary_add_v1_glossary_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GlossaryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Glossary Add",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/v1/glossary/{entry_id}": {
+      "delete": {
+        "description": "Remove a word pair that was added. Only the person who added it, or an administrator.",
+        "operationId": "glossary_remove_v1_glossary__entry_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Glossary Remove",
+        "tags": [
+          "Catalogue"
         ]
       }
     },
@@ -6283,8 +7089,256 @@
         ]
       }
     },
+    "/v1/products/{product_id}/barcode": {
+      "delete": {
+        "description": "Remove a barcode that a person linked, for a product you are not watching. A barcode the\nstore publishes cannot be removed.",
+        "operationId": "unlink_product_barcode_v1_products__product_id__barcode_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "product_id",
+            "required": true,
+            "schema": {
+              "title": "Product Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Unlink Product Barcode",
+        "tags": [
+          "Catalogue"
+        ]
+      },
+      "post": {
+        "description": "The same as linking a barcode through a monitor, for a product you are not watching (for\nexample one found by a search). Same rules: a barcode that already belongs to another product\nanswers 409 unless you resend with `merge: true`, and a store-published barcode cannot be\nchanged. The link is shared by everyone using the catalogue and is recorded with your name.",
+        "operationId": "link_product_barcode_v1_products__product_id__barcode_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "product_id",
+            "required": true,
+            "schema": {
+              "title": "Product Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BarcodeLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Link Product Barcode",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
     "/v1/products/{product_id}/history": {
       "get": {
+        "description": "Public prices seen for this product in every store, newest first (`limit` of them, up to 2000).",
         "operationId": "product_history_v1_products__product_id__history_get",
         "parameters": [
           {
@@ -6294,6 +7348,18 @@
             "schema": {
               "title": "Product Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 2000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
             }
           },
           {
@@ -6641,6 +7707,384 @@
         ]
       }
     },
+    "/v1/products/{product_id}/names": {
+      "get": {
+        "description": "Every name a product goes by: its store listings' names, the reference database's, and the\nalternative names people added (`source` is `store`, `reference` or `user`).",
+        "operationId": "product_names_list_v1_products__product_id__names_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "product_id",
+            "required": true,
+            "schema": {
+              "title": "Product Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Product Names List",
+        "tags": [
+          "Catalogue"
+        ]
+      },
+      "post": {
+        "description": "Add an alternative name (for example the English one). Shared by everyone, and recorded with\nwho added it. A search for it then finds this product in shops that call it something else.",
+        "operationId": "add_product_name_v1_products__product_id__names_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "product_id",
+            "required": true,
+            "schema": {
+              "title": "Product Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Add Product Name",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/v1/products/{product_id}/names/{name_id}": {
+      "delete": {
+        "description": "Remove an alternative name. Only the person who added it, or an administrator, can.",
+        "operationId": "remove_product_name_v1_products__product_id__names__name_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "product_id",
+            "required": true,
+            "schema": {
+              "title": "Product Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name_id",
+            "required": true,
+            "schema": {
+              "title": "Name Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Remove Product Name",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
     "/v1/products/{product_id}/prices": {
       "get": {
         "operationId": "product_prices_v1_products__product_id__prices_get",
@@ -6757,6 +8201,138 @@
           }
         ],
         "summary": "Product Prices",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/v1/products/{product_id}/same-as": {
+      "post": {
+        "description": "Say that two products are the same item (for example after a \"probably the same\" suggestion):\nthe listings of one move to the other, price history is kept. The one with a barcode is kept;\ntwo products with different barcodes are never merged.",
+        "operationId": "products_are_the_same_v1_products__product_id__same_as_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "product_id",
+            "required": true,
+            "schema": {
+              "title": "Product Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SameAsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Products Are The Same",
         "tags": [
           "Catalogue"
         ]

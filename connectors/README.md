@@ -9,6 +9,7 @@ To add a store, add a folder. To remove one, delete its folder. The application 
 | [`se.coop/`](se.coop/) | Coop | Working. Needs the `COOP_API_KEY` setting (enter it in the admin page) |
 | [`se.willys/`](se.willys/) | Willys | Working. No key needed. Search and links; member offers; one national online store; background checks only 04:00-08:45 UTC as Willys asks |
 | [`se.lidl/`](se.lidl/) | Lidl | Working, narrow. Add a product by its lidl.se page link (no search); covers only the online shop, not grocery prices, which Lidl does not publish |
+| [`se.dollarstore/`](se.dollarstore/) | Dollarstore | Working. No key needed. Search, offers ("2 för 35") and per-store stock; stores come from the site's store list; a search is capped at the first 25 results |
 | [`se.ica/`](se.ica/) | ICA | Placeholder only. ICA's product data refuses automated clients, so there is no implementation and we do not disguise the client. See its `access_note` |
 | [`test.fixture/`](test.fixture/) | Fixture retailer | Synthetic data for tests and the demo store |
 | [`test.demoshop/`](test.demoshop/) | Demo shop (synthetic) | A made-up store with two shops (north, south) whose prices move over time and that sell the same barcodes. For trying the app and the example client without any real retailer; it never contacts anything |

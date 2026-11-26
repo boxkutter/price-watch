@@ -4,7 +4,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Retail Monitor: example client</title>
 <style>
-body{font:16px system-ui,sans-serif;max-width:860px;margin:1rem auto;padding:0 1rem;color:#18212b}
+body{font:16px system-ui,sans-serif;max-width:1600px;margin:1rem auto;padding:0 1.5rem;color:#18212b}
 header{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;justify-content:space-between;margin-bottom:.4rem}
 h1{font-size:1.3rem;margin:.2rem 0}h2{font-size:1.05rem;margin:.2rem 0 .5rem}
 a,button{font:inherit}button{cursor:pointer;padding:.4rem .7rem}input,select{font:inherit;padding:.4rem}
@@ -20,6 +20,43 @@ section.panel{display:none}section.panel.on{display:block}
 table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.4rem;border-bottom:1px solid #dce1e7;vertical-align:top}
 tr.grouphead td{background:#eef6f0;border-bottom:1px solid #cfe3d5}div.pic{display:flex;flex-direction:column;align-items:center;gap:.25rem}.photo-ctl{display:flex;flex-direction:column;align-items:center;gap:.2rem}.photo-ctl .chip{font-size:.72rem;padding:.1rem .45rem;white-space:nowrap}
 #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;z-index:50;cursor:zoom-out}#lightbox figure{margin:0;text-align:center}#lightbox img{max-width:92vw;max-height:80vh;background:#fff;border-radius:8px}#lightbox figcaption{color:#e8edf2;font-size:.85rem;margin-top:.5rem}
+.logo{display:inline-flex;align-items:center;justify-content:center;border-radius:6px;color:#fff;font-weight:700;vertical-align:middle;flex:none;letter-spacing:-.02em}img.logo{background:#fff;border:1px solid #dce1e7;padding:1px}
+#tab-history{--surface:#fff;--ink:#191919;--ink-2:#666;--grid:#e7e7e7;--axis:#c2c2c2;--good:#006c10;--bad:#b4282a;
+ --series-1:#257de0;--series-2:#f47230;--series-3:#00b894;--series-4:#f2a600;--series-5:#ee7fac;--series-6:#008a17;--series-7:#6a4ce2;--series-8:#ec4647}
+.hx-head{display:flex;gap:.8rem;align-items:center;margin:.4rem 0}.hx-head h3{margin:0}
+.hx-filters{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin:.6rem 0}
+.seg{display:inline-flex;border:1px solid #ccd3db;border-radius:8px;overflow:hidden}.seg button{border:0;background:#fff;padding:.3rem .7rem;font:inherit;cursor:pointer}
+.seg button+button{border-left:1px solid #ccd3db}.seg button[aria-pressed=true]{background:#e6eaef;font-weight:650}.seg button:hover{background:#f1f4f7}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.6rem;margin:.6rem 0}
+.tile{border:1px solid #dce1e7;border-radius:10px;padding:.6rem .8rem;background:#fff}.tile .lbl{color:#666;font-size:.85rem}.tile .val{font-size:1.6rem;font-weight:650;line-height:1.2}.tile .sub{color:#666;font-size:.85rem}
+.hx-chart{max-width:1100px;position:relative;border:1px solid #dce1e7;border-radius:10px;background:#fff;padding:.4rem;outline-offset:2px}.hx-chart svg{display:block;width:100%;height:auto}
+.hx-chart text{font:11.5px system-ui,sans-serif;fill:#666}.hx-chart .dl{fill:#191919;font-weight:600}
+.hx-tip{position:absolute;pointer-events:none;background:#fff;border:1px solid #ccd3db;border-radius:8px;padding:.4rem .6rem;box-shadow:0 2px 8px rgba(0,0,0,.12);font-size:.85rem;min-width:150px;z-index:5}
+.hx-tip .when{color:#666;margin-bottom:.2rem}.hx-tip .r{display:flex;align-items:center;gap:.4rem}.hx-tip .k{width:12px;height:2px;border-radius:2px;flex:none}.hx-tip b{font-size:.95rem}.hx-tip .n{color:#666}
+.hx-legend{display:flex;gap:.4rem 1rem;flex-wrap:wrap;margin:.5rem 0}.hx-legend label{display:flex;align-items:center;gap:.4rem;font-size:.9rem;cursor:pointer}
+.hx-legend .k{width:14px;height:3px;border-radius:2px;flex:none}.hx-legend input{margin:0}
+.hx-note{color:#666;font-size:.85rem}
+/* ---- the results table: a calm row, one place for each fact ---- */
+#search-result{overflow-x:auto}#search-result table{border-collapse:separate;border-spacing:0;width:100%;min-width:900px;table-layout:fixed}
+#search-result th{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:#5c6874;font-weight:600;border-bottom:2px solid #dce1e7;padding:.45rem .7rem;white-space:nowrap}
+#search-result td{padding:.8rem .7rem;border-bottom:1px solid #eceff3;vertical-align:top}
+#search-result tr:not(.grouphead):hover td{background:#fafbfc}
+#search-result th.num,#search-result td.num{text-align:right}
+#search-result col.c-pic{width:92px}#search-result col.c-brand{width:14%}#search-result col.c-size{width:9%}#search-result col.c-price{width:15%}#search-result col.c-act{width:150px}
+.ptitle{font-weight:650;font-size:1.05rem;line-height:1.3}.ptitle a{color:inherit;text-decoration:underline;text-decoration-color:#b9c3cf;text-underline-offset:3px}.ptitle a:hover{color:#0b6b3a;text-decoration-color:#0b6b3a}
+.meta .chip{padding:0 .4rem;font-size:.8rem;line-height:1.3}.meta a{color:#0b57a8}
+.meta{color:#5c6874;font-size:.85rem;display:flex;align-items:center;gap:.4rem;margin-top:.2rem;flex-wrap:wrap}
+.pr{font-size:1.2rem;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.2}
+.pills{display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;margin-top:.35rem}.pills .badge{white-space:nowrap}
+.suggest{margin-top:.45rem;padding:.45rem .65rem;background:#fff8e6;border:1px solid #f1deaa;border-radius:8px;font-size:.85rem;display:flex;gap:.4rem .6rem;align-items:center;flex-wrap:wrap}
+button.btn-sm{font:inherit;font-size:.82rem;padding:.25rem .65rem;border:1px solid #b9c3cf;border-radius:6px;background:#fff;cursor:pointer}button.btn-sm:hover{background:#f1f4f7}
+button.watch{font:inherit;font-weight:600;background:#0b6b3a;color:#fff;border:0;border-radius:8px;padding:.5rem 1rem;cursor:pointer;width:100%}button.watch:hover{background:#095c32}button.watch:disabled{background:#d4dae1;color:#44505c;cursor:default}
+button.linkbtn{font:inherit;font-size:.85rem;background:none;border:0;color:#0b57a8;padding:.35rem 0 0;cursor:pointer;text-decoration:underline;text-underline-offset:3px;display:block;margin:0 auto}
+.act{text-align:center}
+details.edit{margin-top:.35rem}details.edit>summary{display:inline-block;cursor:pointer;color:#5c6874;font-size:.8rem;list-style:none}details.edit>summary::-webkit-details-marker{display:none}details.edit>summary::before{content:'▸ '}details.edit[open]>summary::before{content:'▾ '}
+details.edit[open]{padding:.5rem .6rem;background:#f6f8fa;border-radius:8px}
+.editrow{display:flex;gap:.4rem;margin:.3rem 0;flex-wrap:wrap;align-items:center}.editrow input{font:inherit;font-size:.85rem;padding:.3rem .5rem;border:1px solid #ccd3db;border-radius:6px;width:12rem}
+.toolbar{display:flex;gap:.9rem;flex-wrap:wrap;align-items:center;margin:.3rem 0 .8rem}
 code,pre{background:#f1f4f7;border-radius:4px}code{padding:0 .25rem}pre{padding:.6rem;overflow:auto;font-size:.85rem}
 .err{color:#a1281a}.chip{border:1px solid #ccd3db;border-radius:1rem;background:#fff;padding:.15rem .6rem;font-size:.85rem}
 details.group{border:1px solid #dce1e7;border-radius:8px;margin:.4rem 0;padding:.3rem .7rem}details.group summary{cursor:pointer;font-weight:600}details.group[open] summary{margin-bottom:.4rem}details.group .list{max-height:18rem;overflow:auto}
@@ -37,12 +74,23 @@ label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid
 <input type="file" id="photo-input" accept="image/*" hidden>
 <div id="lightbox" role="dialog" aria-modal="true" aria-label="Picture" hidden><figure><img id="lightbox-img" alt=""><figcaption id="lightbox-cap"></figcaption></figure></div>
 <p class="muted small">This page is a client app: a <b>regular user</b> (not an admin) calling the public API with a user token and a client token, the way a phone app or script would. Everything you do here is an ordinary API call; see the "API calls" tab.</p>
-<nav id="tabs"><button data-tab="watch" class="on">Watchlist</button><button data-tab="add">Add a product</button><button data-tab="compare">Compare in a shop</button><button data-tab="stores">Your stores</button><button data-tab="activity">Activity</button><button data-tab="api">API calls</button></nav>
+<nav id="tabs"><button data-tab="watch" class="on">Watchlist</button><button data-tab="add">Lookup</button><button data-tab="compare">Compare</button><button data-tab="history">Price history</button><button data-tab="stores">Your stores</button><button data-tab="activity">Activity</button><button data-tab="api">API calls</button></nav>
 <label class="inline small"><input type="checkbox" id="auto" checked> Refresh every 15 seconds</label>
 
-<section class="panel on" id="tab-watch"><h2>Watchlist</h2><div id="watchlist"></div></section>
+<section class="panel on" id="tab-watch"><h2>Watchlist</h2>
+ <fieldset><legend>Watch a product from its page link</legend>
+  <form id="link-form" class="row"><input name="url" size="46" required placeholder="https://..."><select id="link-store"></select>
+   <input name="maximum_price" size="8" placeholder="alert at ≤ kr" inputmode="decimal"><button>Add</button></form>
+  <div class="row small muted">Examples: <button type="button" class="chip" data-fill="https://demo.example.org/p/oats-1kg">demo oats</button>
+   <button type="button" class="chip" data-fill="https://www.citygross.se/matvaror/frukt-och-gront/frukt/%C3%A4pple-ingrid-marie-p100142800_KG">City Gross apple</button></div>
+  <div id="link-result" role="status"></div></fieldset>
+ <div id="watchlist"></div></section>
+
+<section class="panel" id="tab-history"><h2>Price history</h2><div id="history-page"></div></section>
 
 <section class="panel" id="tab-add">
+ <h2>Lookup</h2>
+ <p class="muted small">Search your stores by name or barcode, compare, and save barcodes. Watching a product starts from a result's Watch button, or from a product page link on the Watchlist.</p>
  <fieldset id="offline" hidden><legend>Try it offline</legend>
   <p class="small">The demo shop is a made-up store whose prices move every minute, so you can watch monitoring work without any real retailer.</p>
   <button id="try-demo">Use the demo shop and search "demo"</button></fieldset>
@@ -57,16 +105,14 @@ label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid
   <div class="row small muted demo-only">Try: <button type="button" class="chip" data-search-fill="demo">demo</button> <button type="button" class="chip" data-search-fill="9999990000019">demo oats barcode</button> <button type="button" class="chip" data-search-fill="9999990000026">demo coffee barcode</button></div>
   <p class="muted small">Digits only (8 to 14) are treated as a barcode; anything else is searched by name, in Swedish.</p>
   <div id="search-result" role="status"></div></fieldset>
- <fieldset><legend>Add by product page link</legend>
-  <form id="link-form" class="row"><input name="url" size="46" required placeholder="https://..."><select id="link-store"></select>
-   <input name="maximum_price" size="8" placeholder="alert at ≤ kr" inputmode="decimal"><button>Add</button></form>
-  <div class="row small muted">Examples: <button type="button" class="chip" data-fill="https://demo.example.org/p/oats-1kg">demo oats</button>
-   <button type="button" class="chip" data-fill="https://www.citygross.se/matvaror/frukt-och-gront/frukt/%C3%A4pple-ingrid-marie-p100142800_KG">City Gross apple</button></div>
-  <div id="link-result" role="status"></div></fieldset>
+ <fieldset id="words"><legend>Word equivalents (shared)</legend>
+  <p class="muted small">English and Swedish words treated as the same in searches and when comparing names, so "oat drink" also finds "havredryck". Everyone sees what you add.</p>
+  <form id="word-form" class="row"><input name="term" size="18" required placeholder="e.g. oat drink"> → <input name="canonical" size="18" required placeholder="e.g. havredryck"><button>Add</button></form>
+  <div id="word-list" class="small"></div></fieldset>
 </section>
 
 <section class="panel" id="tab-compare">
- <h2>Compare in a shop</h2>
+ <h2>Compare</h2>
  <p class="muted small">Standing in a store? Type the barcode and say where you are. Prices we already know appear at once; live prices follow. Uses the stores you ticked.</p>
  <form id="compare-form" class="row"><input name="gtin" size="18" inputmode="numeric" required placeholder="barcode digits"><select id="compare-here"></select><button>Compare</button></form>
  <div class="row small muted demo-only">Demo barcodes: <button type="button" class="chip" data-gtin="9999990000019">demo oats</button> <button type="button" class="chip" data-gtin="9999990000026">demo coffee</button></div>
@@ -97,7 +143,7 @@ const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const adminToken=sessionStorage.getItem('retailToken');
-let userToken=null,clientToken=null,stores=[],mine=new Set(),monitors=[],names={},events=[],callLog=[],open=new Set(),busy=false,retailerNames={},openGroups=new Set(),groupFilter={},storesHtml='';
+let retailerLogos={},userToken=null,clientToken=null,stores=[],mine=new Set(),monitors=[],names={},events=[],callLog=[],busy=false,retailerNames={},openGroups=new Set(),groupFilter={},storesHtml='';
 const say=t=>{$('msg').textContent=t||''};
 
 // ---- the client's API helper: user token + client token on every call -----------------------
@@ -123,7 +169,7 @@ const until=d=>{if(!d)return '';const s=Math.round((new Date(/Z|[+-]\d\d:?\d\d$/
 
 // ---- tabs, header --------------------------------------------------------------------------
 document.addEventListener('click',e=>{const g=e.target.closest('[data-goto]');if(g){const b=document.querySelector(`#tabs [data-tab="${g.dataset.goto}"]`);if(b)b.click()}});
-$('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;
+$('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.tab==='history'&&!hist.productId)renderHistory();if(b.dataset.tab==='add'&&!wordsLoaded)loadWords().catch(err=>say(err.message));
  document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id==='tab-'+b.dataset.tab))};
 $('reset').onclick=async()=>{if(!adminToken){say('Sign in on the admin page first');return}
@@ -133,11 +179,191 @@ $('reset').onclick=async()=>{if(!adminToken){say('Sign in on the admin page firs
 // ---- loading -------------------------------------------------------------------------------
 async function loadAll(){
  const [s,m,my,ev,rt]=await Promise.all([call('GET','/v1/stores'),call('GET','/v1/monitors?include_removed=true'),call('GET','/v1/me/stores'),call('GET','/v1/events?limit=200'),call('GET','/v1/connectors').catch(()=>({items:[]}))]);
- retailerNames=Object.fromEntries(rt.items.map(x=>[x.id,x.name]));stores=s.items;mine=new Set(my.items.map(x=>x.store_id));events=ev.items;
+ retailerNames=Object.fromEntries(rt.items.map(x=>[x.id,x.name]));retailerLogos=Object.fromEntries(rt.items.map(x=>[x.id,x.logo_url]));stores=s.items;mine=new Set(my.items.map(x=>x.store_id));events=ev.items;
  monitors=m.items.filter(x=>!x.removed_at);names={};m.items.forEach(x=>names[x.id]=x.name);
  renderStores();renderWatch();renderActivity();
 }
 async function quickRefresh(){if(busy||document.hidden||!$('auto').checked)return;try{busy=true;await loadAll()}catch(e){}finally{busy=false}}
+
+// ---- shared word list -----------------------------------------------------------------------
+let wordsLoaded=false;
+async function loadWords(){
+ const r=await call('GET','/v1/glossary');wordsLoaded=true;
+ const custom=r.items.filter(e=>e.source==='custom'),built=r.items.filter(e=>e.source==='builtin');
+ $('word-list').innerHTML=(custom.length?'<div class="row">'+custom.map(e=>`<span class="chip">${esc(e.term)} → ${esc(e.canonical)} <button type="button" class="chip" data-word-remove="${esc(e.id)}" title="Remove">×</button></span>`).join('')+'</div>':'<span class="muted">Nothing added yet.</span>')+
+  `<details><summary class="muted">Built-in words (${built.length})</summary><div class="muted">${built.map(e=>esc(e.term)+' → '+esc(e.canonical)).join(' &middot; ')}</div></details>`;
+}
+$('word-form').onsubmit=async e=>{e.preventDefault();
+ try{const f=new FormData(e.target);await call('POST','/v1/glossary',{term:f.get('term'),canonical:f.get('canonical')});e.target.reset();await loadWords();say('Word pair added for everyone.')}catch(err){say(err.message)}};
+$('word-list').addEventListener('click',async e=>{const b=e.target.closest('[data-word-remove]');if(!b)return;
+ try{await call('DELETE','/v1/glossary/'+b.dataset.wordRemove);await loadWords();say('Removed.')}catch(err){say(err.message)}});
+
+// ---- price history page --------------------------------------------------------------------
+// One line per store (a step line: a price holds until it changes). A store keeps its colour for
+// as long as the product has it, whatever is filtered, so a colour always means the same store.
+const hist={productId:null,product:null,rows:[],range:'30',hidden:new Set(),at:null,series:[],times:[],geo:null};
+const parseT=d=>new Date(/Z|[+-]\d\d:?\d\d$/.test(d)?d:d+'Z').getTime();
+const kr=v=>v.toFixed(2)+' kr';
+const dateShort=t=>new Date(t).toLocaleDateString('sv-SE',{day:'numeric',month:'short'});
+const dateLong=t=>new Date(t).toLocaleString('sv-SE',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const storeById=id=>stores.find(s=>s.id===id)||{};
+
+async function openHistory(productId){
+ hist.productId=productId;hist.hidden=new Set();hist.at=null;
+ document.querySelector('#tabs [data-tab="history"]').click();
+ const page=$('history-page');page.style.opacity=.55;     // keep the frame while it reloads
+ try{
+  const [product,h]=await Promise.all([call('GET','/v1/products/'+productId),call('GET','/v1/products/'+productId+'/history?limit=2000')]);
+  hist.product=product;
+  hist.rows=h.items.filter(x=>x.current_price!=null).map(x=>({t:parseT(x.observed_at),price:Number(x.current_price),store:x.store_id})).sort((a,b)=>a.t-b.t);
+ }catch(err){say(err.message);hist.product=null;hist.rows=[]}
+ page.style.opacity=1;renderHistory();
+}
+
+// a store's prices reduced to where they change; the last check is kept so the line reaches it
+function priceChanges(rows){
+ const out=[];rows.forEach((r,i)=>{if(!out.length||out[out.length-1].price!==r.price)out.push({t:r.t,price:r.price})});
+ return out;
+}
+function buildSeries(rows){
+ const by=new Map();rows.forEach(r=>{if(!by.has(r.store))by.set(r.store,[]);by.get(r.store).push(r)});
+ const ids=[...by.keys()].sort((a,b)=>(storeById(a).retailer_id||'').localeCompare(storeById(b).retailer_id||'')||a.localeCompare(b));
+ return ids.slice(0,8).map((id,i)=>({store:id,slot:i+1,color:`var(--series-${i+1})`,pts:priceChanges(by.get(id)),last:by.get(id)[by.get(id).length-1].t,checks:by.get(id).length}));
+}
+function niceStep(raw){const p=Math.pow(10,Math.floor(Math.log10(raw))),f=raw/p;return (f<=1?1:f<=2?2:f<=5?5:10)*p}
+
+function renderHistory(){
+ const box=$('history-page');
+ if(!hist.productId){
+  const watched=monitors.filter(m=>m.product_id);
+  box.innerHTML=watched.length?'<p class="muted">Choose a product:</p><div class="row">'+watched.map(m=>`<button data-open-history="${esc(m.product_id)}">${esc(m.name)}</button>`).join('')+'</div>'
+   :'<p class="muted">Open a product\'s price history from the Watchlist or from a search result.</p>';
+  return;
+ }
+ const p=hist.product;
+ if(!p){box.innerHTML='<p class="muted">That product could not be loaded.</p>';return}
+ const all=buildSeries(hist.rows);
+ const head=`<div class="hx-head">${thumb(p.image,64)}<div><h3>${esc(p.name)}</h3><div class="muted small">${[p.brand,p.package_quantity&&(Number(p.package_quantity.value)+' '+p.package_quantity.unit),p.gtin14&&('Barcode '+shortCode(p.gtin14))].filter(Boolean).map(esc).join(' &middot; ')}</div></div></div>`;
+ if(!all.length){box.innerHTML=head+'<p class="muted">No prices have been recorded for this product yet.</p>';return}
+ const tEnd=Math.max(...all.map(s=>s.last)),tMin=Math.min(...all.map(s=>s.pts[0].t));
+ const days=hist.range==='all'?null:Number(hist.range);
+ const tStart=days?Math.max(tMin,tEnd-days*864e5):tMin;
+ // each store's line inside the window: it starts at the price in force at the window's start
+ const lines=all.map(s=>{
+  let start=null;const inside=[];
+  s.pts.forEach(pt=>{if(pt.t<=tStart)start=pt;else if(pt.t<=tEnd)inside.push(pt)});
+  const pts=[...(start?[{t:tStart,price:start.price,carried:true}]:[]),...inside];
+  return {...s,line:pts.length?pts:[{t:tStart,price:s.pts[0].price}],end:(pts.length?pts[pts.length-1]:s.pts[0]).price};
+ }).filter(s=>s.line.length);
+ hist.series=lines;
+ const shown=lines.filter(s=>!hist.hidden.has(s.store));
+ const values=shown.flatMap(s=>s.line.map(x=>x.price));
+ const filters=`<div class="hx-filters"><div class="seg" role="group" aria-label="Date range">${[['7','7 days'],['30','30 days'],['90','90 days'],['all','All']].map(([k,l])=>`<button type="button" data-hrange="${k}" aria-pressed="${hist.range===k}">${l}</button>`).join('')}</div><span class="hx-note">${dateShort(tStart)} to ${dateShort(tEnd)}</span></div>`;
+ // ---- headline numbers
+ const cheapestNow=shown.length?shown.reduce((a,b)=>b.end<a.end?b:a):null;
+ const tied=cheapestNow?shown.filter(s=>Math.abs(s.end-cheapestNow.end)<0.005):[];
+ const lows=shown.flatMap(s=>s.line.map(x=>({...x,store:s.store})));
+ const low=lows.length?lows.reduce((a,b)=>b.price<a.price?b:a):null,high=lows.length?lows.reduce((a,b)=>b.price>a.price?b:a):null;
+ const tile=(label,value,sub)=>`<div class="tile"><div class="lbl">${esc(label)}</div><div class="val">${value}</div><div class="sub">${sub}</div></div>`;
+ const tiles=shown.length?`<div class="tiles">${tile('Cheapest now',esc(kr(cheapestNow.end)),tied.length>1?`${tied.map(s=>esc(storeById(s.store).name||'')).join(', ')} (same price)`:`${storeLogo(cheapestNow.store,16)} ${esc(storeById(cheapestNow.store).name||'')}`)}${tile('Lowest in this period',esc(kr(low.price)),`${esc(storeById(low.store).name||'')}${low.carried?' (since the start)':', '+esc(dateShort(low.t))}`)}${tile('Highest in this period',esc(kr(high.price)),`${esc(storeById(high.store).name||'')}${high.carried?' (since the start)':', '+esc(dateShort(high.t))}`)}</div>`:'';
+ // ---- the chart
+ const W=760,H=300,L=50,T=14,B=30,labels=lines.length<=4,R=labels?150:18;
+ let chart='';
+ if(!shown.length)chart='<p class="muted">Every store is switched off. Tick one below.</p>';
+ else{
+  let lo=Math.min(...values),hi=Math.max(...values);if(hi-lo<0.01){lo-=1;hi+=1}
+  const step=niceStep((hi-lo)/4),yLo=Math.floor(lo/step)*step,yHi=Math.ceil(hi/step)*step;
+  const x=t=>L+(tEnd===tStart?0.5:(t-tStart)/(tEnd-tStart))*(W-L-R),y=v=>T+(1-(v-yLo)/(yHi-yLo))*(H-T-B);
+  const grid=[];for(let v=yLo;v<=yHi+step/2;v+=step)grid.push(v);
+  const xt=[];for(let i=0;i<=4;i++)xt.push(tStart+(tEnd-tStart)*i/4);
+  const gridSvg=grid.map(v=>`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end">${esc(Number.isInteger(v)?v:v.toFixed(2))}</text>`).join('');
+  const xSvg=xt.map((t,i)=>`<text x="${x(t)}" y="${H-8}" text-anchor="${i===0?'start':i===4?'end':'middle'}">${esc(dateShort(t))}</text>`).join('');
+  const paths=shown.map(s=>{
+   const pts=s.line;let d=`M${x(pts[0].t)} ${y(pts[0].price)}`;
+   for(let i=1;i<pts.length;i++)d+=` H${x(pts[i].t)} V${y(pts[i].price)}`;
+   d+=` H${x(tEnd)}`;
+   const dots=pts.filter((q,i)=>!q.carried).map(q=>`<circle cx="${x(q.t)}" cy="${y(q.price)}" r="4" fill="${s.color}" stroke="var(--surface)" stroke-width="2"/>`).join('');
+   const endDot=`<circle cx="${x(tEnd)}" cy="${y(s.end)}" r="5" fill="${s.color}" stroke="var(--surface)" stroke-width="2"/>`;
+   return `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}${endDot}`;
+  }).join('');
+  // end labels, only when they do not collide (else the legend and the tooltip carry the values)
+  let direct='';
+  if(labels&&shown.length){
+   const ys=shown.map(s=>y(s.end)).sort((a,b)=>a-b);
+   if(ys.every((v,i)=>i===0||v-ys[i-1]>=14))direct=shown.map(s=>`<text class="dl" x="${x(tEnd)+10}" y="${y(s.end)+4}">${esc((storeById(s.store).name||'').slice(0,16))} ${esc(s.end.toFixed(2))}</text>`).join('');
+  }
+  hist.times=[...new Set([tEnd,...shown.flatMap(s=>s.line.filter(q=>!q.carried).map(q=>q.t))])].sort((a,b)=>a-b);
+  hist.geo={W,H,L,R,T,B,x,y,tStart,tEnd};
+  chart=`<div class="hx-chart" id="hx-chart" tabindex="0" role="img" aria-label="Price history of ${esc(p.name)} in ${shown.length} store(s). Use the left and right arrow keys to read each price change.">
+   <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${gridSvg}<line x1="${L}" x2="${W-R}" y1="${H-B}" y2="${H-B}" stroke="var(--axis)" stroke-width="1"/>${xSvg}${paths}${direct}
+   <line id="hx-cross" y1="${T}" y2="${H-B}" stroke="var(--axis)" stroke-width="1" visibility="hidden"/><rect id="hx-hit" x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}" fill="transparent"/></svg>
+   <div class="hx-tip" id="hx-tip" hidden></div></div>`;
+ }
+ // ---- legend: always with 2 or more stores; a switch per store
+ const legend=lines.length>1?`<div class="hx-legend" role="group" aria-label="Stores">${lines.map(s=>{
+  const first=s.line[0].price,d=s.end-first,chg=Math.abs(d)<0.005?'':` <span class="chg ${d<0?'down':'up'}">${d<0?'▼':'▲'} ${Math.abs(d).toFixed(2)}</span>`;
+  return `<label><input type="checkbox" data-hstore="${esc(s.store)}" ${hist.hidden.has(s.store)?'':'checked'}><span class="k" style="background:${s.color}"></span>${storeLogo(s.store,16)} ${esc(storeById(s.store).name||'a store')}: <b>${esc(kr(s.end))}</b>${chg}</label>`}).join('')}</div>`
+  :`<p class="hx-note">${storeLogo(lines[0].store,16)} ${esc(storeById(lines[0].store).name||'')}: ${esc(kr(lines[0].end))}</p>`;
+ // ---- table view: every price change in the window
+ const changes=lines.flatMap(s=>s.line.map((q,i)=>({store:s.store,t:q.t,price:q.price,prev:i?s.line[i-1].price:null,carried:q.carried}))).filter(r=>!r.carried).sort((a,b)=>b.t-a.t).slice(0,120);
+ const table=`<details class="small"><summary>Table view: price changes (${changes.length})</summary><table><tr><th>When</th><th>Store</th><th>Price</th><th>Change</th></tr>${changes.map(r=>`<tr><td>${esc(dateLong(r.t))}</td><td>${esc(storeById(r.store).name||'')}</td><td>${esc(kr(r.price))}</td><td>${r.prev==null?'first seen':`<span class="chg ${r.price<r.prev?'down':'up'}">${r.price<r.prev?'▼':'▲'} ${Math.abs(r.price-r.prev).toFixed(2)}</span>`}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">No price changes in this period.</td></tr>'}</table></details>`;
+ const more=all.length<new Set(hist.rows.map(r=>r.store)).size?`<p class="hx-note">Showing the first 8 of ${new Set(hist.rows.map(r=>r.store)).size} stores.</p>`:'';
+ const sameLine=new Map();shown.forEach(s=>{const k=JSON.stringify(s.line.map(q=>[q.t,q.price]));if(!sameLine.has(k))sameLine.set(k,[]);sameLine.get(k).push(storeById(s.store).name||'a store')});
+ const overlaps=[...sameLine.values()].filter(g=>g.length>1);
+ const overlap=overlaps.length?`<p class="hx-note">These stores have had exactly the same price, so their lines sit on top of each other: ${overlaps.map(g=>esc(g.join(' and '))).join('; ')}.</p>`:'';
+ const single=hist.rows.length&&!lines.some(s=>s.line.length>1)?'<p class="hx-note">Only one price has been seen so far in each store. The lines will step as the prices change.</p>':'';
+ box.innerHTML=head+filters+tiles+chart+legend+overlap+single+more+table;
+ wireChart();
+}
+
+// ---- the hover and keyboard layer
+function valueAt(s,t){let v=null;for(const q of s.line)if(q.t<=t)v=q.price;return v}
+function showAt(t){
+ const g=hist.geo,tip=$('hx-tip'),cross=$('hx-cross'),wrap=$('hx-chart');if(!g||!tip)return;
+ hist.at=t;const cx=g.x(t);cross.setAttribute('x1',cx);cross.setAttribute('x2',cx);cross.setAttribute('visibility','visible');
+ tip.replaceChildren();
+ const when=document.createElement('div');when.className='when';when.textContent=dateLong(t);tip.append(when);
+ hist.series.filter(s=>!hist.hidden.has(s.store)).forEach(s=>{
+  const v=valueAt(s,t);if(v==null)return;
+  const r=document.createElement('div');r.className='r';
+  const k=document.createElement('span');k.className='k';k.style.background=s.color;
+  const b=document.createElement('b');b.textContent=kr(v);
+  const n=document.createElement('span');n.className='n';n.textContent=storeById(s.store).name||'a store';
+  r.append(k,b,n);tip.append(r);
+ });
+ tip.hidden=false;
+ const scale=wrap.clientWidth/g.W,left=cx*scale,w=tip.offsetWidth;
+ tip.style.left=Math.max(4,left+14+w>wrap.clientWidth?left-w-14:left+14)+'px';tip.style.top='12px';
+}
+function hideTip(){const tip=$('hx-tip'),cross=$('hx-cross');if(tip)tip.hidden=true;if(cross)cross.setAttribute('visibility','hidden');hist.at=null}
+function wireChart(){
+ const wrap=$('hx-chart'),hit=$('hx-hit');if(!wrap)return;
+ const nearest=clientX=>{
+  const g=hist.geo,rect=wrap.querySelector('svg').getBoundingClientRect(),svgX=(clientX-rect.left)*g.W/rect.width;
+  const t=g.tStart+(svgX-g.L)/(g.W-g.L-g.R)*(g.tEnd-g.tStart);
+  return hist.times.reduce((a,b)=>Math.abs(b-t)<Math.abs(a-t)?b:a);
+ };
+ hit.addEventListener('pointermove',e=>showAt(nearest(e.clientX)));
+ hit.addEventListener('pointerleave',hideTip);
+ wrap.addEventListener('keydown',e=>{
+  const i=hist.at==null?-1:hist.times.indexOf(hist.at);
+  if(e.key==='ArrowRight'){showAt(hist.times[Math.min(hist.times.length-1,i+1)]);e.preventDefault()}
+  else if(e.key==='ArrowLeft'){showAt(hist.times[Math.max(0,i<0?hist.times.length-1:i-1)]);e.preventDefault()}
+  else if(e.key==='Home'){showAt(hist.times[0]);e.preventDefault()}
+  else if(e.key==='End'){showAt(hist.times[hist.times.length-1]);e.preventDefault()}
+  else if(e.key==='Escape')hideTip();
+ });
+ wrap.addEventListener('focus',()=>{if(hist.at==null)showAt(hist.times[hist.times.length-1])});
+ wrap.addEventListener('blur',hideTip);
+}
+document.addEventListener('click',e=>{
+ const o=e.target.closest('[data-open-history]');if(o){openHistory(o.dataset.openHistory);return}
+ const r=e.target.closest('[data-hrange]');if(r){hist.range=r.dataset.hrange;renderHistory()}
+});
+document.addEventListener('change',e=>{
+ const s=e.target.closest('[data-hstore]');if(!s)return;
+ s.checked?hist.hidden.delete(s.dataset.hstore):hist.hidden.add(s.dataset.hstore);renderHistory();
+});
 
 // ---- pictures and reference data -----------------------------------------------------------
 function thumb(img,size){
@@ -189,44 +415,27 @@ async function uploadPhoto(productId,file){
 $('photo-input').onchange=async e=>{const file=e.target.files[0];if(!file||!photoTarget)return;try{await uploadPhoto(photoTarget,file)}catch(err){say(err.message)}};
 
 // ---- watchlist ----------------------------------------------------------------------------
-function spark(items){
- const pts=items.slice().reverse().map(x=>Number(x.current_price)).filter(Number.isFinite);if(pts.length<2)return '<span class="muted small">Not enough history yet: check again in a minute.</span>';
- const w=320,h=64,lo=Math.min(...pts),hi=Math.max(...pts),span=(hi-lo)||1;
- const xy=pts.map((p,i)=>`${(i/(pts.length-1)*(w-8)+4).toFixed(1)},${(h-6-(p-lo)/span*(h-12)).toFixed(1)}`).join(' ');
- return `<svg width="${w}" height="${h}" role="img" aria-label="price history"><polyline points="${xy}" fill="none" stroke="#0b6b3a" stroke-width="2"/></svg><div class="muted small">low ${lo.toFixed(2)} &middot; high ${hi.toFixed(2)} &middot; ${pts.length} prices</div>`;
-}
 function card(m){
  const l=m.latest,alert=m.conditions&&m.conditions.maximum_price,id=esc(m.id);
  let delta='';if(l&&l.previous_price){const d=Number(l.current_price)-Number(l.previous_price);if(d)delta=`<span class="chg ${d<0?'down':'up'}">${d<0?'▼':'▲'} ${Math.abs(d).toFixed(2)}</span>`}
  const hit=alert&&l&&Number(l.current_price)<=Number(alert)?' <span class="badge ok">at or below your alert</span>':'';
  const code=m.barcode?`Barcode ${esc(m.barcode.gtin14.replace(/^0+/,''))} ${m.barcode.source!=='retailer'?`<span class="muted">(${esc(m.barcode.source==='user'?'added by a user':m.barcode.source)})</span>`:''}${m.barcode.source!=='retailer'?` <button data-unlink="${id}">Unlink</button>`:''}`:'No barcode';
  const link=m.type==='exact_product'&&!(m.barcode&&m.barcode.source==='retailer')?` <input data-code="${id}" placeholder="scan barcode" size="13" inputmode="numeric"> <button data-link="${id}">Link</button>`:'';
- return `<div class="card" data-id="${id}"><div class="row" style="justify-content:space-between"><div class="row" style="flex-wrap:nowrap;gap:.7rem">${pictureCell(m.image,m.product_id,64)}<div><b>${esc(m.name)}</b><div class="muted small">${esc(m.store_name||'')}${alert?` &middot; alert at ≤ ${esc(alert)} kr`:''}</div></div></div>
+ return `<div class="card" data-id="${id}"><div class="row" style="justify-content:space-between"><div class="row" style="flex-wrap:nowrap;gap:.7rem">${pictureCell(m.image,m.product_id,64)}<div><b>${esc(m.name)}</b><div class="muted small">${m.retailer_id?logoOf(m.retailer_id,16)+' ':''}${esc(m.store_name||'')}${alert?` &middot; alert at ≤ ${esc(alert)} kr`:''}</div></div></div>
   <div style="text-align:right"><span class="price">${l?esc(l.current_price)+' '+esc(l.currency):'<span class="muted">no price yet</span>'}</span>${delta}${hit}
   ${l&&l.unit_price?`<div class="muted small">${esc(l.unit_price.amount)} per ${esc(l.unit_price.unit)}</div>`:''}</div></div>
   <div class="muted small">Checked ${ago(m.last_success_at)} &middot; next check ${until(m.next_due_at)} &middot; ${code}${link}</div>
-  <div class="row"><button data-check="${id}">Check now</button><button data-history="${id}">${open.has(m.id)?'Hide':'Show'} history</button><button data-remove="${id}">Remove</button></div>
-  <div class="hist" id="hist-${id}">${open.has(m.id)?'<span class="muted small">Loading...</span>':''}</div></div>`;
+  <div class="row"><button data-check="${id}">Check now</button>${m.product_id?`<button data-open-history="${esc(m.product_id)}">Price history</button>`:''}<button data-remove="${id}">Remove</button></div></div>`;
 }
 function renderWatch(){
- $('watchlist').innerHTML=monitors.length?monitors.map(card).join(''):'<p class="muted">Nothing watched yet. Open <b>Add a product</b> to get started.</p>';
- open.forEach(id=>loadHistory(id));
-}
-async function loadHistory(id){
- const m=monitors.find(x=>x.id===id),box=$('hist-'+id);if(!m||!box)return;
- try{
-  const [prices,ev]=await Promise.all([call('GET','/v1/listings/'+m.conditions.listing_id+'/prices'),call('GET','/v1/monitors/'+id+'/events')]);
-  const evs=ev.items.slice(0,8).map(e=>`<li>${esc(eventText(e))} <span class="muted small">${ago(e.created_at)}</span></li>`).join('');
-  box.innerHTML=spark(prices.items)+(evs?`<ul class="small">${evs}</ul>`:'<p class="muted small">No events yet. Events appear when the price moves or an offer starts.</p>');
- }catch(e){box.textContent=e.message}
+ $('watchlist').innerHTML=monitors.length?monitors.map(card).join(''):'<p class="muted">Nothing watched yet. Paste a product page link above, or open <b>Lookup</b> to search.</p>';
 }
 $('watchlist').onclick=async e=>{
  const b=e.target.closest('button');if(!b)return;const d=b.dataset;
  try{
   if(d.check){say('Checking...');const r=await call('POST','/v1/monitors/'+d.check+'/check');const job=await waitJob(r.job_id);
    say(job.state==='succeeded'?'Checked.':'Check finished: '+job.state+(job.result&&job.result.detail?' ('+job.result.detail+')':''));await loadAll()}
-  else if(d.history){open.has(d.history)?open.delete(d.history):open.add(d.history);renderWatch()}
-  else if(d.remove){await call('DELETE','/v1/monitors/'+d.remove);open.delete(d.remove);say('Removed. Its activity is kept.');await loadAll()}
+  else if(d.remove){await call('DELETE','/v1/monitors/'+d.remove);say('Removed. Its activity is kept.');await loadAll()}
   else if(d.unlink){await call('DELETE','/v1/monitors/'+d.unlink+'/barcode');say('Barcode removed');await loadAll()}
   else if(d.link){await linkBarcode(d.link)}
  }catch(err){say(err.message)}};
@@ -241,6 +450,21 @@ async function linkBarcode(id,typed){
  await loadAll();return true;
 }
 
+// A retailer's logo, or a coloured badge with its initials until one is uploaded.
+function retailerBadge(id,name,size){
+ const words=String(name||id).replace(/[^\p{L}\p{N} ]/gu,' ').trim().split(/\s+/).filter(Boolean);
+ const letters=words.length>1?(words[0][0]+words[1][0]).toUpperCase():(words[0]||'?').slice(0,2);
+ const initials=words.length>1?letters:letters[0].toUpperCase()+letters.slice(1).toLowerCase();
+ let hue=0;for(const c of String(id))hue=(hue*31+c.charCodeAt(0))%360;
+ return `<span class="logo" title="${esc(name||id)}" style="width:${size}px;height:${size}px;background:hsl(${hue} 55% 38%);font-size:${Math.round(size*.42)}px">${esc(initials)}</span>`;
+}
+function retailerLogo(id,name,url,size){
+ size=size||22;
+ return url?`<img class="logo" src="${esc(url)}" width="${size}" height="${size}" alt="${esc(name||id)}" title="${esc(name||id)}" style="object-fit:contain">`:retailerBadge(id,name,size);
+}
+const logoOf=(id,size)=>retailerLogo(id,retailerNames[id],retailerLogos[id],size);
+const storeLogo=(storeId,size)=>{const s=stores.find(x=>x.id===storeId);return s?logoOf(s.retailer_id,size):''};
+
 // ---- stores, adding products ---------------------------------------------------------------
 function renderStores(){
  const real=s=>s.retailer_id!=='test.fixture';
@@ -250,7 +474,7 @@ function renderStores(){
   const list=groups[id],chosen=list.filter(s=>mine.has(s.id)).length;
   const picked=chosen&&!openGroups.has(id)?`<div class="muted small">${list.filter(s=>mine.has(s.id)).map(s=>esc(s.name)).join(', ')}</div>`:'';
   const filter=list.length>8?`<input type="search" placeholder="Find a store in ${esc(retailerName(id))}" data-filter="${esc(id)}" value="${esc(groupFilter[id]||'')}" size="28"> `:'';
-  return `<details class="group" data-group="${esc(id)}" ${openGroups.has(id)?'open':''}><summary>${esc(retailerName(id))} <span class="muted small">${chosen} of ${list.length} selected</span></summary>${picked}${filter}
+  return `<details class="group" data-group="${esc(id)}" ${openGroups.has(id)?'open':''}><summary>${logoOf(id,24)} ${esc(retailerName(id))} <span class="muted small">${chosen} of ${list.length} selected</span></summary>${picked}${filter}
    <div class="list">${list.map(s=>`<label class="inline" data-name="${esc(s.name.toLowerCase())}"><input type="checkbox" data-store="${esc(s.id)}" ${mine.has(s.id)?'checked':''}> ${esc(s.name)}</label>`).join('')}</div></details>`}).join('')
   ||'<p class="muted">No stores yet. An administrator registers them on the admin page.</p>';
  if(html!==storesHtml){storesHtml=html;$('stores').innerHTML=html;$('stores').querySelectorAll('[data-filter]').forEach(applyFilter)}
@@ -293,7 +517,7 @@ function renderScope(){
  for(const id of [...searchPick])if(!mine.has(id))searchPick.delete(id);
  const html=!mineStores.length?'<span class="muted">Choose the stores you shop in first. <button type="button" class="chip" data-goto="stores">Open Your stores</button></span>'
   :`<div class="row"><b>Search in:</b> <label class="inline"><input type="checkbox" data-scope-all ${searchAll?'checked':''}> All my stores (${mineStores.length})</label></div>`+
-   (searchAll?'':`<div class="row">${mineStores.map(s=>`<label class="inline"><input type="checkbox" data-scope="${esc(s.id)}" ${searchPick.has(s.id)?'checked':''}> ${esc(s.name)}</label>`).join('')}</div>`);
+   (searchAll?'':`<div class="row">${mineStores.map(s=>`<label class="inline"><input type="checkbox" data-scope="${esc(s.id)}" ${searchPick.has(s.id)?'checked':''}> ${logoOf(s.retailer_id,18)} ${esc(s.name)}</label>`).join('')}</div>`);
  if(html!==scopeHtml){scopeHtml=html;$('search-scope').innerHTML=html}
 }
 $('search-scope').addEventListener('change',e=>{const b=e.target;
@@ -315,7 +539,7 @@ async function runSearch(text,ids,narrow={}){
  if(!ids.length){out.textContent=mine.size?'Pick at least one store to search in.':'Choose your stores first (the Your stores tab).';return}
  const digits=text.replace(/[\s-]/g,'');const isCode=/^\d{8,14}$/.test(digits);
  if(isCode){const bad=barcodeProblem(digits);if(bad){out.textContent=bad;return}}
- const items=[],coverage=[],problems=[];let done=0;resultBrand='';resultSize='';
+ const items=[],coverage=[],problems=[];let done=0,alsoAs=null;resultBrand='';resultSize='';
  try{
   for(let i=0;i<ids.length;i+=5){          // a search job covers up to 5 stores
    const chunk=ids.slice(i,i+5);
@@ -325,31 +549,56 @@ async function runSearch(text,ids,narrow={}){
    if(['queued','running','retry_wait'].includes(job.state))
     problems.push(`${chunk.length} store(s): the search is still waiting for the worker (${job.state}). It has not failed, so try again in a minute.`);
    else if(job.state==='failed'&&!(r.coverage||[]).length)problems.push(`${chunk.length} store(s): the search failed on the server. Try again; if it keeps failing, look at the worker log.`);
-   items.push(...(r.items||[]));coverage.push(...(r.coverage||[]));done+=chunk.length;
+   items.push(...(r.items||[]));coverage.push(...(r.coverage||[]));done+=chunk.length;if(r.query&&r.query.also_searched_as)alsoAs=r.query.also_searched_as;
   }
   problems.push(...coverageProblems(coverage));
-  showResults({result:{items,coverage}},'search-result',`Searched ${done} store(s) by ${isCode?'barcode':'name'}${isCode?'':narrowNote(narrow)}.${isCode&&Object.keys(narrow).length?' (Narrowing does not apply to a barcode search.)':''}`,problems);
+  showResults({result:{items,coverage}},'search-result',`Searched ${done} store(s) by ${isCode?'barcode':'name'}${isCode?'':narrowNote(narrow)}${alsoAs?`, also as "${alsoAs}"`:''}.${isCode&&Object.keys(narrow).length?' (Narrowing does not apply to a barcode search.)':''}`,problems);
  }catch(err){
   if(items.length||problems.length)showResults({result:{items,coverage}},'search-result',`Stopped after ${done} of ${ids.length} stores: ${err.message}`,[...problems,...coverageProblems(coverage)]);
   else out.textContent=err.message}
 }
 const shortCode=g=>g.replace(/^0+/,'');
-function barcodeCell(i){
- if(i.barcode)return `<div class="small">Barcode ${esc(shortCode(i.barcode.gtin14))} ${i.barcode.source!=='retailer'?`<span class="muted">(${esc(i.barcode.source==='user'?'added by a user':i.barcode.source)})</span>`:''}</div>`;
- return `<div class="small muted">No barcode known. <input data-newcode="${esc(i.listing_id)}" placeholder="barcode" size="13" inputmode="numeric"> <button type="button" data-add-code="${esc(i.listing_id)}" data-store-id="${esc(i.store_id)}" data-name="${esc(i.name)}">Add barcode</button> <span class="muted">(this also watches the product)</span></div>`;
+const priceText=i=>i.currency&&i.currency!=='SEK'?`${i.current_price} ${i.currency}`:String(i.current_price);
+function barcodeLine(i){
+ if(i.barcode)return `<div class="meta">Barcode ${esc(shortCode(i.barcode.gtin14))}${i.barcode.source!=='retailer'?` <span>(${esc(i.barcode.source==='user'?'added by a user':i.barcode.source)})</span>`:''}</div>`;
+ return '<div class="meta">No barcode known</div>';
+}
+function suggestBlock(i){
+ if(i.barcode)return '';
+ return (i.likely_same||[]).map(s=>{
+  const where=(stores.find(x=>x.id===s.store_id)||{}).name||'another store';
+  const diff=(s.differs||[]).length?`<span class="badge warn" title="Words only one of the two names has. Check them: they can mean a different product.">differs: ${esc(s.differs.join(', '))}</span>`:'';
+  return `<div class="suggest"><span>Probably the same as <b>${esc(s.name)}</b> at ${esc(where)}</span>${diff}<button type="button" class="btn-sm" data-same="${esc(i.listing_id)}" data-other="${esc(s.product_id)}" title="Treats the two as one product${s.barcode?' and uses its barcode':''}. It is not added to your watchlist.">${s.barcode?'Same item: use barcode '+esc(shortCode(s.barcode)):'Same item'}</button></div>`}).join('');
+}
+// what else the product is called
+function alsoLine(i){
+ const own=(i.also_called||[]).map(n=>`${esc(n.name)}${n.source==='user'?` <button type="button" class="chip" data-name-remove="${esc(n.id)}" data-product="${esc(i.product_id)}" title="Remove this name">×</button>`:''}`).join(' · ');
+ return own?`<div class="meta">Also called: ${own}</div>`:'';
+}
+// adding a name or a barcode: out of the way until it is wanted
+function editBox(i){
+ return `<details class="edit"><summary>Edit names${i.barcode?'':' and barcode'}</summary>
+  <div class="editrow"><input data-newname="${esc(i.listing_id)}" placeholder="Also called…"> <button type="button" class="btn-sm" data-add-name="${esc(i.listing_id)}">Add name</button></div>
+  ${i.barcode?'':`<div class="editrow"><input data-newcode="${esc(i.listing_id)}" placeholder="Barcode" inputmode="numeric"> <button type="button" class="btn-sm" data-add-code="${esc(i.listing_id)}">Save barcode</button></div>`}</details>`;
 }
 const lastResults={},lastNotes={},lastProblems={};let resultSort='match',resultBrand='',resultSize='';
 const priceOf=i=>Number(i.current_price);
 const sname=id=>(stores.find(s=>s.id===id)||{}).name||'';
 function groupsOf(items){const g={};items.forEach(i=>{if(i.like_key)(g[i.like_key]=g[i.like_key]||[]).push(i)});return g}
 const spreadOf=(groups,i)=>i.like_key?new Set(groups[i.like_key].map(x=>x.store_id)).size:1;
+// the offer a result is filed under: a public one first, else a members-only one, else none
+const mainOffer=i=>(i.offers||[]).find(o=>o.eligibility!=='member')||(i.offers||[])[0]||null;
+const offerRank=i=>{const o=mainOffer(i);return !o?2:o.eligibility==='member'?1:0};
 function sortedItems(items,groups){
  const by=(a,b)=>String(a).localeCompare(String(b),'sv',{sensitivity:'base'});
  const key={
   // same item in several stores first (cheapest first), then single items, then unknown ones
   match:(a,b)=>spreadOf(groups,b)-spreadOf(groups,a)||(a.like_key?0:1)-(b.like_key?0:1)||by(a.like_key||'',b.like_key||'')||priceOf(a)-priceOf(b),
+  // everything on offer together at the top (public offers, then members-only), grouped by the offer, then those with none
+  offers:(a,b)=>offerRank(a)-offerRank(b)||by((mainOffer(a)||{}).terms||'',(mainOffer(b)||{}).terms||''),
   name:(a,b)=>by(a.display_name||a.name,b.display_name||b.name),store:(a,b)=>by(sname(a.store_id),sname(b.store_id))};
  const order=[resultSort,...['match','name','store'].filter(k=>k!==resultSort)];
+ // within an offer, the same item stays together
  return [...items].sort((a,b)=>{for(const k of order){const c=key[k](a,b);if(c)return c}return 0});
 }
 function facet(items,pick,keyOf){
@@ -360,7 +609,18 @@ function facet(items,pick,keyOf){
 function productTitle(i){
  const name=esc(i.display_name||i.name);
  // the store's own product page; only plain https links are followed
- return i.url&&/^https:\/\//i.test(i.url)?`<b><a href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">${name}</a></b>`:`<b>${name}</b>`;
+ return i.url&&/^https:\/\//i.test(i.url)?`<a href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">${name}</a>`:name;
+}
+// the store's offers for this product ("2 för 35 kr") and, where it says, how many are in stock there
+function offersCell(i){
+ return (i.offers||[]).map(o=>{
+  const member=o.eligibility==='member',until=o.valid_to?` until ${esc(dateShort(parseT(o.valid_to)))}`:'';
+  return `<span class="badge ${member?'warn':'ok'}" title="${esc(o.title||'')}${member?' (members only)':''}">${esc(o.terms)}${member?' · members':''}${until}</span>`}).join('');
+}
+function stockCell(i){
+ if(i.availability==='in_stock')return `<span class="badge ok">In stock${i.stock_quantity!=null?' ('+esc(i.stock_quantity)+')':''}</span>`;
+ if(i.availability==='out_of_stock')return '<span class="badge warn">Out of stock</span>';
+ return '';
 }
 function showResults(job,target,note,problems){
  const id=target||'search-result',out=$(id);const all=(job.result&&job.result.items)||[];lastResults[id]=all;if(note!==undefined)lastNotes[id]=note;if(problems!==undefined)lastProblems[id]=problems;
@@ -374,23 +634,43 @@ function showResults(job,target,note,problems){
  const groups=groupsOf(items);
  const watched=new Set(monitors.filter(m=>m.type==='exact_product'&&m.conditions).map(m=>m.conditions.listing_id));
  const select=(name,label,opts,cur)=>`<label class="small">${label} <select data-${name}><option value="">All</option>${opts.map(([k,l])=>`<option value="${esc(k)}"${k===cur?' selected':''}>${esc(l)}</option>`).join('')}</select></label>`;
- const bar=`<div class="row">`+
-  `<label class="small">Sort by <select data-sort>${[['match','Same item'],['name','Name'],['store','Store']].map(([k,l])=>`<option value="${k}"${k===resultSort?' selected':''}>${l}</option>`).join('')}</select></label>`+
+ const bar=`<div class="toolbar">`+
+  `<label class="small">Sort by <select data-sort>${[['match','Same item'],['offers','Offers'],['name','Name'],['store','Store']].map(([k,l])=>`<option value="${k}"${k===resultSort?' selected':''}>${l}</option>`).join('')}</select></label>`+
   (brands.length>1?select('brand','Brand',brands,resultBrand):'')+(sizes.length>1?select('size','Size',sizes,resultSize):'')+
   `<span class="muted small">${items.length===all.length?all.length+' result(s)':items.length+' of '+all.length+' shown'}</span></div>`;
  const seen=new Set();
- const rows=sortedItems(items,groups).map(i=>{
+ const sorted=sortedItems(items,groups);
+ const offerCount=items.filter(i=>offerRank(i)<2).length;
+ const seenOffer=new Set();
+ const rows=sorted.map(i=>{
   let head='';
+  if(resultSort==='offers'){
+   // a header for each distinct offer ("2 för 35 kr"), then one for what has no offer
+   const o=mainOffer(i),k=o?(o.eligibility==='member'?'m:':'p:')+o.terms:'none';
+   if(!seenOffer.has(k)){seenOffer.add(k);
+    const n=sorted.filter(x=>{const q=mainOffer(x);return (q?(q.eligibility==='member'?'m:':'p:')+q.terms:'none')===k}).length;
+    head=`<tr class="grouphead"><td colspan="6">${o?`<b>${esc(o.terms)}</b> <span class="muted small">${o.eligibility==='member'?'members only; ':''}${n} result${n>1?'s':''}</span>`:`<b>No offer</b> <span class="muted small">${n} result${n>1?'s':''}${offerCount?'':'; none of these results has an offer'}</span>`}</td></tr>`}}
   if(resultSort==='match'&&i.like_key&&!seen.has(i.like_key)){seen.add(i.like_key);
    const g=groups[i.like_key];const n=spreadOf(groups,i);
    if(n>1){const low=Math.min(...g.map(priceOf)),high=Math.max(...g.map(priceOf));
     const basis=i.like_key.startsWith('barcode:')?'same barcode':'same brand, size and name (no barcode yet)';
     // only worth saying when one store really is cheaper than another
     const cheapest=low<high?`; cheapest ${esc(low.toFixed(2))} ${esc(g[0].currency)} at ${esc([...new Set(g.filter(x=>priceOf(x)===low).map(x=>sname(x.store_id)))].join(', '))}`:'';
-    head=`<tr class="grouphead"><td colspan="7"><b>Same item in ${n} stores</b> <span class="muted small">${basis}${cheapest}</span></td></tr>`}}
+    // one monitor per store: the cheapest listing of each store not already watched
+    const byStore=new Map();g.forEach(x=>{const cur=byStore.get(x.store_id);if(!cur||priceOf(x)<priceOf(cur))byStore.set(x.store_id,x)});
+    const watchedStores=new Set(g.filter(x=>watched.has(x.listing_id)).map(x=>x.store_id));
+    const todo=[...byStore.values()].filter(x=>!watchedStores.has(x.store_id));
+    const all=todo.length===0?`<span class="badge ok">Watching in all ${n} stores</span>`
+     :`<button type="button" data-watch-group="${esc(i.like_key)}">${watchedStores.size?`Watch in the other ${todo.length} store${todo.length>1?'s':''}`:`Watch in all ${n} stores`}</button>`;
+    head=`<tr class="grouphead"><td colspan="6"><b>Same item in ${n} stores</b> <span class="muted small">${basis}${cheapest}</span> ${all}</td></tr>`}}
   const w=watched.has(i.listing_id);
-  return head+`<tr><td>${pictureCell(i.image,i.product_id,56)}</td><td title="${esc(i.name)}">${productTitle(i)}${refLine(i)}${barcodeCell(i)}</td><td>${esc(i.brand||'')}</td><td>${esc([i.size,i.pack].filter(Boolean).join(' · '))}</td><td>${esc(sname(i.store_id))}</td><td>${esc(i.current_price)} ${esc(i.currency)}</td><td><button data-watch="${esc(i.listing_id)}" data-store-id="${esc(i.store_id)}" data-name="${esc(i.name)}"${watched.has(i.listing_id)?' disabled':''}>${watched.has(i.listing_id)?'Watching':'Watch'}</button></td></tr>`}).join('');
- out.innerHTML=(lastNotes[id]?`<p class="muted small">${esc(lastNotes[id])}</p>`:'')+trouble+bar+'<table><tr><th></th><th>Product</th><th>Brand</th><th>Size</th><th>Store</th><th>Price</th><th></th></tr>'+rows+'</table>';
+  return head+`<tr><td>${pictureCell(i.image,i.product_id,64)}</td>
+   <td title="${esc(i.name)}"><div class="ptitle">${productTitle(i)}${i.via?' <span class="badge" title="The store words it differently; found through another of its names.">found via another name</span>':''}</div>
+    <div class="meta">${storeLogo(i.store_id,16)} <span>${esc(sname(i.store_id))}</span></div>${refLine(i)}${alsoLine(i)}${barcodeLine(i)}${suggestBlock(i)}${editBox(i)}</td>
+   <td>${esc(i.brand||'')}</td><td>${esc([i.size,i.pack].filter(Boolean).join(' · '))}</td>
+   <td class="num"><div class="pr">${esc(priceText(i))}</div><div class="pills">${offersCell(i)}${stockCell(i)}</div></td>
+   <td class="act"><button class="watch" data-watch="${esc(i.listing_id)}" data-store-id="${esc(i.store_id)}" data-name="${esc(i.name)}"${watched.has(i.listing_id)?' disabled':''}>${watched.has(i.listing_id)?'Watching':'Watch'}</button><button type="button" class="linkbtn" data-open-history="${esc(i.product_id)}">Price history</button></td></tr>`}).join('');
+ out.innerHTML=(lastNotes[id]?`<p class="muted small">${esc(lastNotes[id])}</p>`:'')+trouble+bar+`<table><colgroup><col class="c-pic"><col><col class="c-brand"><col class="c-size"><col class="c-price"><col class="c-act"></colgroup><tr><th></th><th>Product</th><th>Brand</th><th>Size</th><th class="num">${items.every(i=>!i.currency||i.currency==='SEK')?'Price (SEK)':'Price'}</th><th></th></tr>`+rows+'</table>';
 }
 const reshow=()=>{if(lastResults['search-result']&&lastResults['search-result'].length)showResults({result:{items:lastResults['search-result']}},'search-result')};
 document.addEventListener('change',e=>{const el=e.target;
@@ -427,23 +707,70 @@ $('try-demo').onclick=async()=>{const out=$('search-result');
   for(const s of demo)if(!mine.has(s.id)){await call('PUT','/v1/me/stores/'+s.id);mine.add(s.id)}renderStores();
   await runSearch('demo',demo.map(s=>s.id))}catch(err){out.textContent=err.message}};
 document.addEventListener('click',e=>{const g=e.target.closest('[data-search-fill]');if(g)document.querySelector('#search-form [name=q]').value=g.dataset.searchFill});
+// Watch one item in every store that has it: one monitor per store, so each keeps its own history.
+async function watchGroup(likeKey){
+ const items=(lastResults['search-result']||[]).filter(i=>i.like_key===likeKey);
+ const watched=new Set(monitors.filter(m=>m.type==='exact_product'&&m.conditions).map(m=>m.conditions.listing_id));
+ const byStore=new Map();items.forEach(x=>{const cur=byStore.get(x.store_id);if(!cur||priceOf(x)<priceOf(cur))byStore.set(x.store_id,x)});
+ const have=new Set(items.filter(x=>watched.has(x.listing_id)).map(x=>x.store_id));
+ const todo=[...byStore.values()].filter(x=>!have.has(x.store_id));
+ let added=0;
+ try{for(const x of todo){
+  await call('POST','/v1/monitors',{name:x.name,type:'exact_product',store_id:x.store_id,conditions:{listing_id:x.listing_id},interval_minutes:60});added++}
+  say(`Watching in ${added} more store${added===1?'':'s'}. Each store has its own entry in the watchlist.`)}
+ catch(err){say(added?`Watching in ${added} of ${todo.length} stores, then stopped: ${err.message}`:err.message)}
+ await loadAll();reshow();
+}
+// Say that a result and another product are one item. No monitor, nothing is watched.
+async function confirmSame(item,otherProductId){
+ const r=await call('POST','/v1/products/'+item.product_id+'/same-as',{product_id:otherProductId});
+ const keep=r.product;
+ for(const items of Object.values(lastResults))for(const i of items)if(i.product_id===item.product_id||i.product_id===otherProductId){
+  i.product_id=keep.id;i.barcode=keep.barcode?{gtin14:keep.barcode.gtin14,source:keep.barcode.source}:null;
+  i.like_key=keep.barcode?'barcode:'+keep.barcode.gtin14:i.like_key;i.likely_same=(i.likely_same||[]).filter(s=>s.product_id!==keep.id)}
+ say('Treated as the same product'+(keep.barcode?', with its barcode.':'.'));reshow();await loadAll();
+}
+async function refreshNames(productId){
+ const r=await call('GET','/v1/products/'+productId+'/names');
+ for(const items of Object.values(lastResults))for(const i of items)if(i.product_id===productId){
+  const own=(i.name||'').toLowerCase();i.also_called=r.items.filter(n=>n.name.toLowerCase()!==own&&n.name!==i.display_name).slice(0,6)}
+ reshow();
+}
+// Save a barcode on a result's product. No monitor is needed and the product is not watched.
+async function saveBarcode(item,gtin){
+ const path='/v1/products/'+item.product_id+'/barcode';
+ let r,merged=false;
+ try{r=await call('POST',path,{gtin})}
+ catch(err){
+  const ex=err.status===409&&err.data&&err.data.details&&err.data.details[0]&&err.data.details[0].existing_product;
+  if(!ex)throw err;
+  if(!confirm(`That barcode already belongs to "${ex.name}" (${(ex.retailers||[]).join(', ')||'no store'}). Are they the same item?`))return false;
+  r=await call('POST',path,{gtin,merge:true});merged=true}
+ item.product_id=r.product.id;
+ item.barcode=r.product.barcode||{gtin14:gtin.padStart(14,'0'),source:'user'};
+ item.like_key='barcode:'+item.barcode.gtin14;item.likely_same=[];
+ say(merged||r.outcome==='merged'?'Barcode saved. This now counts as the same product as the other store\'s.':'Barcode saved.');
+ reshow();await loadAll();return true;
+}
 const watchClick=async e=>{
- const add=e.target.closest('[data-add-code]');
- if(add){const out=add.closest('[role=status]');
-  try{const input=out.querySelector(`[data-newcode="${CSS.escape(add.dataset.addCode)}"]`);
+ const find=listingId=>(lastResults['search-result']||[]).find(x=>x.listing_id===listingId);
+ const group=e.target.closest('[data-watch-group]'),same=e.target.closest('[data-same]'),add=e.target.closest('[data-add-code]'),addName=e.target.closest('[data-add-name]'),rmName=e.target.closest('[data-name-remove]');
+ try{
+  if(group){await watchGroup(group.dataset.watchGroup);return}
+  if(same){const item=find(same.dataset.same);if(item)await confirmSame(item,same.dataset.other);return}
+  if(addName){const item=find(addName.dataset.addName);
+   const input=addName.closest('[role=status]').querySelector(`[data-newname="${CSS.escape(addName.dataset.addName)}"]`);
+   if(!input.value.trim()){say('Type the other name first');return}
+   await call('POST','/v1/products/'+item.product_id+'/names',{name:input.value.trim()});await refreshNames(item.product_id);say('Name added for everyone.');return}
+  if(rmName){await call('DELETE','/v1/products/'+rmName.dataset.product+'/names/'+rmName.dataset.nameRemove);await refreshNames(rmName.dataset.product);say('Name removed.');return}
+  if(add){const item=find(add.dataset.addCode);
+   const input=add.closest('[role=status]').querySelector(`[data-newcode="${CSS.escape(add.dataset.addCode)}"]`);
    if(!input.value.trim()){say('Enter the barcode first');return}
-   // A barcode is attached through a monitor you own, so watch the product first if you are not.
-   let mon=monitors.find(m=>m.type==='exact_product'&&m.conditions&&m.conditions.listing_id===add.dataset.addCode);
-   if(!mon)mon=await call('POST','/v1/monitors',{name:add.dataset.name,type:'exact_product',store_id:add.dataset.storeId,conditions:{listing_id:add.dataset.addCode},interval_minutes:60});
-   const done=await linkBarcode(mon.id,input.value);
-   if(done){const row=add.closest('tr');const w=row&&row.querySelector('[data-watch]');if(w){w.textContent='Watching';w.disabled=true}
-    const item=(lastResults[out.id]||[]).find(x=>x.listing_id===add.dataset.addCode);if(item){item.barcode={gtin14:input.value.trim().padStart(14,'0'),source:'user'};item.like_key='barcode:'+item.barcode.gtin14}
-    add.closest('div').innerHTML='Barcode '+esc(shortCode(input.value.trim()))+' <span class="muted">(added by a user)</span>'}
-  }catch(err){say(err.message)}
-  return}
- const b=e.target.closest('[data-watch]');if(!b)return;
- try{await call('POST','/v1/monitors',{name:b.dataset.name,type:'exact_product',store_id:b.dataset.storeId,conditions:{listing_id:b.dataset.watch},interval_minutes:60});
-  b.textContent='Watching';b.disabled=true;await loadAll();say('Added to your watchlist.')}catch(err){say(err.message)}};
+   if(item)await saveBarcode(item,input.value.replace(/[\s-]/g,''));return}
+  const b=e.target.closest('[data-watch]');if(!b)return;
+  await call('POST','/v1/monitors',{name:b.dataset.name,type:'exact_product',store_id:b.dataset.storeId,conditions:{listing_id:b.dataset.watch},interval_minutes:60});
+  b.textContent='Watching';b.disabled=true;await loadAll();say('Added to your watchlist.');
+ }catch(err){say(err.message)}};
 $('search-result').onclick=watchClick;
 
 // ---- comparing in a shop -------------------------------------------------------------------
@@ -453,8 +780,8 @@ function renderCompare(data,live,note){
  const head=data.product?`<p><b>${esc((rows.find(r=>r.status==='found')||{}).product_name||data.product.name)}</b> <span class="muted small">barcode ${esc(data.gtin14.replace(/^0+/,''))}</span></p>`:'';
  const saving=sum.saving_vs_here?`<p><b>${esc(sum.cheapest.store_name)}</b> is ${Math.abs(Number(sum.saving_vs_here.amount)).toFixed(2)} kr (${Math.abs(Number(sum.saving_vs_here.percent))}%) cheaper than where you are.</p>`:(sum.cheapest&&data.here_store_id?'<p>Where you are is already the cheapest we know.</p>':'');
  const body=rows.map(r=>{const here=r.store_id===data.here_store_id?' <span class="badge">here</span>':'';
-  if(r.status!=='found')return `<tr class="muted"><td>${esc(r.store_name)}${here}</td><td colspan="3">${esc(stText[r.status]||r.status)}</td></tr>`;
-  return `<tr${r.is_cheapest?' style="font-weight:600"':''}><td>${esc(r.store_name)}${here}</td><td>${esc(r.current_price)} ${esc(r.currency)}</td><td>${r.is_cheapest?'cheapest':'+'+Number(r.vs_cheapest.amount).toFixed(2)+' kr'}</td><td class="muted small">${r.source==='live'?'live':'known '+Math.round(r.age_seconds/60)+' min ago'}</td></tr>`}).join('');
+  if(r.status!=='found')return `<tr class="muted"><td>${logoOf(r.retailer_id,18)} ${esc(r.store_name)}${here}</td><td colspan="3">${esc(stText[r.status]||r.status)}</td></tr>`;
+  return `<tr${r.is_cheapest?' style="font-weight:600"':''}><td>${logoOf(r.retailer_id,18)} ${esc(r.store_name)}${here}</td><td>${esc(r.current_price)} ${esc(r.currency)}</td><td>${r.is_cheapest?'cheapest':'+'+Number(r.vs_cheapest.amount).toFixed(2)+' kr'}</td><td class="muted small">${r.source==='live'?'live':'known '+Math.round(r.age_seconds/60)+' min ago'}</td></tr>`}).join('');
  $('compare-result').innerHTML=head+saving+`<table><tr><th>Store</th><th>Price</th><th>vs cheapest</th><th>Source</th></tr>${body}</table>`+(note?`<p class="muted small">${esc(note)}</p>`:'');
 }
 $('compare-form').onsubmit=async e=>{e.preventDefault();

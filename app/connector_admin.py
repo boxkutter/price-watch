@@ -8,7 +8,16 @@ from sqlalchemy.orm import Session
 
 from app import connector_state
 from app.connectors import registry
-from app.models import ConnectorPackage, ConnectorSetting, Job, Monitor, Store, utcnow
+from app.models import (
+    ConnectorPackage,
+    ConnectorSetting,
+    Job,
+    Monitor,
+    RetailerLogo,
+    Store,
+    aware,
+    utcnow,
+)
 from app.security import decrypt_secret, encrypt_secret
 
 
@@ -110,6 +119,8 @@ def last_discoveries(db: Session) -> dict[str, dict]:
 
 def admin_view(db: Session) -> dict:
     discoveries = last_discoveries(db)
+    logos = {row.retailer_id: row.updated_at for row in db.execute(
+        select(RetailerLogo.retailer_id, RetailerLogo.updated_at))}
     stores = dict(db.execute(select(Store.retailer_id, func.count()).group_by(Store.retailer_id)).all())
     monitors = dict(db.execute(
         select(Store.retailer_id, func.count()).select_from(Monitor)
@@ -133,6 +144,9 @@ def admin_view(db: Session) -> dict:
             "paused": state.state == "paused", "pause_reason": state.reason,
             "settings": settings_status(db, info["id"]),
             "last_discovery": discoveries.get(info["id"]),
+            # `v` changes when the logo does, so a replaced logo is not served from a browser cache
+            "logo_url": (f"/logos/{info['id']}?v={int(aware(logos[info['id']]).timestamp())}"
+                         if info["id"] in logos else None),
             "stores": stores.get(info["id"], 0), "active_monitors": monitors.get(info["id"], 0),
             "installed_at": package.installed_at if package else None,
         })

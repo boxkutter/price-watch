@@ -77,6 +77,7 @@ def process_add_product(db: Session, job: Job) -> dict:
     add_price(db, listing, item, new_id(), utcnow())
     unit = unit_price(item.current_price, item.package_value, item.package_unit)
     product = {"name": listing.name, "sku": sku, "listing_id": listing.id,
+               "product_id": listing.product_id,
                "current_price": str(item.current_price), "currency": item.currency,
                "unit_price": {"amount": str(unit[0]), "unit": unit[1]} if unit else None,
                "availability": item.availability, "source_url": item.source_url}

@@ -359,3 +359,40 @@ class ProductImage(Base):
     credit: Mapped[str | None] = mapped_column(String(300))
     source_url: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ProductAlias(Base):
+    """A name a person gave a product besides the ones its store listings carry ("Oat drink" for
+    Havredryck). Shared by everyone, like a barcode link, and recorded with who added it."""
+    __tablename__ = "product_aliases"
+    __table_args__ = (UniqueConstraint("product_id", "folded"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    product_id: Mapped[str] = mapped_column(ForeignKey("products.id"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    folded: Mapped[str] = mapped_column(String(200))
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class GlossaryEntry(Base):
+    """A word people say one way and shops another (English `term`, Swedish `canonical`), added on
+    top of the built-in list. Shared by everyone."""
+    __tablename__ = "glossary_entries"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    term: Mapped[str] = mapped_column(String(80), unique=True)
+    canonical: Mapped[str] = mapped_column(String(80))
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class RetailerLogo(Base):
+    """The logo an administrator uploaded for a retailer (reduced, transparency kept). Without one,
+    clients draw a coloured badge from the retailer's name."""
+    __tablename__ = "retailer_logos"
+    retailer_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    content_type: Mapped[str] = mapped_column(String(30))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

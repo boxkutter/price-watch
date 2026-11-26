@@ -9,7 +9,7 @@ from pathlib import Path
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from argon2.exceptions import VerifyMismatchError
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import connector_admin, connector_state, declared_stores
+from app import connector_admin, connector_state, declared_stores, glossary, logos, names
 from app.audit import record as audit
 from app.barcodes import (
     BarcodeConflict,
@@ -50,6 +50,7 @@ from app.models import (
     Credential,
     Delivery,
     Event,
+    GlossaryEntry,
     IdempotencyRecord,
     Invitation,
     Job,
@@ -60,7 +61,9 @@ from app.models import (
     OfferObservation,
     PriceObservation,
     Product,
+    ProductAlias,
     ProductImage,
+    RetailerLogo,
     Store,
     User,
     UserStore,
@@ -68,7 +71,7 @@ from app.models import (
     aware,
     utcnow,
 )
-from app.naming import describe
+from app.naming import describe, normalize_brand
 from app.openapi import install as install_openapi
 from app.products import delete_monitor_permanently, existing_monitor, parse_threshold
 from app.ratelimit import SlidingWindow
@@ -601,7 +604,7 @@ def revoke_client(client_id: str, db: Session = Depends(get_db),
 
 PUBLIC_CONNECTOR_FIELDS = ("id", "name", "country", "description", "enabled", "status",
                             "capabilities", "connector_version", "access_review",
-                            "minimum_monitor_interval_minutes", "store_discovery_inputs")
+                            "minimum_monitor_interval_minutes", "store_discovery_inputs", "logo_url")
 
 
 def public_connectors(db: Session) -> list[dict]:
@@ -957,7 +960,7 @@ def get_product(product_id: str, db: Session = Depends(get_db),
     if not product:
         raise HTTPException(404, "Product not found")
     listings = db.scalars(select(Listing).where(Listing.product_id == product.id)).all()
-    return {"id": product.id, "name": product.name, "brand": product.brand,
+    return {"id": product.id, "name": product.name, "brand": normalize_brand(product.brand),
             "gtin14": product.gtin14, "verified": product.verified,
             "gtin_source": product.gtin_source, "gtin_set_at": product.gtin_set_at,
             "package_quantity": {"value": str(product.package_value), "unit": product.package_unit}
@@ -1016,6 +1019,220 @@ def remove_product_image(product_id: str, db: Session = Depends(get_db),
     db.commit()
 
 
+class SameAsRequest(BaseModel):
+    product_id: str
+
+
+class NameRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=names.MAX_ALIAS_LENGTH)
+
+
+class GlossaryRequest(BaseModel):
+    term: str = Field(min_length=2, max_length=80, description="The word as people (or other shops) say it")
+    canonical: str = Field(min_length=2, max_length=80, description="The word the shops use")
+
+    @field_validator("term", "canonical")
+    @classmethod
+    def plain_words(cls, value: str) -> str:
+        value = " ".join(value.split())
+        if not re.fullmatch(r"[\w][\w \-]*", value):
+            raise ValueError("Use letters, digits, spaces and hyphens only")
+        return value.lower()
+
+
+@app.post("/v1/products/{product_id}/same-as")
+def products_are_the_same(product_id: str, body: SameAsRequest, db: Session = Depends(get_db),
+                          p: Principal = Depends(principal)):
+    """Say that two products are the same item (for example after a "probably the same" suggestion):
+    the listings of one move to the other, price history is kept. The one with a barcode is kept;
+    two products with different barcodes are never merged."""
+    p.require("monitors:write")
+    one, other = db.get(Product, product_id), db.get(Product, body.product_id)
+    if not one or not other:
+        raise HTTPException(404, "Product not found")
+    if one.id == other.id:
+        return {"outcome": "unchanged", "merged_listings": 0, "product": product_summary(db, one)}
+    if one.gtin14 and other.gtin14:
+        raise HTTPException(409, "Both products already have a barcode, and they differ: "
+                                 "they are not the same item.")
+    counts = {x.id: db.scalar(select(func.count()).select_from(Listing)
+                              .where(Listing.product_id == x.id)) for x in (one, other)}
+    # keep the one that has a barcode, else the one with more listings
+    target, source = ((one, other) if one.gtin14 else (other, one) if other.gtin14
+                      else (one, other) if counts[one.id] > counts[other.id] else (other, one))
+    try:
+        moved = merge_products(db, source, target)
+    except BarcodeConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+    audit(db, p.user.id, "product.merged", "product", target.id,
+          {"from": source.id, "listings_moved": moved})
+    db.commit()
+    return {"outcome": "merged", "merged_listings": moved, "product": product_summary(db, target)}
+
+
+def _names_view(db: Session, product: Product) -> dict:
+    return {"items": [{"name": n.name, "source": n.source, "id": n.id, "retailer_id": n.retailer_id}
+                      for n in names.product_names(db, product)]}
+
+
+@app.get("/v1/products/{product_id}/names")
+def product_names_list(product_id: str, db: Session = Depends(get_db),
+                       p: Principal = Depends(principal)):
+    """Every name a product goes by: its store listings' names, the reference database's, and the
+    alternative names people added (`source` is `store`, `reference` or `user`)."""
+    p.require("catalogue:read")
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(404, "Product not found")
+    return _names_view(db, product)
+
+
+@app.post("/v1/products/{product_id}/names", status_code=201)
+def add_product_name(product_id: str, body: NameRequest, response: Response,
+                     db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    """Add an alternative name (for example the English one). Shared by everyone, and recorded with
+    who added it. A search for it then finds this product in shops that call it something else."""
+    p.require("monitors:write")
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(404, "Product not found")
+    row = names.add_alias(db, product, body.name, p.user.id)
+    if row is None:
+        response.status_code = 200                 # it already goes by that name
+    else:
+        audit(db, p.user.id, "product.name_added", "product", product.id, {"name": row.name})
+        db.commit()
+    return _names_view(db, product)
+
+
+@app.delete("/v1/products/{product_id}/names/{name_id}", status_code=204)
+def remove_product_name(product_id: str, name_id: str, db: Session = Depends(get_db),
+                        p: Principal = Depends(principal)):
+    """Remove an alternative name. Only the person who added it, or an administrator, can."""
+    p.require("monitors:write")
+    row = db.get(ProductAlias, name_id)
+    if not row or row.product_id != product_id:
+        raise HTTPException(404, "Name not found")
+    if row.created_by != p.user.id and not p.user.is_admin:
+        raise HTTPException(403, "Only the person who added a name, or an administrator, can remove it")
+    audit(db, p.user.id, "product.name_removed", "product", product_id, {"name": row.name})
+    db.delete(row)
+    db.commit()
+
+
+def _glossary_view(db: Session) -> dict:
+    custom = [{"id": r.id, "term": r.term, "canonical": r.canonical, "source": "custom",
+               "created_by": r.created_by} for r in db.scalars(
+        select(GlossaryEntry).order_by(GlossaryEntry.term))]
+    return {"items": custom + [{"id": None, **entry} for entry in glossary.entries()]}
+
+
+@app.get("/v1/glossary")
+def glossary_list(db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    """The English and Swedish words treated as the same in searches and comparisons: the ones people
+    added (`custom`, with an id) and the built-in list."""
+    p.require("catalogue:read")
+    return _glossary_view(db)
+
+
+@app.post("/v1/glossary", status_code=201)
+def glossary_add(body: GlossaryRequest, db: Session = Depends(get_db),
+                 p: Principal = Depends(principal)):
+    """Add a word pair, for example `{"term": "oat drink", "canonical": "havredryck"}`. Shared by
+    everyone: searches for the term are also asked in the shops' word, and names that use either are
+    treated as the same."""
+    p.require("monitors:write")
+    if glossary.fold(body.term) == glossary.fold(body.canonical):
+        raise HTTPException(422, "The two words are the same")
+    known = {glossary.fold(k) for k in [*glossary.BUILTIN, *glossary.CUSTOM]}
+    if glossary.fold(body.term) in known:
+        raise HTTPException(409, "That word already has a translation")
+    row = GlossaryEntry(term=body.term, canonical=body.canonical, created_by=p.user.id)
+    db.add(row)
+    audit(db, p.user.id, "glossary.added", "glossary", row.id, {"term": row.term})
+    db.commit()
+    glossary.refresh(db)
+    return _glossary_view(db)
+
+
+@app.delete("/v1/glossary/{entry_id}", status_code=204)
+def glossary_remove(entry_id: str, db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    """Remove a word pair that was added. Only the person who added it, or an administrator."""
+    p.require("monitors:write")
+    row = db.get(GlossaryEntry, entry_id)
+    if not row:
+        raise HTTPException(404, "Entry not found")
+    if row.created_by != p.user.id and not p.user.is_admin:
+        raise HTTPException(403, "Only the person who added it, or an administrator, can remove it")
+    audit(db, p.user.id, "glossary.removed", "glossary", entry_id, {"term": row.term})
+    db.delete(row)
+    db.commit()
+    glossary.refresh(db)
+
+
+@app.put("/v1/admin/connectors/{retailer_id}/logo")
+async def upload_retailer_logo(retailer_id: str, data: bytes = Depends(image_body),
+                               db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Set the logo shown for a retailer (the request body is the image: PNG, JPEG, WebP, ...). It is
+    reduced to at most 160 px and keeps its transparency. Without one, clients draw a coloured badge
+    from the retailer's name."""
+    if not registry.retailer(retailer_id):
+        raise HTTPException(404, "Connector not found")
+    try:
+        reduced, width, height = await run_in_threadpool(reduce_image, data, 160, True)
+    except BadImage as exc:
+        raise HTTPException(422, str(exc)) from exc
+    row = logos.save_logo(db, retailer_id, reduced, width, height, p.user.id)
+    audit(db, p.user.id, "connector.logo_set", "connector", retailer_id)
+    db.commit()
+    return {"logo_url": f"/logos/{retailer_id}?v={int(row.updated_at.timestamp())}"}
+
+
+@app.post("/v1/admin/connectors/{retailer_id}/logo/fetch", status_code=202)
+def fetch_retailer_logo(retailer_id: str, db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Fetch a retailer's logo from its own website (its touch icon or favicon), as a worker job.
+    It contacts only the retailer's website, a handful of requests, and keeps the largest usable
+    icon; the job result says where it came from. The connector must be enabled and not paused.
+    Replace or remove a poor result with the logo endpoints."""
+    info = registry.retailer(retailer_id)
+    if not info or not connector_state.is_enabled(db, retailer_id):
+        raise HTTPException(404, "Connector not found or not enabled")
+    if not logos.site_origin(info):
+        raise HTTPException(422, "This connector names no website to fetch a logo from; upload one")
+    payload = {"retailer_id": retailer_id}
+    pending = next((j for j in db.scalars(select(Job).where(
+        Job.kind == "logo_fetch", Job.state.in_(["queued", "running"]))) if j.payload == payload), None)
+    if pending:
+        return {"job_id": pending.id, "status": pending.state}
+    job = Job(owner_id=p.user.id, kind="logo_fetch", payload=payload)
+    db.add(job)
+    db.flush()
+    audit(db, p.user.id, "connector.logo_fetch_queued", "connector", retailer_id)
+    db.commit()
+    return {"job_id": job.id, "status": job.state}
+
+
+@app.delete("/v1/admin/connectors/{retailer_id}/logo", status_code=204)
+def remove_retailer_logo(retailer_id: str, db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Remove a retailer's uploaded logo (the coloured badge is used again)."""
+    row = db.get(RetailerLogo, retailer_id)
+    if row:
+        audit(db, p.user.id, "connector.logo_removed", "connector", retailer_id)
+        db.delete(row)
+        db.commit()
+
+
+@app.get("/logos/{retailer_id}")
+def retailer_logo(retailer_id: str, db: Session = Depends(get_db)):
+    """A retailer's uploaded logo (WebP). No login, so a page can show it in an <img> tag; the logo
+    is the same for everyone. The `v` in the link changes whenever the logo does."""
+    row = db.get(RetailerLogo, retailer_id)
+    if not row:
+        raise HTTPException(404, "No logo")
+    return Response(row.data, media_type=row.content_type, headers={
+        "Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"})
+
+
 @app.get("/images/{image_id}")
 def product_image(image_id: str, db: Session = Depends(get_db)):
     """A stored product picture (WebP). No login, because an <img> tag cannot send one: the id
@@ -1046,8 +1263,9 @@ def product_prices(product_id: str, db: Session = Depends(get_db),
 
 
 @app.get("/v1/products/{product_id}/history")
-def product_history(product_id: str, db: Session = Depends(get_db),
-                          p: Principal = Depends(principal)):
+def product_history(product_id: str, limit: int = Query(200, ge=1, le=2000),
+                    db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    """Public prices seen for this product in every store, newest first (`limit` of them, up to 2000)."""
     p.require("catalogue:read")
     if not db.get(Product, product_id):
         raise HTTPException(404, "Product not found")
@@ -1055,7 +1273,7 @@ def product_history(product_id: str, db: Session = Depends(get_db),
         PriceObservation.listing_id == Listing.id).where(
         Listing.product_id == product_id, PriceObservation.account_id.is_(None),
         PriceObservation.eligibility == "public")
-        .order_by(PriceObservation.observed_at.desc()).limit(200)).all()
+        .order_by(PriceObservation.observed_at.desc()).limit(limit)).all()
     return {"items": [price_dict(observation, listing) for observation, listing in rows],
             "coverage": "observed_only"}
 
@@ -1390,18 +1608,8 @@ def _monitor_product(db: Session, p: Principal, monitor_id: str) -> Product:
     return product
 
 
-@app.post("/v1/monitors/{monitor_id}/barcode")
-def link_barcode(monitor_id: str, body: BarcodeLinkRequest, request: Request,
-                 db: Session = Depends(get_db), p: Principal = Depends(principal)):
-    """Link the barcode you scanned to this monitor's product. The link is shared: it lets the
-    product be found by barcode and compared with the same item in other stores.
-
-    If the barcode already belongs to another product you get 409 naming it; resend with
-    `merge: true` to say the two are the same item (your product's listings then move to it).
-    A barcode published by the store itself cannot be changed.
-    """
-    p.require("monitors:write")
-    product = _monitor_product(db, p, monitor_id)
+def _link_barcode(db: Session, p: Principal, request: Request, product: Product,
+                  body: BarcodeLinkRequest, monitor_id: str | None = None):
     try:
         gtin14 = clean_barcode(body.gtin)
     except BarcodeError as exc:
@@ -1429,12 +1637,58 @@ def link_barcode(monitor_id: str, body: BarcodeLinkRequest, request: Request,
     return {"outcome": outcome, "merged_listings": merged, "product": product_summary(db, product)}
 
 
+@app.post("/v1/monitors/{monitor_id}/barcode")
+def link_barcode(monitor_id: str, body: BarcodeLinkRequest, request: Request,
+                 db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    """Link the barcode you scanned to this monitor's product. The link is shared: it lets the
+    product be found by barcode and compared with the same item in other stores.
+
+    If the barcode already belongs to another product you get 409 naming it; resend with
+    `merge: true` to say the two are the same item (your product's listings then move to it).
+    A barcode published by the store itself cannot be changed.
+    """
+    p.require("monitors:write")
+    return _link_barcode(db, p, request, _monitor_product(db, p, monitor_id), body, monitor_id)
+
+
+@app.post("/v1/products/{product_id}/barcode")
+def link_product_barcode(product_id: str, body: BarcodeLinkRequest, request: Request,
+                         db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    """The same as linking a barcode through a monitor, for a product you are not watching (for
+    example one found by a search). Same rules: a barcode that already belongs to another product
+    answers 409 unless you resend with `merge: true`, and a store-published barcode cannot be
+    changed. The link is shared by everyone using the catalogue and is recorded with your name."""
+    p.require("monitors:write")
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(404, "Product not found")
+    return _link_barcode(db, p, request, product, body)
+
+
 @app.delete("/v1/monitors/{monitor_id}/barcode", status_code=204)
 def unlink_barcode(monitor_id: str, db: Session = Depends(get_db), p: Principal = Depends(principal)):
     """Remove a barcode that was linked by a person (for example after a wrong scan). One the
     store publishes cannot be removed."""
     p.require("monitors:write")
     product = _monitor_product(db, p, monitor_id)
+    gtin14 = product.gtin14
+    try:
+        clear_barcode(db, product)
+    except BarcodeConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+    audit(db, p.user.id, "product.barcode_cleared", "product", product.id, {"gtin14": gtin14})
+    db.commit()
+
+
+@app.delete("/v1/products/{product_id}/barcode", status_code=204)
+def unlink_product_barcode(product_id: str, db: Session = Depends(get_db),
+                           p: Principal = Depends(principal)):
+    """Remove a barcode that a person linked, for a product you are not watching. A barcode the
+    store publishes cannot be removed."""
+    p.require("monitors:write")
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(404, "Product not found")
     gtin14 = product.gtin14
     try:
         clear_barcode(db, product)

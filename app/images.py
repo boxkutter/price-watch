@@ -14,21 +14,24 @@ class BadImage(ValueError):
     pass
 
 
-def reduce_image(raw: bytes) -> tuple[bytes, int, int]:
-    """WebP bytes no larger than MAX_SIDE on a side, with the orientation applied and all metadata
-    (camera, location) dropped. Raises BadImage for anything that is not a readable picture."""
+def reduce_image(raw: bytes, max_side: int = MAX_SIDE, keep_alpha: bool = False) -> tuple[bytes, int, int]:
+    """WebP bytes no larger than `max_side` on a side, with the orientation applied and all metadata
+    (camera, location) dropped. A photo is flattened onto white; a logo (`keep_alpha`) keeps its
+    transparency. Raises BadImage for anything that is not a readable picture."""
     try:
         with Image.open(io.BytesIO(raw)) as source:
             source.load()
             picture = ImageOps.exif_transpose(source)
-            if picture.mode in ("RGBA", "LA", "P"):
+            if keep_alpha:
+                picture = picture.convert("RGBA")
+            elif picture.mode in ("RGBA", "LA", "P"):
                 picture = picture.convert("RGBA")
                 flat = Image.new("RGB", picture.size, "white")   # keep a white shelf, not black
                 flat.paste(picture, mask=picture.getchannel("A"))
                 picture = flat
             else:
                 picture = picture.convert("RGB")
-            picture.thumbnail((MAX_SIDE, MAX_SIDE), Image.Resampling.LANCZOS)
+            picture.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
             out = io.BytesIO()
             picture.save(out, "WEBP", quality=QUALITY, method=6)
             return out.getvalue(), picture.width, picture.height

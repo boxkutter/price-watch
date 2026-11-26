@@ -1,0 +1,46 @@
+id: se.dollarstore
+name: Dollarstore
+country: SE
+description: Targeted product search, offers ("2 för 35") and per-store stock from dollarstore.se.
+author: price-watch
+protocol_version: 1
+connector_version: 0.1.0
+enabled: true
+# Added at the owner's request (2026-11-26): private, targeted use of what a normal visitor can see.
+access_review: approved
+access_note: >-
+  Reads the pages dollarstore.se serves to any visitor (the search page and product pages), the
+  same requests a browser makes, with no key or login. Targeted lookups only; robots.txt
+  disallows nothing and states no crawl delay, so requests are spaced two seconds apart and kept
+  few. The site is a Next.js app that embeds its data in the page; there is no separate JSON API.
+  The chosen store travels in the `selectedStore` cookie, which this connector sends per request:
+  it changes the stock figure of a product (an unknown store silently falls back to a national
+  default of 8000, which is treated as unknown), not the prices seen so far. Offers are the
+  `mixMatch` text ("2 för 35"). Online listings are only part of each store's range. Search
+  returns 25 results per page and the page parameter was not found, so a search is capped at the
+  first 25 and says so. Barcodes are not published (the product image file name looks like the EAN
+  but is not relied on). Unofficial: a 401/403 pauses the connector.
+implementation: connector:DollarstoreConnector
+capabilities:
+  store_discovery: supported
+  product_search: supported
+  barcode_search: unsupported
+  online_prices: supported
+  physical_store_prices: unsupported
+  store_offers: unsupported
+allowed_hosts: [dollarstore.se]
+store_discovery_inputs:
+  - name: place
+    label: Town or postcode (blank for every store)
+    pattern: '^[A-Za-zÅÄÖåäöÉé0-9 .-]{1,40}$'
+    required: false
+# The article number is the part before "--" in the last path segment (the page itself is never
+# fetched). The address always has a category path; the number is lower case in it.
+product_urls:
+  - pattern: '^https://(www\.)?dollarstore\.se/(?:[a-z0-9-]+/)+(?P<sku>[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)--[a-z0-9-]+$'
+    example: 'https://dollarstore.se/mat-dryck/lask-dryck/8068-12530--oatly-ikaffe'
+minimum_request_interval_seconds: 2
+minimum_monitor_interval_minutes: 60
+max_requests_per_scan: 8
+max_requests_per_day: 400
+cache_seconds: 600

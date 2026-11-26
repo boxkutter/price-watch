@@ -244,7 +244,7 @@ curl -X POST $BASE/v1/search/jobs $AUTH -H 'Content-Type: application/json' \
 ```
 
 The job result lists `items` (`product_id`, `listing_id`, `store_id`, `name`, `current_price`,
-`currency`, plus `display_name`, `brand`, `size`, `pack`, `barcode` and `like_key`) and `coverage` per store (`complete`,
+`currency`, plus `display_name`, `brand`, `size`, `pack`, `barcode`, `like_key`, `offers`, `availability` and `stock_quantity`) and `coverage` per store (`complete`,
 `not_found`, `paused`, …). Search by barcode with `"gtin"` instead of `"query"`.
 
 Optional narrowing for a name search, apart from the words typed: `brand` (also added to what the
@@ -254,6 +254,12 @@ many; `1` means a single item; either end may be left out), and a weight or volu
 (`g`, `kg`, `ml`, `cl`, `dl`, `l`; default `g`). A result
 known to differ is dropped; a result of unknown size is kept by a size range. Ignored for a barcode
 search.
+
+`offers` lists what the store offers on this product right now (`terms`, such as "2 för 35 kr", the bundle
+`price` when it states one, `eligibility` `public` or `member`, `valid_to` or null); they are shown
+for what was just looked up and are recorded when the product is watched. `availability` is
+`in_stock`, `out_of_stock` or null (unknown), and `stock_quantity` is how many the store says it has
+at that store, when it says (null otherwise; a figure is per store, so each store's result has its own).
 
 Words in `query` are matched in any order, ignoring case and accents, and each must appear in the
 product's name or brand. A package size typed in the query (`"oatly havredryck 1l"`) is not sent to
@@ -296,6 +302,47 @@ it never changes a barcode. Search results and the monitor list carry:
 `PUT /v1/products/{product_id}/image` takes your own picture as the request body (any common image
 format, up to 8 MB). It is reduced and compressed, location and camera data are dropped, and it
 replaces your earlier one; only you see it.
+
+### Retailer logos
+
+`GET /v1/connectors` returns `logo_url` for each retailer (`null` until an administrator uploads
+one). It is a plain link (`/logos/<id>?v=…`, no login, so an `<img>` tag can use it; `v` changes when
+the logo does). A client with no logo draws a badge from the retailer's name, such as its initials on
+a colour derived from the name. An administrator sets or removes a logo with
+`PUT` / `DELETE /v1/admin/connectors/{id}/logo`: the body is the image (PNG, JPEG, WebP, ...), reduced
+to at most 160 px with transparency kept.
+
+`POST /v1/admin/connectors/{id}/logo/fetch` queues a worker job that looks for the retailer's touch
+icon or favicon on its own website (taken from the manifest's product page example, else its allowed
+host) and keeps the largest usable one. It makes at most six requests, two seconds apart, to that
+website and its image hosts on the same domain, and nowhere else; the connector must be enabled and
+not paused. The job result gives `source_url`, `width`, `height` and `small` (under 48 px), or
+`not_found` with advice to upload one. A poor result can be replaced or removed with the endpoints above.
+
+### One item, several names
+
+Shops word the same item differently, sometimes in English and sometimes in Swedish. Three shared
+things deal with that. Everyone using the service sees and benefits from them, and each is recorded
+with who added it.
+
+- **Alternative names.** `GET /v1/products/{id}/names` lists every name a product goes by: its store
+  listings' names (`source: "store"`), the reference database's (`"reference"`) and the ones people
+  added (`"user"`, with an `id`). `POST /v1/products/{id}/names` adds one (`{"name": "Oat drink"}`);
+  only its author or an administrator can `DELETE /v1/products/{id}/names/{name_id}`. A name search
+  that matches an alternative name finds the product in a shop that words it differently: the shop's
+  own listing is looked up by its id and comes back with `"via": "alternative name"`. Results carry
+  `also_called` (the other names).
+- **The word list.** `GET /v1/glossary` lists English words and the Swedish word shops use (a built-in
+  list, plus `custom` entries with an `id`). `POST /v1/glossary` adds one
+  (`{"term": "oat drink", "canonical": "havredryck"}`), `DELETE /v1/glossary/{id}` removes one you added.
+  Words in a search are also asked in Swedish (`query.also_searched_as`), and a name using either
+  word matches, so "Oat Drink" and "Havredryck" count as the same words when comparing names.
+- **Probably the same.** A result with no barcode carries `likely_same`: other results with the same
+  brand and size whose names mostly agree, each with its `barcode` (if it has one), `differs` (the
+  words only one name has, such as `["eko"]`: check them, they can mean a different product) and a
+  `score`. It is only a suggestion. `POST /v1/products/{id}/same-as` with `{"product_id": "<other>"}`
+  confirms it: the listings of one move to the other, and the one with a barcode is kept. Two
+  products that both have barcodes, and differ, are never merged (`409`).
 
 ### Compare in a shop (scan a barcode)
 
@@ -346,6 +393,10 @@ barcode already belongs to another product you get `409` naming it in `details[0
 `"merge": true`, which moves your product's listings to that one (`outcome: "merged"`, price
 history is kept). A barcode the store itself publishes cannot be changed (`409`). Undo a wrong scan
 with `DELETE /v1/monitors/{id}/barcode`. Only `exact_product` monitors have a barcode to link.
+
+You do not have to watch a product to link a barcode to it: `POST /v1/products/{product_id}/barcode`
+takes the same body and gives the same answers, and `DELETE /v1/products/{product_id}/barcode`
+undoes it. Search results offer a shortcut, described next.
 
 ### Your watchlist
 
@@ -483,7 +534,7 @@ Scope is what the token needs. All paths are under the base URL.
 | GET | `/v1/products/barcode/{gtin}` | `catalogue:read` | The product linked to a barcode, or `404` |
 | GET | `/v1/products/{product_id}` | `catalogue:read` | A product, its barcode and where it is listed |
 | GET | `/v1/products/{product_id}/prices` | `catalogue:read` | Latest price per store |
-| GET | `/v1/products/{product_id}/history` | `catalogue:read` | Price history across stores |
+| GET | `/v1/products/{product_id}/history` | `catalogue:read` | Price history across stores, newest first (`?limit=` up to 2000, default 200) |
 | GET | `/v1/listings/{listing_id}/prices` | `catalogue:read` | Price history of one listing |
 | POST | `/v1/search/jobs` | `catalogue:read` | Live search by name or barcode (asynchronous) |
 | POST | `/v1/compare/barcode` | `catalogue:read` | Compare one barcode across your stores |
@@ -497,6 +548,15 @@ Scope is what the token needs. All paths are under the base URL.
 | GET | `/v1/monitors/{monitor_id}/events` | `events:read` | One monitor's events |
 | DELETE | `/v1/monitors/{monitor_id}` | `monitors:write` | Remove (`permanent=true` to delete) |
 | POST | `/v1/monitors/{monitor_id}/check` | `monitors:write` | Check now (asynchronous) |
+| POST | `/v1/products/{product_id}/same-as` | `monitors:write` | Say two products are the same item; the listings are merged |
+| GET | `/v1/products/{product_id}/names` | `catalogue:read` | Every name a product goes by |
+| POST | `/v1/products/{product_id}/names` | `monitors:write` | Add an alternative name (shared) |
+| DELETE | `/v1/products/{product_id}/names/{name_id}` | `monitors:write` | Remove an alternative name you added |
+| GET | `/v1/glossary` | `catalogue:read` | The English/Swedish word list |
+| POST | `/v1/glossary` | `monitors:write` | Add a word pair (shared) |
+| DELETE | `/v1/glossary/{entry_id}` | `monitors:write` | Remove a word pair you added |
+| POST | `/v1/products/{product_id}/barcode` | `monitors:write` | Link a barcode to a product you are not watching (same rules as through a monitor) |
+| DELETE | `/v1/products/{product_id}/barcode` | `monitors:write` | Remove a barcode a person linked, for a product you are not watching |
 | POST | `/v1/monitors/{monitor_id}/barcode` | `monitors:write` | Link a barcode to the monitor's product |
 | DELETE | `/v1/monitors/{monitor_id}/barcode` | `monitors:write` | Remove a barcode a person linked |
 | GET | `/v1/events` | `events:read` | Your event feed (cursor) |
@@ -517,6 +577,9 @@ Not available to client tokens; listed so the full surface is documented.
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/v1/admin/invitations` | Invite a user |
+| PUT | `/v1/admin/connectors/{retailer_id}/logo` | Set a retailer's logo (the body is the image) |
+| POST | `/v1/admin/connectors/{retailer_id}/logo/fetch` | Fetch the logo from the retailer's own website (a worker job) |
+| DELETE | `/v1/admin/connectors/{retailer_id}/logo` | Remove it; clients draw a coloured badge again |
 | GET | `/v1/admin/audit` | Recent audit log |
 | GET | `/v1/admin/jobs` | Recent jobs of all users |
 | POST | `/v1/admin/jobs/{job_id}/retry` | Retry a finished job that did not succeed |

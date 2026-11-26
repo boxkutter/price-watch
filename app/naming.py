@@ -7,11 +7,11 @@ unit, and the remaining "core" words. Nothing here guesses: a part that cannot b
 and an item is only called the same as another when its brand, size and core words all agree.
 """
 import re
-import unicodedata
 from dataclasses import dataclass
 from decimal import Decimal
 from difflib import SequenceMatcher
 
+from app.glossary import canonical_tokens, fold
 from app.pricing import base_quantity, parse_size
 
 # Words that describe a variant, not the brand: "Garant Eko" is the brand Garant, organic.
@@ -20,12 +20,6 @@ _SIZE_IN_TEXT = re.compile(
     r"(?<![\w.,])(?:(\d+)\s*[xX]\s*)?(\d+(?:[.,]\d+)?)\s*(kg|gram|gr|g|liter|litre|l|dl|cl|ml|st)(?![a-z0-9])",
     re.IGNORECASE)
 _PACK_IN_TEXT = re.compile(r"(?<![\w.,])(\d{1,3})\s*-?\s*(pack|port|portioner)(?![a-z0-9])", re.IGNORECASE)
-
-
-def fold(text: str | None) -> str:
-    """Lower case without accents (Saltå -> salta, Mjölk -> mjolk) so spellings compare equal."""
-    decomposed = unicodedata.normalize("NFKD", (text or "").casefold())
-    return "".join(c for c in decomposed if not unicodedata.combining(c))
 
 
 def tokens(text: str | None) -> list[str]:
@@ -130,7 +124,7 @@ def describe(name: str, brand: str | None, package_value: Decimal | None = None,
     text = _without(name, from_name[1] if from_name else None, pack[1] if pack else None)
     drop = bkey.split() if bkey else []
     return Described(brand=brand, brand_key=bkey, size=size, pack=pack[0] if pack else None,
-                     core=frozenset(w for w in tokens(text) if len(w) > 1 and not _is_brand(w, drop)))
+                     core=frozenset(w for w in canonical_tokens(text) if len(w) > 1 and not _is_brand(w, drop)))
 
 
 def normalize_brand(brand: str | None) -> str | None:
@@ -168,7 +162,7 @@ class Query:
     size: Size | None            # a size typed in the query ('1l', '500 g')
 
     def accepts(self, name: str, brand: str | None, item_size: Size | None) -> bool:
-        words = tokens(name) + tokens(brand)
+        words = canonical_tokens(name) + tokens(brand)       # English and Swedish words alike
         # a typed word may be part of a longer Swedish compound (havregryn in havregrynsgrot)
         if not all(any(term in word for word in words) for term in self.terms):
             return False
@@ -181,7 +175,7 @@ def parse_query(text: str) -> Query:
     rest = re.sub(r"\s+", " ", rest).strip()
     if len(rest) < 2:                        # only a size was typed: ask the store as typed
         return Query(store_text=text.strip(), terms=(), size=found[0] if found else None)
-    return Query(store_text=rest, terms=tuple(w for w in tokens(rest) if len(w) > 1),
+    return Query(store_text=rest, terms=tuple(w for w in canonical_tokens(rest) if len(w) > 1),
                  size=found[0] if found else None)
 
 

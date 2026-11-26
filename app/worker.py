@@ -9,6 +9,7 @@ from app.compare import process_compare
 from app.connectors import registry
 from app.db import SessionLocal
 from app.discovery import process_discovery
+from app.logos import process_logo_fetch
 from app.models import Job, Monitor, Store, utcnow
 from app.monitoring import next_due, process_scan
 from app.products import process_add_product
@@ -74,6 +75,8 @@ def run_job() -> bool:
                 result = process_add_product(db, job)
             elif job.kind == "compare":
                 result = process_compare(db, job)
+            elif job.kind == "logo_fetch":
+                result = process_logo_fetch(db, job)
             elif job.kind == "reference_lookup":
                 result = process_reference(db, job)
             else:

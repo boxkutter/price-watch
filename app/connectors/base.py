@@ -81,6 +81,9 @@ class PriceData:
     brand: str | None = None
     package_value: Decimal | None = None
     package_unit: str | None = None
+    # How many the store says it has, when it says (a per-store figure, not stored: it is shown in
+    # search results). `availability` stays the stored, comparable fact.
+    stock_quantity: int | None = None
 
 
 @dataclass(frozen=True)

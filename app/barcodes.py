@@ -7,11 +7,11 @@ are only ever merged when someone asks for it explicitly.
 """
 import re
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.gtin import normalize_gtin
-from app.models import Listing, Product, utcnow
+from app.models import Listing, Product, ProductAlias, ProductImage, utcnow
 
 
 class BarcodeError(ValueError):
@@ -118,6 +118,7 @@ def merge_products(db: Session, source: Product, target: Product) -> int:
         raise BarcodeConflict("This product already has a different barcode; remove it first.")
     moved = db.execute(update(Listing).where(Listing.product_id == source.id)
                        .values(product_id=target.id)).rowcount
+    _move_attachments(db, source, target)
     if target.package_value is None and source.package_value is not None:
         target.package_value, target.package_unit = source.package_value, source.package_unit
     db.flush()
@@ -125,3 +126,20 @@ def merge_products(db: Session, source: Product, target: Product) -> int:
     db.delete(source)
     db.flush()
     return moved
+
+
+def _move_attachments(db: Session, source: Product, target: Product) -> None:
+    """What hangs off a product follows the merge: a person's own pictures and the names people
+    gave it move to the target (a name the target already has is dropped); the source's shared
+    reference picture is dropped because the target has its own."""
+    db.execute(delete(ProductImage).where(ProductImage.product_id == source.id,
+                                          ProductImage.owner_id.is_(None)))
+    db.execute(update(ProductImage).where(ProductImage.product_id == source.id)
+               .values(product_id=target.id))
+    have = set(db.scalars(select(ProductAlias.folded).where(ProductAlias.product_id == target.id)))
+    for alias in db.scalars(select(ProductAlias).where(ProductAlias.product_id == source.id)):
+        if alias.folded in have:
+            db.delete(alias)
+        else:
+            alias.product_id = target.id
+            have.add(alias.folded)

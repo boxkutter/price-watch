@@ -2,7 +2,7 @@
 from decimal import Decimal
 
 from app.naming import describe, display_name, normalize_brand, parse_query
-from tests.test_politeness import search
+from tests.test_politeness import AXA, search
 
 
 def like(name, brand, value=None, unit=None, gtin=None):
@@ -153,3 +153,42 @@ def test_brands_are_written_one_way():
              "Love Made": "Love Made", "  ": None, None: None}
     for given, expected in shown.items():
         assert normalize_brand(given) == expected, given
+
+
+def test_a_barcode_is_linked_to_a_product_without_watching_it(cg):
+    template = cg.site.items[0]
+    cg.site.items = [template, {**template, "id": "9_ST", "gtin": None, "name": "Havregryn",
+                                "subtitle": "1,5KG AXA"}]
+    items = search(cg, query="axa")["result"]["items"]
+    plain = next(i for i in items if i["barcode"] is None)
+    owned = next(i for i in items if i["barcode"])
+    assert plain["likely_same"][0]["barcode"] == owned["barcode"]["gtin14"]
+    assert plain["likely_same"][0]["differs"] == [] and owned["likely_same"] == []
+    url = f"/v1/products/{plain['product_id']}/barcode"
+    assert cg.client.post(url, json={"gtin": "731013032108"}).status_code == 422        # bad check digit
+    assert cg.client.post("/v1/products/missing/barcode", json={"gtin": AXA}).status_code == 404
+
+    clash = cg.client.post(url, json={"gtin": owned["barcode"]["gtin14"]})
+    assert clash.status_code == 409 and clash.json()["details"][0]["existing_product"]["id"] == owned["product_id"]
+    done = cg.client.post(url, json={"gtin": owned["barcode"]["gtin14"], "merge": True})
+    assert done.status_code == 200 and done.json()["outcome"] == "merged"
+    assert cg.client.get("/v1/monitors").json()["items"] == []                          # nothing is watched
+    again = {i["listing_id"]: i for i in search(cg, query="axa")["result"]["items"]}
+    assert {i["product_id"] for i in again.values()} == {owned["product_id"]}            # one product now
+    assert all(i["barcode"] and i["likely_same"] == [] for i in again.values())
+
+    # a barcode the store publishes cannot be changed, and one a person linked can be undone
+    assert cg.client.post(f"/v1/products/{owned['product_id']}/barcode",
+                          json={"gtin": "4006381333931"}).status_code == 409
+    assert cg.client.delete(f"/v1/products/{owned['product_id']}/barcode").status_code == 409
+
+
+def test_a_products_history_can_be_asked_for_in_more_or_fewer_points(cg):
+    pid = search(cg, gtin=AXA)["result"]["items"][0]["product_id"]
+    search(cg, gtin=AXA)
+    both = cg.client.get(f"/v1/products/{pid}/history").json()["items"]
+    assert len(both) == 2 and both[0]["observed_at"] >= both[1]["observed_at"]     # newest first
+    assert len(cg.client.get(f"/v1/products/{pid}/history?limit=1").json()["items"]) == 1
+    assert cg.client.get(f"/v1/products/{pid}/history?limit=0").status_code == 422
+    assert cg.client.get(f"/v1/products/{pid}/history?limit=2001").status_code == 422
+    assert cg.client.get(f"/v1/products/{pid}").json()["brand"] == "AXA"          # shown the one way
