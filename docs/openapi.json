@@ -346,6 +346,18 @@
       },
       "SearchRequest": {
         "properties": {
+          "brand": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
           "channel": {
             "default": "online",
             "title": "Channel",
@@ -361,6 +373,32 @@
               }
             ],
             "title": "Gtin"
+          },
+          "pack_max": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Max"
+          },
+          "pack_min": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Min"
           },
           "query": {
             "anyOf": [
@@ -383,6 +421,33 @@
             "minItems": 1,
             "title": "Store Ids",
             "type": "array"
+          },
+          "weight_max": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Max"
+          },
+          "weight_min": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Min"
+          },
+          "weight_unit": {
+            "default": "g",
+            "title": "Weight Unit",
+            "type": "string"
           }
         },
         "required": [
@@ -529,6 +594,67 @@
         "summary": "Ready",
         "tags": [
           "Health"
+        ]
+      }
+    },
+    "/images/{image_id}": {
+      "get": {
+        "description": "A stored product picture (WebP). No login, because an <img> tag cannot send one: the id\nis unguessable, which is the only protection a picture someone uploaded has.",
+        "operationId": "product_image_images__image_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "image_id",
+            "required": true,
+            "schema": {
+              "title": "Image Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "summary": "Product Image",
+        "tags": [
+          "Catalogue"
         ]
       }
     },
@@ -6273,6 +6399,243 @@
           }
         ],
         "summary": "Product History",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/v1/products/{product_id}/image": {
+      "delete": {
+        "description": "Remove your own picture of this product; the store's or the reference's shows again.",
+        "operationId": "remove_product_image_v1_products__product_id__image_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "product_id",
+            "required": true,
+            "schema": {
+              "title": "Product Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Remove Product Image",
+        "tags": [
+          "Catalogue"
+        ]
+      },
+      "put": {
+        "description": "Use your own picture of this product (the request body is the image: JPEG, PNG, WebP, ...).\nIt is reduced and compressed, location and camera data are dropped, and it replaces any earlier\npicture of yours. Only you see it; it is preferred over the store's and the reference's.",
+        "operationId": "upload_product_image_v1_products__product_id__image_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "product_id",
+            "required": true,
+            "schema": {
+              "title": "Product Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Upload Product Image",
         "tags": [
           "Catalogue"
         ]

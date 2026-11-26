@@ -52,6 +52,8 @@ markupsafe==3.0.4
     # via mako
 opentelemetry-api==1.45.2
     # via fastapi
+pillow==12.3.0
+    # via retail-monitor
 psycopg==3.3.9
     # via retail-monitor
 psycopg-binary==3.3.9 ; implementation_name != 'pypy'

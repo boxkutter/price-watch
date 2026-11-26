@@ -118,7 +118,7 @@ Every error uses one envelope, with the HTTP status:
 
 | Status | `code` | Meaning |
 |---|---|---|
-| 400 / 422 | `invalid_request` | The request is invalid; `details` lists the fields (`field`, `type`) |
+| 400 / 422 | `invalid_request` | The request is invalid; `details` lists the fields (`field`, `type`, and `message` when a value was rejected for a stated reason, such as a bad barcode check digit) |
 | 401 | `unauthorized` | Missing, invalid, expired or revoked token |
 | 403 | `forbidden` | The token lacks the scope, or the action is administrator-only |
 | 404 | `not_found` | Missing, or not yours (the service does not reveal other people's resources) |
@@ -244,8 +244,27 @@ curl -X POST $BASE/v1/search/jobs $AUTH -H 'Content-Type: application/json' \
 ```
 
 The job result lists `items` (`product_id`, `listing_id`, `store_id`, `name`, `current_price`,
-`currency`) and `coverage` per store (`complete`, `not_found`, `paused`, …). Search by barcode with
-`"gtin"` instead of `"query"`. Watch one by creating a monitor from its `listing_id`:
+`currency`, plus `display_name`, `brand`, `size`, `pack`, `barcode` and `like_key`) and `coverage` per store (`complete`,
+`not_found`, `paused`, …). Search by barcode with `"gtin"` instead of `"query"`.
+
+Optional narrowing for a name search, apart from the words typed: `brand` (also added to what the
+store is asked), a multipack count range `pack_min` / `pack_max` (use the same number for exactly that
+many; `1` means a single item; either end may be left out), and a weight or volume range
+`weight_min` / `weight_max` (the same number twice for an exact size) in `weight_unit`
+(`g`, `kg`, `ml`, `cl`, `dl`, `l`; default `g`). A result
+known to differ is dropped; a result of unknown size is kept by a size range. Ignored for a barcode
+search.
+
+Words in `query` are matched in any order, ignoring case and accents, and each must appear in the
+product's name or brand. A package size typed in the query (`"oatly havredryck 1l"`) is not sent to
+the store: results of a known different size are dropped, results of unknown size are kept.
+`coverage[].filtered_out` counts what a store returned that did not match. `display_name` is `name` without the brand, the package size and the pack count, which have their own
+fields; `size` is the package size as people say it (`750 g`, `1.5 kg`, `1 L`) and `pack` a multipack or
+portion count (`8-pack`, `13 portioner`), which also keeps a 4-pack and an 8-pack apart. `like_key` is the same for the same item in
+different stores, so you can line them up for a price comparison: `barcode:<gtin14>` when the
+barcode is known, otherwise `name:` followed by brand, size and name words (brand and size must
+both be known, or it is `null`). The second kind is a strong hint, not a guarantee: link the
+barcode to confirm. Watch one by creating a monitor from its `listing_id`:
 
 ```bash
 curl -X POST $BASE/v1/monitors $AUTH -H 'Content-Type: application/json' \
@@ -257,6 +276,26 @@ curl -X POST $BASE/v1/monitors $AUTH -H 'Content-Type: application/json' \
 A `generic_product` monitor follows a search: `"conditions": {"query": "råris", "brand": "…",
 "excluded_terms": ["ekologisk"], "maximum_price": "30", "minimum_package_weight_kg": "1",
 "maximum_unit_price": {"amount": "25.00", "unit": "kg"}}`. It reports new matches and qualifying prices.
+
+### Pictures and reference data
+
+Products with a barcode are matched, in the background, against Open Food Facts (and its sister
+sites for non-food). What it says is shown beside the store's own data and never replaces it, and
+it never changes a barcode. Search results and the monitor list carry:
+
+- `image`: `{"url": "/images/<id>", "source": "user" | "store" | "reference", "credit": ...}`, or
+  `null`. Your own picture wins, then the store's, then the reference's. The picture is our own
+  reduced WebP copy (at most 512 px). `GET /images/{image_id}` needs no login, because an `<img>`
+  tag cannot send one: the id is unguessable, which is all the protection a picture you upload has.
+  Pictures from Open Food Facts are CC BY-SA: show the `credit`.
+- `reference`: `{"source", "name", "brand", "quantity", "url", "details", "flags"}` or `null` when
+  the barcode is unknown to the reference (or not looked up yet). `flags` lists where it disagrees
+  with the store (`{"field": "size", "ours": "750 g", "reference": "500 g"}`; `brand` likewise): a hint
+  that the barcode may be wrong. `GET /v1/products/{id}` returns both too.
+
+`PUT /v1/products/{product_id}/image` takes your own picture as the request body (any common image
+format, up to 8 MB). It is reduced and compressed, location and camera data are dropped, and it
+replaces your earlier one; only you see it.
 
 ### Compare in a shop (scan a barcode)
 
@@ -439,6 +478,8 @@ Scope is what the token needs. All paths are under the base URL.
 | GET | `/v1/offers` | `catalogue:read` | Promotions, optionally by `store_id` |
 | GET | `/v1/offers/{offer_id}` | `catalogue:read` | One promotion |
 | GET | `/v1/products/search` | `catalogue:read` | Search the products already known (no store contact) |
+| PUT | `/v1/products/{product_id}/image` | `monitors:write` | Use your own picture of a product (the body is the image) |
+| DELETE | `/v1/products/{product_id}/image` | `monitors:write` | Remove your own picture; the store's or reference picture shows again |
 | GET | `/v1/products/barcode/{gtin}` | `catalogue:read` | The product linked to a barcode, or `404` |
 | GET | `/v1/products/{product_id}` | `catalogue:read` | A product, its barcode and where it is listed |
 | GET | `/v1/products/{product_id}/prices` | `catalogue:read` | Latest price per store |

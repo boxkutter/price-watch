@@ -9,7 +9,7 @@ dependencies = [
   "argon2-cffi>=23,<26", "httpx>=0.28,<1",
   "cryptography>=44,<47",
   "anyio>=4.9,<4.16",
-  "PyYAML>=6,<7",
+  "PyYAML>=6,<7", "Pillow>=11,<13",
 ]
 
 [project.optional-dependencies]

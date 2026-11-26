@@ -40,6 +40,7 @@ from app.db import get_db
 from app.example_user import open_session as open_example_session
 from app.example_user import reset_data as reset_example_data
 from app.gtin import normalize_gtin
+from app.images import BadImage, reduce_image
 from app.models import (
     AuditLog,
     ClientGrant,
@@ -59,6 +60,7 @@ from app.models import (
     OfferObservation,
     PriceObservation,
     Product,
+    ProductImage,
     Store,
     User,
     UserStore,
@@ -66,9 +68,11 @@ from app.models import (
     aware,
     utcnow,
 )
+from app.naming import describe
 from app.openapi import install as install_openapi
 from app.products import delete_monitor_permanently, existing_monitor, parse_threshold
 from app.ratelimit import SlidingWindow
+from app.reference import best_image, reference_info
 from app.security import (
     Principal,
     admin,
@@ -122,10 +126,17 @@ async def http_error(request: Request, exc: StarletteHTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(request: Request, exc: RequestValidationError):
-    details = [{"field": ".".join(map(str, error["loc"])), "type": error["type"]}
-               for error in exc.errors()]
+    details, reasons = [], []
+    for error in exc.errors():
+        detail = {"field": ".".join(map(str, error["loc"])), "type": error["type"]}
+        if error["type"] == "value_error":      # our own validators: the reason is safe and useful
+            reason = str(error["msg"]).removeprefix("Value error, ")
+            detail["message"] = reason
+            reasons.append(reason)
+        details.append(detail)
     return JSONResponse(status_code=422,
-                        content={"code": "invalid_request", "message": "Invalid request",
+                        content={"code": "invalid_request",
+                                 "message": "Invalid request" + (f": {reasons[0]}" if reasons else ""),
                                  "details": details, "request_id": request.state.request_id})
 
 
@@ -269,6 +280,34 @@ class SearchRequest(BaseModel):
     gtin: str | None = None
     store_ids: list[str] = Field(min_length=1, max_length=5)
     channel: str = "online"
+    # Optional narrowing of a name search, apart from the words typed (ignored for a barcode search)
+    brand: str | None = Field(default=None, max_length=60)
+    pack_min: int | None = Field(default=None, ge=1, le=100)
+    pack_max: int | None = Field(default=None, ge=1, le=100)
+    weight_min: str | None = None
+    weight_max: str | None = None
+    weight_unit: str = "g"
+
+    @model_validator(mode="after")
+    def narrowing(self):
+        if self.weight_unit.lower() not in {"g", "kg", "ml", "cl", "dl", "l"}:
+            raise ValueError("weight_unit must be g, kg, ml, cl, dl or l")
+        bounds = []
+        for value in (self.weight_min, self.weight_max):
+            try:
+                number = Decimal(value) if value else None
+            except InvalidOperation:
+                raise ValueError("weight_min and weight_max must be numbers") from None
+            if number is not None and (not number.is_finite() or number <= 0):
+                raise ValueError("weight_min and weight_max must be positive")
+            bounds.append(number)
+        if None not in bounds and bounds[0] > bounds[1]:
+            raise ValueError("weight_min must not be above weight_max")
+        if None not in (self.pack_min, self.pack_max) and self.pack_min > self.pack_max:
+            raise ValueError("pack_min must not be above pack_max")
+        if self.brand is not None and not self.brand.strip():
+            self.brand = None
+        return self
 
     @model_validator(mode="after")
     def query_or_gtin(self):
@@ -312,6 +351,7 @@ def monitor_dict(row: Monitor, db: Session) -> dict:
             "product_name": listing.name if listing else None,
             "store_name": store.name if store else None,
             "retailer_id": store.retailer_id if store else None,
+            "image": best_image(db, product.id, row.owner_id) if product else None,
             "latest": latest,
             "barcode": ({"gtin14": product.gtin14, "source": product.gtin_source}
                         if product and product.gtin14 else None),
@@ -922,8 +962,69 @@ def get_product(product_id: str, db: Session = Depends(get_db),
             "gtin_source": product.gtin_source, "gtin_set_at": product.gtin_set_at,
             "package_quantity": {"value": str(product.package_value), "unit": product.package_unit}
             if product.package_value is not None else None,
+            "image": best_image(db, product.id, p.user.id),
+            "reference": reference_info(db, product.gtin14, describe(
+                product.name, product.brand, product.package_value, product.package_unit)),
             "listings": [{"id": x.id, "retailer_id": x.retailer_id, "sku": x.sku,
                           "store_id": x.store_id, "channel": x.channel} for x in listings]}
+
+
+async def image_body(request: Request) -> bytes:
+    limit = settings.max_image_upload_bytes
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        raise HTTPException(413, f"The picture is too large (limit {limit} bytes)")
+    data = bytearray()
+    async for chunk in request.stream():
+        data += chunk
+        if len(data) > limit:
+            raise HTTPException(413, f"The picture is too large (limit {limit} bytes)")
+    return bytes(data)
+
+
+@app.put("/v1/products/{product_id}/image")
+async def upload_product_image(product_id: str, data: bytes = Depends(image_body),
+                               db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    """Use your own picture of this product (the request body is the image: JPEG, PNG, WebP, ...).
+    It is reduced and compressed, location and camera data are dropped, and it replaces any earlier
+    picture of yours. Only you see it; it is preferred over the store's and the reference's."""
+    p.require("monitors:write")
+    if not db.get(Product, product_id):
+        raise HTTPException(404, "Product not found")
+    try:
+        reduced, width, height = await run_in_threadpool(reduce_image, data)
+    except BadImage as exc:
+        raise HTTPException(422, str(exc)) from exc
+    for old in db.scalars(select(ProductImage).where(
+            ProductImage.product_id == product_id, ProductImage.owner_id == p.user.id)):
+        db.delete(old)
+    image = ProductImage(product_id=product_id, owner_id=p.user.id, source="user",
+                         content_type="image/webp", data=reduced, width=width, height=height)
+    db.add(image)
+    audit(db, p.user.id, "product.image_uploaded", "product", product_id)
+    db.commit()
+    return {"image": {"url": f"/images/{image.id}", "source": "user", "credit": None}}
+
+
+@app.delete("/v1/products/{product_id}/image", status_code=204)
+def remove_product_image(product_id: str, db: Session = Depends(get_db),
+                         p: Principal = Depends(principal)):
+    """Remove your own picture of this product; the store's or the reference's shows again."""
+    p.require("monitors:write")
+    db.execute(delete(ProductImage).where(ProductImage.product_id == product_id,
+                                          ProductImage.owner_id == p.user.id))
+    db.commit()
+
+
+@app.get("/images/{image_id}")
+def product_image(image_id: str, db: Session = Depends(get_db)):
+    """A stored product picture (WebP). No login, because an <img> tag cannot send one: the id
+    is unguessable, which is the only protection a picture someone uploaded has."""
+    image = db.get(ProductImage, image_id)
+    if not image:
+        raise HTTPException(404, "Picture not found")
+    return Response(image.data, media_type=image.content_type, headers={
+        "Cache-Control": "public, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff"})
 
 
 @app.get("/v1/products/{product_id}/prices")

@@ -2,7 +2,7 @@ import logging
 import time
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import case, select
 
 from app import declared_stores
 from app.compare import process_compare
@@ -12,6 +12,8 @@ from app.discovery import process_discovery
 from app.models import Job, Monitor, Store, utcnow
 from app.monitoring import next_due, process_scan
 from app.products import process_add_product
+from app.reference import process_reference
+from app.reference import schedule as schedule_reference
 from app.search import process_search
 from app.webhooks import due_delivery, send_delivery
 
@@ -44,7 +46,9 @@ def claim_job(db):
     # LIMIT 1 matters on PostgreSQL: without it FOR UPDATE locks every matching row.
     return db.scalar(select(Job).where(
         ((Job.state == "queued") | ((Job.state == "running") & (Job.lease_until < utcnow()))),
-        Job.run_after <= utcnow()).order_by(Job.created_at)
+        Job.run_after <= utcnow())
+        # what a person is waiting for (a search, a check) goes before background upkeep
+        .order_by(case((Job.kind == "reference_lookup", 1), else_=0), Job.created_at)
         .limit(1).with_for_update(skip_locked=True))
 
 
@@ -70,6 +74,8 @@ def run_job() -> bool:
                 result = process_add_product(db, job)
             elif job.kind == "compare":
                 result = process_compare(db, job)
+            elif job.kind == "reference_lookup":
+                result = process_reference(db, job)
             else:
                 result = process_scan(db, job)
             job.result = result
@@ -106,6 +112,8 @@ def main() -> None:
                 with SessionLocal.begin() as db:
                     declared_stores.seed(db)
             schedule_due()
+            with SessionLocal.begin() as db:
+                schedule_reference(db)
             did_work = run_job()
             did_work = run_delivery() or did_work
             if not did_work:

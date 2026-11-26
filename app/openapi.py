@@ -42,7 +42,7 @@ TAGS = [
 ]
 ERROR_CODES = ["unauthorized", "forbidden", "not_found", "method_not_allowed", "conflict",
                "invalid_request", "rate_limited", "unavailable", "request_failed"]
-PUBLIC = ("/v1/auth/login", "/v1/auth/accept-invitation")
+PUBLIC = ("/v1/auth/login", "/v1/auth/accept-invitation", "/images/{image_id}")
 
 
 def tag_for(path: str) -> str:

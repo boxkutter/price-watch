@@ -18,6 +18,8 @@ section.panel{display:none}section.panel.on{display:block}
 .badge{display:inline-block;padding:.1rem .5rem;border-radius:1rem;font-size:.8rem;background:#e6eaef}
 .badge.ok{background:#d4f0dc;color:#14532d}.badge.warn{background:#fdf1cf;color:#7a5200}
 table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.4rem;border-bottom:1px solid #dce1e7;vertical-align:top}
+tr.grouphead td{background:#eef6f0;border-bottom:1px solid #cfe3d5}div.pic{display:flex;flex-direction:column;align-items:center;gap:.25rem}.photo-ctl{display:flex;flex-direction:column;align-items:center;gap:.2rem}.photo-ctl .chip{font-size:.72rem;padding:.1rem .45rem;white-space:nowrap}
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;z-index:50;cursor:zoom-out}#lightbox figure{margin:0;text-align:center}#lightbox img{max-width:92vw;max-height:80vh;background:#fff;border-radius:8px}#lightbox figcaption{color:#e8edf2;font-size:.85rem;margin-top:.5rem}
 code,pre{background:#f1f4f7;border-radius:4px}code{padding:0 .25rem}pre{padding:.6rem;overflow:auto;font-size:.85rem}
 .err{color:#a1281a}.chip{border:1px solid #ccd3db;border-radius:1rem;background:#fff;padding:.15rem .6rem;font-size:.85rem}
 details.group{border:1px solid #dce1e7;border-radius:8px;margin:.4rem 0;padding:.3rem .7rem}details.group summary{cursor:pointer;font-weight:600}details.group[open] summary{margin-bottom:.4rem}details.group .list{max-height:18rem;overflow:auto}
@@ -32,31 +34,35 @@ label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid
 <p id="gate" class="err" hidden>Sign in on the <a href="/admin">admin page</a> first, then open this page from there. It opens a session as a regular example user.</p>
 <p id="msg" role="status" class="muted"></p>
 <main id="app" hidden>
+<input type="file" id="photo-input" accept="image/*" hidden>
+<div id="lightbox" role="dialog" aria-modal="true" aria-label="Picture" hidden><figure><img id="lightbox-img" alt=""><figcaption id="lightbox-cap"></figcaption></figure></div>
 <p class="muted small">This page is a client app: a <b>regular user</b> (not an admin) calling the public API with a user token and a client token, the way a phone app or script would. Everything you do here is an ordinary API call; see the "API calls" tab.</p>
-<nav id="tabs"><button data-tab="watch" class="on">Watchlist</button><button data-tab="add">Add a product</button><button data-tab="compare">Compare in a shop</button><button data-tab="activity">Activity</button><button data-tab="api">API calls</button></nav>
+<nav id="tabs"><button data-tab="watch" class="on">Watchlist</button><button data-tab="add">Add a product</button><button data-tab="compare">Compare in a shop</button><button data-tab="stores">Your stores</button><button data-tab="activity">Activity</button><button data-tab="api">API calls</button></nav>
 <label class="inline small"><input type="checkbox" id="auto" checked> Refresh every 15 seconds</label>
 
 <section class="panel on" id="tab-watch"><h2>Watchlist</h2><div id="watchlist"></div></section>
 
 <section class="panel" id="tab-add">
- <h2>Your stores</h2>
- <p class="muted small">Tick the stores you shop in. Searches and price comparisons use these.</p>
- <div id="stores"></div>
  <fieldset id="offline" hidden><legend>Try it offline</legend>
   <p class="small">The demo shop is a made-up store whose prices move every minute, so you can watch monitoring work without any real retailer.</p>
   <button id="try-demo">Use the demo shop and search "demo"</button></fieldset>
+ <fieldset><legend>Search by name or barcode</legend>
+  <form id="search-form" class="row"><input name="q" size="32" required minlength="2" placeholder="name (e.g. havregryn) or barcode digits"><button>Search</button></form>
+  <div class="row small">
+   <label>Brand <input name="brand" form="search-form" size="12" placeholder="e.g. Axa"></label>
+   <label>Pack <input name="pack" form="search-form" size="7" inputmode="numeric" placeholder="6 or 4-8" title="Multipack count: a number (6) or a range (4-8). 1 means a single item"></label>
+   <label>Size <input name="size" form="search-form" size="11" inputmode="decimal" placeholder="500 or 400-600" title="A number (500) or a range (400-600), in the unit chosen next to it"></label>
+   <select name="wunit" form="search-form" aria-label="Unit"><option>g</option><option>kg</option><option>ml</option><option>cl</option><option>dl</option><option>l</option></select></div>
+  <div id="search-scope" class="small"></div>
+  <div class="row small muted demo-only">Try: <button type="button" class="chip" data-search-fill="demo">demo</button> <button type="button" class="chip" data-search-fill="9999990000019">demo oats barcode</button> <button type="button" class="chip" data-search-fill="9999990000026">demo coffee barcode</button></div>
+  <p class="muted small">Digits only (8 to 14) are treated as a barcode; anything else is searched by name, in Swedish.</p>
+  <div id="search-result" role="status"></div></fieldset>
  <fieldset><legend>Add by product page link</legend>
   <form id="link-form" class="row"><input name="url" size="46" required placeholder="https://..."><select id="link-store"></select>
    <input name="maximum_price" size="8" placeholder="alert at ≤ kr" inputmode="decimal"><button>Add</button></form>
   <div class="row small muted">Examples: <button type="button" class="chip" data-fill="https://demo.example.org/p/oats-1kg">demo oats</button>
    <button type="button" class="chip" data-fill="https://www.citygross.se/matvaror/frukt-och-gront/frukt/%C3%A4pple-ingrid-marie-p100142800_KG">City Gross apple</button></div>
   <div id="link-result" role="status"></div></fieldset>
- <fieldset><legend>Search by name or barcode</legend>
-  <form id="search-form" class="row"><input name="q" size="32" required minlength="2" placeholder="name (e.g. havregryn) or barcode digits"><button>Search</button></form>
-  <div id="search-scope" class="small"></div>
-  <div class="row small muted demo-only">Try: <button type="button" class="chip" data-search-fill="demo">demo</button> <button type="button" class="chip" data-search-fill="9999990000019">demo oats barcode</button> <button type="button" class="chip" data-search-fill="9999990000026">demo coffee barcode</button></div>
-  <p class="muted small">Digits only (8 to 14) are treated as a barcode; anything else is searched by name, in Swedish.</p>
-  <div id="search-result" role="status"></div></fieldset>
 </section>
 
 <section class="panel" id="tab-compare">
@@ -67,7 +73,15 @@ label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid
  <div id="compare-result" role="status"></div>
 </section>
 
+<section class="panel" id="tab-stores">
+ <h2>Your stores</h2>
+ <p class="muted small">Tick the stores you shop in. Searches and price comparisons use these.</p>
+ <div id="stores"></div>
+</section>
+
 <section class="panel" id="tab-activity"><h2>Activity</h2><div id="activity"></div></section>
+
+<p class="muted small">Reference details and pictures, where shown, come from <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener noreferrer">Open Food Facts</a> (data under ODbL, pictures CC BY-SA). The pictures are our own reduced copies. A photo you add yourself shows only for you.</p>
 
 <section class="panel" id="tab-api">
  <h2>API calls this page made</h2>
@@ -108,6 +122,7 @@ const ago=d=>{if(!d)return 'never';const s=Math.max(0,Math.round((Date.now()-new
 const until=d=>{if(!d)return '';const s=Math.round((new Date(/Z|[+-]\d\d:?\d\d$/.test(d)?d:d+'Z')-Date.now())/1000);return s<=0?'due now':s<3600?'in '+Math.max(1,Math.round(s/60))+' min':'in '+Math.round(s/3600)+' h'};
 
 // ---- tabs, header --------------------------------------------------------------------------
+document.addEventListener('click',e=>{const g=e.target.closest('[data-goto]');if(g){const b=document.querySelector(`#tabs [data-tab="${g.dataset.goto}"]`);if(b)b.click()}});
 $('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;
  document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id==='tab-'+b.dataset.tab))};
@@ -124,6 +139,55 @@ async function loadAll(){
 }
 async function quickRefresh(){if(busy||document.hidden||!$('auto').checked)return;try{busy=true;await loadAll()}catch(e){}finally{busy=false}}
 
+// ---- pictures and reference data -----------------------------------------------------------
+function thumb(img,size){
+ size=size||56;
+ const caption=img?(img.source==='user'?'Your photo':img.credit||''):'';
+ return img?`<img src="${esc(img.url)}" width="${size}" height="${size}" data-zoom="${esc(img.url)}" data-caption="${esc(caption)}" style="object-fit:contain;background:#fff;border:1px solid #dce1e7;border-radius:6px;cursor:zoom-in" alt="Product picture (click to enlarge)" loading="lazy" title="Click to enlarge${caption?' · '+esc(caption):''}">`
+  :`<span style="display:inline-block;width:${size}px;height:${size}px;border:1px dashed #ccd3db;border-radius:6px"></span>`;
+}
+// the picture with its own buttons underneath it
+function pictureCell(img,productId,size){
+ return `<div class="pic" style="width:${Math.max(size||56,84)}px">${thumb(img,size)}${photoControl(productId,img)}</div>`;
+}
+function photoControl(productId,img){
+ if(!productId)return '';
+ const mine=img&&img.source==='user';
+ return `<div class="photo-ctl"><button type="button" class="chip" data-photo="${esc(productId)}">${mine?'Change my photo':'My photo'}</button>${mine?`<button type="button" class="chip" data-photo-remove="${esc(productId)}">Remove</button>`:''}</div>`;
+}
+function refLine(i){
+ const r=i.reference;if(!r)return '';
+ const bits=[r.name,r.quantity].filter(Boolean).map(esc).join(' &middot; ');
+ const flags=(r.flags||[]).map(f=>`<span class="badge warn" title="The store says ${esc(f.ours||'')}; ${esc(r.source)} says ${esc(f.reference||'')}. The barcode may be wrong. The store's own data is what we use.">${f.field==='size'?'Size differs':'Brand differs'}: ${esc(f.reference||'')}</span>`).join(' ');
+ return `<div class="muted small">${esc(r.source)}: <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${bits||'details'}</a> ${flags}</div>`;
+}
+const closeLightbox=()=>{$('lightbox').hidden=true;$('lightbox-img').removeAttribute('src')};
+document.addEventListener('click',e=>{const z=e.target.closest('[data-zoom]');
+ if(z){$('lightbox-img').src=z.dataset.zoom;$('lightbox-cap').textContent=z.dataset.caption||'';$('lightbox').hidden=false;return}
+ if(!$('lightbox').hidden)closeLightbox()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('lightbox').hidden)closeLightbox()});
+let photoTarget=null;
+document.addEventListener('click',async e=>{
+ const up=e.target.closest('[data-photo]'),rm=e.target.closest('[data-photo-remove]');
+ if(up){photoTarget=up.dataset.photo;$('photo-input').value='';$('photo-input').click()}
+ else if(rm){try{await call('DELETE','/v1/products/'+rm.dataset.photoRemove+'/image');await afterPhoto(rm.dataset.photoRemove,null);say('Your photo was removed.')}catch(err){say(err.message)}}
+});
+async function afterPhoto(productId,image){
+ // the stored results do not know the new picture yet: refresh the shown rows from a reload
+ const reload=await call('GET','/v1/products/'+productId);
+ for(const items of Object.values(lastResults))for(const i of items)if(i.product_id===productId)i.image=reload.image;
+ reshow();await loadAll();
+}
+async function uploadPhoto(productId,file){
+ if(!file.type.startsWith('image/')){say('Choose an image file.');return}
+ const res=await fetch('/v1/products/'+productId+'/image',{method:'PUT',headers:{'Content-Type':file.type,'Authorization':'Bearer '+userToken,'X-Client-Token':clientToken},body:file});
+ const data=await res.json().catch(()=>({}));
+ callLog.unshift({at:new Date(),method:'PUT',path:'/v1/products/'+productId+'/image',status:res.status,ms:0});renderLog();
+ if(!res.ok)throw Error(data.message||('HTTP '+res.status));
+ await afterPhoto(productId,data.image);say('Your photo is saved. It shows only for you.');
+}
+$('photo-input').onchange=async e=>{const file=e.target.files[0];if(!file||!photoTarget)return;try{await uploadPhoto(photoTarget,file)}catch(err){say(err.message)}};
+
 // ---- watchlist ----------------------------------------------------------------------------
 function spark(items){
  const pts=items.slice().reverse().map(x=>Number(x.current_price)).filter(Number.isFinite);if(pts.length<2)return '<span class="muted small">Not enough history yet: check again in a minute.</span>';
@@ -135,9 +199,9 @@ function card(m){
  const l=m.latest,alert=m.conditions&&m.conditions.maximum_price,id=esc(m.id);
  let delta='';if(l&&l.previous_price){const d=Number(l.current_price)-Number(l.previous_price);if(d)delta=`<span class="chg ${d<0?'down':'up'}">${d<0?'▼':'▲'} ${Math.abs(d).toFixed(2)}</span>`}
  const hit=alert&&l&&Number(l.current_price)<=Number(alert)?' <span class="badge ok">at or below your alert</span>':'';
- const code=m.barcode?`Barcode ${esc(m.barcode.gtin14.replace(/^0+/,''))} <span class="muted">(${esc(m.barcode.source)})</span>${m.barcode.source!=='retailer'?` <button data-unlink="${id}">Unlink</button>`:''}`:'No barcode';
+ const code=m.barcode?`Barcode ${esc(m.barcode.gtin14.replace(/^0+/,''))} ${m.barcode.source!=='retailer'?`<span class="muted">(${esc(m.barcode.source==='user'?'added by a user':m.barcode.source)})</span>`:''}${m.barcode.source!=='retailer'?` <button data-unlink="${id}">Unlink</button>`:''}`:'No barcode';
  const link=m.type==='exact_product'&&!(m.barcode&&m.barcode.source==='retailer')?` <input data-code="${id}" placeholder="scan barcode" size="13" inputmode="numeric"> <button data-link="${id}">Link</button>`:'';
- return `<div class="card" data-id="${id}"><div class="row" style="justify-content:space-between"><div><b>${esc(m.name)}</b><div class="muted small">${esc(m.store_name||'')}${alert?` &middot; alert at ≤ ${esc(alert)} kr`:''}</div></div>
+ return `<div class="card" data-id="${id}"><div class="row" style="justify-content:space-between"><div class="row" style="flex-wrap:nowrap;gap:.7rem">${pictureCell(m.image,m.product_id,64)}<div><b>${esc(m.name)}</b><div class="muted small">${esc(m.store_name||'')}${alert?` &middot; alert at ≤ ${esc(alert)} kr`:''}</div></div></div>
   <div style="text-align:right"><span class="price">${l?esc(l.current_price)+' '+esc(l.currency):'<span class="muted">no price yet</span>'}</span>${delta}${hit}
   ${l&&l.unit_price?`<div class="muted small">${esc(l.unit_price.amount)} per ${esc(l.unit_price.unit)}</div>`:''}</div></div>
   <div class="muted small">Checked ${ago(m.last_success_at)} &middot; next check ${until(m.next_due_at)} &middot; ${code}${link}</div>
@@ -227,7 +291,7 @@ const searchIds=()=>searchAll?[...mine]:[...searchPick].filter(id=>mine.has(id))
 function renderScope(){
  const mineStores=stores.filter(s=>mine.has(s.id)&&s.retailer_id!=='test.fixture');
  for(const id of [...searchPick])if(!mine.has(id))searchPick.delete(id);
- const html=!mineStores.length?'<span class="muted">Tick the stores you shop in above, then search them.</span>'
+ const html=!mineStores.length?'<span class="muted">Choose the stores you shop in first. <button type="button" class="chip" data-goto="stores">Open Your stores</button></span>'
   :`<div class="row"><b>Search in:</b> <label class="inline"><input type="checkbox" data-scope-all ${searchAll?'checked':''}> All my stores (${mineStores.length})</label></div>`+
    (searchAll?'':`<div class="row">${mineStores.map(s=>`<label class="inline"><input type="checkbox" data-scope="${esc(s.id)}" ${searchPick.has(s.id)?'checked':''}> ${esc(s.name)}</label>`).join('')}</div>`);
  if(html!==scopeHtml){scopeHtml=html;$('search-scope').innerHTML=html}
@@ -236,50 +300,128 @@ $('search-scope').addEventListener('change',e=>{const b=e.target;
  if(b.dataset.scopeAll!==undefined){searchAll=b.checked;if(!searchAll&&!searchPick.size)mine.forEach(id=>searchPick.add(id))}
  else if(b.dataset.scope){b.checked?searchPick.add(b.dataset.scope):searchPick.delete(b.dataset.scope)}
  renderScope()});
-async function runSearch(text,ids){
+function barcodeProblem(d){
+ if(![8,12,13,14].includes(d.length))return `A barcode has 8, 12, 13 or 14 digits; this has ${d.length}. Check for a missing or extra digit.`;
+ const n=[...d].map(Number);let sum=0;n.slice(0,-1).reverse().forEach((x,i)=>{sum+=x*(i%2===0?3:1)});
+ return (10-sum%10)%10===n[n.length-1]?null:'The last digit does not match the others, so the barcode was probably mistyped. Check it and try again.';
+}
+const coverageWhy={unknown_mapping:"it cannot search by barcode, and no listing of this product is linked to it yet",rate_limited:'it is busy; try again shortly',paused:'its connector is paused',disabled:'its connector is disabled',access_blocked:'it blocked the request',auth_required:'it needs a setting (such as an API key) in the admin page',extraction_failed:'its reply could not be read',unsupported:'it cannot be searched this way',failed:'the lookup failed',invalid_data:'its reply was not valid'};
+function coverageProblems(coverage){
+ const name=id=>(stores.find(s=>s.id===id)||{}).name||'A store';
+ return coverage.filter(c=>!['complete','not_found'].includes(c.status)).map(c=>`${name(c.store_id)}: ${coverageWhy[c.status]||c.status}${c.detail&&c.status!=='unknown_mapping'?' ('+c.detail+')':''}`);
+}
+async function runSearch(text,ids,narrow={}){
  const out=$('search-result');
- if(!ids.length){out.textContent=mine.size?'Pick at least one store to search in.':'Tick at least one store above first.';return}
+ if(!ids.length){out.textContent=mine.size?'Pick at least one store to search in.':'Choose your stores first (the Your stores tab).';return}
  const digits=text.replace(/[\s-]/g,'');const isCode=/^\d{8,14}$/.test(digits);
- const items=[],coverage=[];let done=0;
+ if(isCode){const bad=barcodeProblem(digits);if(bad){out.textContent=bad;return}}
+ const items=[],coverage=[],problems=[];let done=0;resultBrand='';resultSize='';
  try{
   for(let i=0;i<ids.length;i+=5){          // a search job covers up to 5 stores
    const chunk=ids.slice(i,i+5);
    out.textContent=`Searching ${isCode?'barcode '+digits:'"'+text+'"'} in ${ids.length} store(s)${ids.length>5?' ('+done+' done)':''}...`;
-   const first=await call('POST','/v1/search/jobs',isCode?{gtin:digits,store_ids:chunk}:{query:text,store_ids:chunk});
-   const job=await waitJob(first.job_id);const r=job.result||{};
+   const first=await call('POST','/v1/search/jobs',isCode?{gtin:digits,store_ids:chunk}:{query:text,store_ids:chunk,...narrow});
+   const job=await waitJob(first.job_id,120);const r=job.result||{};
+   if(['queued','running','retry_wait'].includes(job.state))
+    problems.push(`${chunk.length} store(s): the search is still waiting for the worker (${job.state}). It has not failed, so try again in a minute.`);
+   else if(job.state==='failed'&&!(r.coverage||[]).length)problems.push(`${chunk.length} store(s): the search failed on the server. Try again; if it keeps failing, look at the worker log.`);
    items.push(...(r.items||[]));coverage.push(...(r.coverage||[]));done+=chunk.length;
   }
-  showResults({result:{items,coverage}},'search-result',`Searched ${done} store(s) by ${isCode?'barcode':'name'}.`);
+  problems.push(...coverageProblems(coverage));
+  showResults({result:{items,coverage}},'search-result',`Searched ${done} store(s) by ${isCode?'barcode':'name'}${isCode?'':narrowNote(narrow)}.${isCode&&Object.keys(narrow).length?' (Narrowing does not apply to a barcode search.)':''}`,problems);
  }catch(err){
-  if(items.length)showResults({result:{items,coverage}},'search-result',`Stopped after ${done} of ${ids.length} stores: ${err.message}`);
+  if(items.length||problems.length)showResults({result:{items,coverage}},'search-result',`Stopped after ${done} of ${ids.length} stores: ${err.message}`,[...problems,...coverageProblems(coverage)]);
   else out.textContent=err.message}
 }
 const shortCode=g=>g.replace(/^0+/,'');
 function barcodeCell(i){
- if(i.barcode)return `<div class="small">Barcode ${esc(shortCode(i.barcode.gtin14))} <span class="muted">(${esc(i.barcode.source)})</span></div>`;
+ if(i.barcode)return `<div class="small">Barcode ${esc(shortCode(i.barcode.gtin14))} ${i.barcode.source!=='retailer'?`<span class="muted">(${esc(i.barcode.source==='user'?'added by a user':i.barcode.source)})</span>`:''}</div>`;
  return `<div class="small muted">No barcode known. <input data-newcode="${esc(i.listing_id)}" placeholder="barcode" size="13" inputmode="numeric"> <button type="button" data-add-code="${esc(i.listing_id)}" data-store-id="${esc(i.store_id)}" data-name="${esc(i.name)}">Add barcode</button> <span class="muted">(this also watches the product)</span></div>`;
 }
-const lastResults={};let resultSort='barcode';
-function sortedItems(items){
- const sname=id=>(stores.find(s=>s.id===id)||{}).name||'';
+const lastResults={},lastNotes={},lastProblems={};let resultSort='match',resultBrand='',resultSize='';
+const priceOf=i=>Number(i.current_price);
+const sname=id=>(stores.find(s=>s.id===id)||{}).name||'';
+function groupsOf(items){const g={};items.forEach(i=>{if(i.like_key)(g[i.like_key]=g[i.like_key]||[]).push(i)});return g}
+const spreadOf=(groups,i)=>i.like_key?new Set(groups[i.like_key].map(x=>x.store_id)).size:1;
+function sortedItems(items,groups){
  const by=(a,b)=>String(a).localeCompare(String(b),'sv',{sensitivity:'base'});
- const key={barcode:(a,b)=>(a.barcode?0:1)-(b.barcode?0:1)||by(a.barcode?a.barcode.gtin14:'',b.barcode?b.barcode.gtin14:''),
-  name:(a,b)=>by(a.name,b.name),store:(a,b)=>by(sname(a.store_id),sname(b.store_id))};
- // like items sit together: the chosen key first, then the other two as tie-breakers
- const order=[resultSort,...['barcode','name','store'].filter(k=>k!==resultSort)];
+ const key={
+  // same item in several stores first (cheapest first), then single items, then unknown ones
+  match:(a,b)=>spreadOf(groups,b)-spreadOf(groups,a)||(a.like_key?0:1)-(b.like_key?0:1)||by(a.like_key||'',b.like_key||'')||priceOf(a)-priceOf(b),
+  name:(a,b)=>by(a.display_name||a.name,b.display_name||b.name),store:(a,b)=>by(sname(a.store_id),sname(b.store_id))};
+ const order=[resultSort,...['match','name','store'].filter(k=>k!==resultSort)];
  return [...items].sort((a,b)=>{for(const k of order){const c=key[k](a,b);if(c)return c}return 0});
 }
-function showResults(job,target,note){
- const id=target||'search-result',out=$(id);const items=(job.result&&job.result.items)||[];lastResults[id]=items;
- if(!items.length){out.innerHTML='<p class="muted">No products found'+(job.result&&job.result.coverage?': '+esc(job.result.coverage.map(c=>stText[c.status]||c.status).join(', ')):'')+'.</p>';return}
- const sname=sid=>(stores.find(s=>s.id===sid)||{}).name||'';
- const watched=new Set(monitors.filter(m=>m.type==='exact_product'&&m.conditions).map(m=>m.conditions.listing_id));
- const picker=`<label class="small">Sort by <select data-sort>${[['barcode','Barcode'],['name','Name'],['store','Store']].map(([k,l])=>`<option value="${k}"${k===resultSort?' selected':''}>${l}</option>`).join('')}</select></label> <span class="muted small">Same barcode = same item, so sorting by barcode lines up like-for-like across stores.</span>`;
- out.innerHTML=(note?`<p class="muted small">${esc(note)}</p>`:'')+picker+'<table>'+sortedItems(items).map(i=>`<tr><td>${esc(i.name)}<div class="muted small">${esc(sname(i.store_id))}</div>${barcodeCell(i)}</td><td>${esc(i.current_price)} ${esc(i.currency)}</td><td><button data-watch="${esc(i.listing_id)}" data-store-id="${esc(i.store_id)}" data-name="${esc(i.name)}"${watched.has(i.listing_id)?' disabled':''}>${watched.has(i.listing_id)?'Watching':'Watch'}</button></td></tr>`).join('')+'</table>';
+function facet(items,pick,keyOf){
+ // the same brand written differently by two stores (accents, case) counts once
+ const counts=new Map();items.forEach(i=>{const v=pick(i);if(v){const k=(keyOf?keyOf(i):v).toLowerCase();counts.set(k,{label:(counts.get(k)||{}).label||v,n:((counts.get(k)||{}).n||0)+1})}});
+ return [...counts.entries()].sort((a,b)=>a[1].label.localeCompare(b[1].label,'sv',{sensitivity:'base'})).map(([k,v])=>[k,`${v.label} (${v.n})`]);
 }
-document.addEventListener('change',e=>{const s=e.target.closest('[data-sort]');if(!s)return;resultSort=s.value;
- if(lastResults['search-result']&&lastResults['search-result'].length)showResults({result:{items:lastResults['search-result']}},'search-result',(($('search-result').querySelector('p.muted.small')||{}).textContent)||'')});
-$('search-form').onsubmit=async e=>{e.preventDefault();await runSearch(new FormData(e.target).get('q').trim(),searchIds())};
+function productTitle(i){
+ const name=esc(i.display_name||i.name);
+ // the store's own product page; only plain https links are followed
+ return i.url&&/^https:\/\//i.test(i.url)?`<b><a href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">${name}</a></b>`:`<b>${name}</b>`;
+}
+function showResults(job,target,note,problems){
+ const id=target||'search-result',out=$(id);const all=(job.result&&job.result.items)||[];lastResults[id]=all;if(note!==undefined)lastNotes[id]=note;if(problems!==undefined)lastProblems[id]=problems;
+ const trouble=(lastProblems[id]||[]).length?`<div class="warn small"><b>Not searched or not answered:</b><ul>${lastProblems[id].map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`:'';
+ if(!all.length){
+  const answered=((job.result&&job.result.coverage)||[]).filter(c=>['complete','not_found'].includes(c.status)).length;
+  const head=(lastProblems[id]||[]).length?(answered?`No match in the ${answered} store(s) that answered.`:'No store could be searched.'):`No products found in ${answered||'the'} store(s) searched.`;
+  out.innerHTML=(lastNotes[id]?`<p class="muted small">${esc(lastNotes[id])}</p>`:'')+`<p class="muted">${esc(head)}</p>`+trouble;return}
+ const brands=facet(all,i=>i.brand,i=>i.brand_key||i.brand),sizes=facet(all,i=>i.size);
+ const items=all.filter(i=>(!resultBrand||(i.brand_key||i.brand||'').toLowerCase()===resultBrand)&&(!resultSize||(i.size||'').toLowerCase()===resultSize));
+ const groups=groupsOf(items);
+ const watched=new Set(monitors.filter(m=>m.type==='exact_product'&&m.conditions).map(m=>m.conditions.listing_id));
+ const select=(name,label,opts,cur)=>`<label class="small">${label} <select data-${name}><option value="">All</option>${opts.map(([k,l])=>`<option value="${esc(k)}"${k===cur?' selected':''}>${esc(l)}</option>`).join('')}</select></label>`;
+ const bar=`<div class="row">`+
+  `<label class="small">Sort by <select data-sort>${[['match','Same item'],['name','Name'],['store','Store']].map(([k,l])=>`<option value="${k}"${k===resultSort?' selected':''}>${l}</option>`).join('')}</select></label>`+
+  (brands.length>1?select('brand','Brand',brands,resultBrand):'')+(sizes.length>1?select('size','Size',sizes,resultSize):'')+
+  `<span class="muted small">${items.length===all.length?all.length+' result(s)':items.length+' of '+all.length+' shown'}</span></div>`;
+ const seen=new Set();
+ const rows=sortedItems(items,groups).map(i=>{
+  let head='';
+  if(resultSort==='match'&&i.like_key&&!seen.has(i.like_key)){seen.add(i.like_key);
+   const g=groups[i.like_key];const n=spreadOf(groups,i);
+   if(n>1){const low=Math.min(...g.map(priceOf)),high=Math.max(...g.map(priceOf));
+    const basis=i.like_key.startsWith('barcode:')?'same barcode':'same brand, size and name (no barcode yet)';
+    // only worth saying when one store really is cheaper than another
+    const cheapest=low<high?`; cheapest ${esc(low.toFixed(2))} ${esc(g[0].currency)} at ${esc([...new Set(g.filter(x=>priceOf(x)===low).map(x=>sname(x.store_id)))].join(', '))}`:'';
+    head=`<tr class="grouphead"><td colspan="7"><b>Same item in ${n} stores</b> <span class="muted small">${basis}${cheapest}</span></td></tr>`}}
+  const w=watched.has(i.listing_id);
+  return head+`<tr><td>${pictureCell(i.image,i.product_id,56)}</td><td title="${esc(i.name)}">${productTitle(i)}${refLine(i)}${barcodeCell(i)}</td><td>${esc(i.brand||'')}</td><td>${esc([i.size,i.pack].filter(Boolean).join(' · '))}</td><td>${esc(sname(i.store_id))}</td><td>${esc(i.current_price)} ${esc(i.currency)}</td><td><button data-watch="${esc(i.listing_id)}" data-store-id="${esc(i.store_id)}" data-name="${esc(i.name)}"${watched.has(i.listing_id)?' disabled':''}>${watched.has(i.listing_id)?'Watching':'Watch'}</button></td></tr>`}).join('');
+ out.innerHTML=(lastNotes[id]?`<p class="muted small">${esc(lastNotes[id])}</p>`:'')+trouble+bar+'<table><tr><th></th><th>Product</th><th>Brand</th><th>Size</th><th>Store</th><th>Price</th><th></th></tr>'+rows+'</table>';
+}
+const reshow=()=>{if(lastResults['search-result']&&lastResults['search-result'].length)showResults({result:{items:lastResults['search-result']}},'search-result')};
+document.addEventListener('change',e=>{const el=e.target;
+ if(el.matches('[data-sort]')){resultSort=el.value;reshow()}
+ else if(el.matches('[data-brand]')){resultBrand=el.value;reshow()}
+ else if(el.matches('[data-size]')){resultSize=el.value;reshow()}});
+// "5" is exactly 5; "5-7" is 5 to 7; "5-" is 5 or more; "-7" is up to 7. Commas count as decimal points.
+function parseRange(text,what,whole){
+ const raw=text.trim().replace(/,/g,'.').replace(/[–—]/g,'-');
+ const number=/^\d+(?:\.\d+)?$/,ok=v=>number.test(v)&&+v>0&&(!whole||Number.isInteger(+v));
+ const parts=raw.split('-').map(p=>p.trim());
+ let lo=null,hi=null;
+ if(parts.length===1){if(!ok(parts[0]))throw Error(`${what}: enter a number such as 5, or a range such as 5-7`);lo=hi=parts[0]}
+ else if(parts.length===2&&(parts[0]||parts[1])){
+  for(const p of parts)if(p&&!ok(p))throw Error(`${what}: enter a number such as 5, or a range such as 5-7`);
+  lo=parts[0]||null;hi=parts[1]||null;
+  if(lo&&hi&&+lo>+hi)throw Error(`${what}: the range starts above where it ends`)}
+ else throw Error(`${what}: enter a number such as 5, or a range such as 5-7`);
+ return [lo,hi];
+}
+function narrowFrom(form){
+ const v=n=>(form.get(n)||'').toString().trim();const out={};
+ if(v('brand'))out.brand=v('brand');
+ if(v('pack')){const [lo,hi]=parseRange(v('pack'),'Pack',true);if(lo)out.pack_min=+lo;if(hi)out.pack_max=+hi}
+ if(v('size')){const [lo,hi]=parseRange(v('size'),'Size',false);if(lo)out.weight_min=lo;if(hi)out.weight_max=hi;out.weight_unit=v('wunit')||'g'}
+ return out;
+}
+function narrowNote(n){const bits=[];if(n.brand)bits.push('brand '+n.brand);if(n.pack_min||n.pack_max)bits.push((n.pack_min===n.pack_max?n.pack_min:(n.pack_min||'1')+' to '+(n.pack_max||'any'))+'-pack');
+ if(n.weight_min||n.weight_max)bits.push((n.weight_min===n.weight_max?n.weight_min:(n.weight_min||'0')+' to '+(n.weight_max||'any'))+' '+n.weight_unit);return bits.length?', '+bits.join(', '):''}
+$('search-form').onsubmit=async e=>{e.preventDefault();
+ try{await runSearch(new FormData(e.target).get('q').trim(),searchIds(),narrowFrom(new FormData(e.target)))}catch(err){$('search-result').textContent=err.message}};
 $('try-demo').onclick=async()=>{const out=$('search-result');
  try{const demo=stores.filter(s=>s.retailer_id==='test.demoshop');if(!demo.length){out.textContent='The demo shop is not installed.';return}
   for(const s of demo)if(!mine.has(s.id)){await call('PUT','/v1/me/stores/'+s.id);mine.add(s.id)}renderStores();
@@ -295,8 +437,8 @@ const watchClick=async e=>{
    if(!mon)mon=await call('POST','/v1/monitors',{name:add.dataset.name,type:'exact_product',store_id:add.dataset.storeId,conditions:{listing_id:add.dataset.addCode},interval_minutes:60});
    const done=await linkBarcode(mon.id,input.value);
    if(done){const row=add.closest('tr');const w=row&&row.querySelector('[data-watch]');if(w){w.textContent='Watching';w.disabled=true}
-    const item=(lastResults[out.id]||[]).find(x=>x.listing_id===add.dataset.addCode);if(item)item.barcode={gtin14:input.value.trim().padStart(14,'0'),source:'user'};
-    add.closest('div').innerHTML='Barcode '+esc(shortCode(input.value.trim()))+' <span class="muted">(you added it)</span>'}
+    const item=(lastResults[out.id]||[]).find(x=>x.listing_id===add.dataset.addCode);if(item){item.barcode={gtin14:input.value.trim().padStart(14,'0'),source:'user'};item.like_key='barcode:'+item.barcode.gtin14}
+    add.closest('div').innerHTML='Barcode '+esc(shortCode(input.value.trim()))+' <span class="muted">(added by a user)</span>'}
   }catch(err){say(err.message)}
   return}
  const b=e.target.closest('[data-watch]');if(!b)return;

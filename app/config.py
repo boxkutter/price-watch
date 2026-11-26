@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     min_manual_check_interval_seconds: int = 60
     max_my_stores: int = 15       # stores one person compares across
     max_compare_stores: int = 8   # stores checked live by one barcode comparison
+    # Reference database (Open Food Facts): matches products by barcode and supplies details and
+    # pictures. Looked up by the worker only, slowly, and cached.
+    reference_enabled: bool = True
+    reference_user_agent: str = "retail-monitor/0.1 (self-hosted price monitor; reference lookups)"
+    reference_min_interval_seconds: float = 3.0
+    reference_max_lookups_per_day: int = 300
+    reference_recheck_days_found: int = 90
+    reference_recheck_days_missing: int = 30
+    max_image_upload_bytes: int = 8_000_000
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

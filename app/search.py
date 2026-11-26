@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -9,12 +11,28 @@ from app.connectors.registry import connector_for
 from app.gtin import normalize_gtin
 from app.ingest import add_price, ensure_listing
 from app.models import Job, Listing, Product, Store, new_id, utcnow
+from app.naming import (
+    describe,
+    display_name,
+    make_narrow,
+    normalize_brand,
+    parse_query,
+    size_label,
+    tokens,
+)
+from app.reference import best_image, reference_info
 from app.retrieval import fetch
 
 
 def process_search(db: Session, job: Job) -> dict:
     payload = job.payload or {}
-    query = str(payload.get("query") or "").casefold().strip()
+    typed = parse_query(str(payload.get("query") or "").strip()) if payload.get("query") else None
+    narrow = make_narrow(payload.get("brand"), payload.get("pack_min"), payload.get("pack_max"),
+                         payload.get("weight_min"),
+                         payload.get("weight_max"), payload.get("weight_unit") or "g")
+    if typed is not None and payload.get("brand") and not set(narrow.brand) <= set(tokens(typed.store_text)):
+        typed = replace(typed, store_text=f"{typed.store_text} {payload['brand'].strip()}")
+    query = typed.store_text.casefold() if typed else ""    # what the stores are asked (no size)
     gtin = str(payload.get("gtin") or "")
     gtin14 = normalize_gtin(gtin) if gtin else None
     known_skus = set()
@@ -64,10 +82,11 @@ def process_search(db: Session, job: Job) -> dict:
             continue
         # not_found is a complete answer for a barcode/ID search: the retailer was asked and
         # returned nothing. It says nothing about whether the product exists elsewhere.
-        coverage.append({"store_id": store_id,
-                         "status": "complete" if snapshot.effective_status == "success" else "not_found",
-                         "source": snapshot.source, "detail": snapshot.detail,
-                         "truncated": snapshot.truncated})
+        scope = {"store_id": store_id,
+                 "status": "complete" if snapshot.effective_status == "success" else "not_found",
+                 "source": snapshot.source, "detail": snapshot.detail,
+                 "truncated": snapshot.truncated, "filtered_out": 0}
+        coverage.append(scope)
         seen_skus: set[str] = set()
         for item in snapshot.prices:
             if item.sku in seen_skus:
@@ -76,11 +95,17 @@ def process_search(db: Session, job: Job) -> dict:
             # A connector that honours the request has already filtered; others return a full
             # snapshot that is matched here by name or by a verified barcode mapping.
             matches = snapshot.targeted or (
-                (bool(query) and query in item.name.casefold()) or
+                (typed is not None and typed.accepts(item.name, item.brand, None)) or
                 (store.retailer_id, item.sku) in known_skus)
             if (not matches or item.channel != channel or
                 item.currency != "SEK" or not item.current_price.is_finite() or
                 item.current_price < 0):
+                continue
+            parts = describe(item.name, item.brand, item.package_value, item.package_unit)
+            if typed is not None and not (typed.accepts(item.name, item.brand, parts.size)
+                                          and narrow.accepts(item.name, item.brand, parts.size,
+                                                             parts.pack_count)):
+                scope["filtered_out"] += 1     # the store returned it, but it is not what was typed
                 continue
             listing = ensure_listing(db, store, item)
             add_price(db, listing, item, run_id, utcnow())
@@ -90,13 +115,23 @@ def process_search(db: Session, job: Job) -> dict:
                 except ValueError:
                     pass
             product = db.get(Product, listing.product_id) if listing.product_id else None
+            gtin14 = product.gtin14 if product else None
+            like = parts.like_key(gtin14)
             items.append({"product_id": listing.product_id, "listing_id": listing.id,
                           "barcode": ({"gtin14": product.gtin14, "source": product.gtin_source}
                                       if product and product.gtin14 else None),
+                          "brand": normalize_brand(item.brand), "brand_key": parts.brand_key,
+                          "url": item.source_url, "size": parts.size_text,
+                          "image": best_image(db, listing.product_id, job.owner_id),
+                          "reference": reference_info(db, gtin14, parts),
+                          "display_name": display_name(item.name, item.brand),
+                          "pack": parts.pack,
+                          "like_key": f"{like[0]}:{like[1]}" if like else None,
                           "store_id": store.id, "channel": channel, "name": item.name,
                           "current_price": str(item.current_price), "currency": item.currency})
     complete = all(scope["status"] in ("complete", "not_found") for scope in coverage)
     return {"status": "success" if complete else "partial", "complete": complete,
             "items": items, "coverage": coverage,
+            "query": ({"terms": list(typed.terms), "size": size_label(typed.size)} if typed else None),
             "barcode_mapping": ("verified" if known_skus or barcode_found
                                 else "unknown" if gtin else None)}

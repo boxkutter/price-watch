@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -322,3 +323,39 @@ class Delivery(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_error: Mapped[str | None] = mapped_column(String(200))
+
+
+class ReferenceProduct(Base):
+    """What an open reference database (Open Food Facts) says about a barcode. A cache: it is
+    looked up once, politely, by the worker, and refreshed rarely. A miss is remembered too."""
+    __tablename__ = "reference_products"
+    gtin14: Mapped[str] = mapped_column(String(14), primary_key=True)
+    source: Mapped[str] = mapped_column(String(30), default="openfoodfacts")
+    status: Mapped[str] = mapped_column(String(12))                  # found | not_found
+    name: Mapped[str | None] = mapped_column(String(300))
+    brand: Mapped[str | None] = mapped_column(String(300))
+    quantity_text: Mapped[str | None] = mapped_column(String(100))
+    page_url: Mapped[str | None] = mapped_column(String(500))
+    image_url: Mapped[str | None] = mapped_column(String(500))
+    details: Mapped[dict | None] = mapped_column(JSON)             # categories, ingredients, ...
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    next_check_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class ProductImage(Base):
+    """A reduced, compressed picture of a product. `source` says where it came from: the person's
+    own upload (`user`, private to `owner_id` and preferred over the rest), the store's (`store`)
+    or the reference database's (`reference`, with its credit). The id is unguessable because the
+    picture is served without a login (an <img> tag cannot send one)."""
+    __tablename__ = "product_images"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    product_id: Mapped[str] = mapped_column(ForeignKey("products.id"), index=True)
+    owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True)
+    source: Mapped[str] = mapped_column(String(12))
+    content_type: Mapped[str] = mapped_column(String(30))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    credit: Mapped[str | None] = mapped_column(String(300))
+    source_url: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
