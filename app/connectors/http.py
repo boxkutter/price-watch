@@ -54,7 +54,7 @@ class PoliteClient:
                  limiter: RateLimiter | None = None, user_agent: str | None = None):
         if not allowed_hosts:
             raise ValueError("A live connector needs at least one allowed host")
-        self.allowed_hosts = allowed_hosts
+        self.allowed_hosts = list(allowed_hosts)  # a private copy: callers cannot widen it later
         self.limiter = limiter or RateLimiter(min_interval)
         self._client = httpx.Client(timeout=timeout, follow_redirects=False, transport=transport,
                                     headers={"User-Agent": user_agent or settings.connector_user_agent,

@@ -1,6 +1,8 @@
 id: se.coop
 name: Coop
 country: SE
+description: Targeted product search, barcode lookup and per-store prices from coop.se.
+author: price-watch
 protocol_version: 1
 connector_version: 0.1.0
 enabled: true
@@ -11,7 +13,7 @@ access_note: >-
   pages send to every visitor, supplied as COOP_API_KEY. Coop publishes no developer programme,
   so this is undocumented and may change; a 401/403 pauses the connector. Targeted search and
   lookup only, spaced requests. No deal amounts are exposed anonymously, so no offers.
-implementation: app.connectors.coop:CoopConnector
+implementation: connector:CoopConnector
 capabilities:
   store_discovery: supported
   product_search: supported
@@ -20,7 +22,20 @@ capabilities:
   physical_store_prices: unsupported
   store_offers: unsupported
 allowed_hosts: [external.api.coop.se]
-store_discovery_requires_postcode: true
+settings:
+  - name: COOP_API_KEY
+    label: Coop API subscription key
+    description: >-
+      The Ocp-Apim-Subscription-Key header coop.se's own pages send on requests to
+      external.api.coop.se (see your browser's developer tools). Not a secret of ours; never
+      commit it.
+    secret: true
+    required: true
+store_discovery_inputs:
+  - name: postcode
+    label: Postcode
+    pattern: '^\d{3}\s?\d{2}$'
+    required: true
 minimum_request_interval_seconds: 3
 minimum_monitor_interval_minutes: 60
 max_requests_per_scan: 6

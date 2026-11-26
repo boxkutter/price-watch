@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from app.connectors.base import ConnectorError, ScanRequest, TransientError
-from app.connectors.citygross import CityGrossConnector, parse_product
+from app.connectors.builtin.citygross.connector import CityGrossConnector, parse_product
 from app.connectors.http import PoliteClient, RateLimiter, host_allowed
 from app.pricing import parse_size
 

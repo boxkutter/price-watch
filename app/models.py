@@ -200,11 +200,33 @@ class ConnectorState(Base):
     __tablename__ = "connector_states"
     retailer_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     state: Mapped[str] = mapped_column(String(16), default="active")  # active | paused
+    # Administrator override of the manifest's default `enabled`; None means "use the default".
+    enabled: Mapped[bool | None] = mapped_column(Boolean)
     reason: Mapped[str | None] = mapped_column(Text)
     consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
     cooldown_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     window_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     requests_in_window: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ConnectorPackage(Base):
+    """A connector installed through the admin interface (built-in connectors have no row)."""
+    __tablename__ = "connector_packages"
+    retailer_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    version: Mapped[str] = mapped_column(String(40))
+    sha256: Mapped[str] = mapped_column(String(64))
+    filename: Mapped[str | None] = mapped_column(String(200))
+    installed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    installed_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+
+
+class ConnectorSetting(Base):
+    """A value an administrator entered for a setting a connector declares (stored encrypted)."""
+    __tablename__ = "connector_settings"
+    retailer_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    ciphertext: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

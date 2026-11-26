@@ -18,22 +18,8 @@ Notes learned from the live API (2026-11-26):
 import re
 from decimal import Decimal
 
-from app.config import settings
-from app.connectors.base import (
-    AccessBlocked,
-    AuthRequired,
-    BudgetExceeded,
-    ConnectorError,
-    ExtractionError,
-    HttpStatusError,
-    PriceData,
-    RateLimited,
-    ScanRequest,
-    Snapshot,
-    StoreInfo,
-    TransientError,
-)
-from app.connectors.http import PoliteClient
+from app.connectors.base import ExtractionError, HttpStatusError, PriceData, ScanRequest, StoreInfo
+from app.connectors.kit import Collected, HttpJsonConnector, to_decimal, valid_gtin
 from app.gtin import normalize_gtin
 from app.pricing import parse_size
 
@@ -43,26 +29,9 @@ BY_ID_URL = BASE + "/personalization/search/entities/by-id"
 STORE_URL = BASE + "/ecommerce/coop/coopstore"
 PAGE_SIZE = 40
 BY_ID_BATCH = 20
+KEY_SETTING = "COOP_API_KEY"
 _UNITS = {"gram": "g", "g": "g", "kilogram": "kg", "kg": "kg", "milliliter": "ml", "ml": "ml",
           "centiliter": "cl", "cl": "cl", "deciliter": "dl", "dl": "dl", "liter": "l", "l": "l"}
-
-
-def _decimal(value) -> Decimal | None:
-    if value is None or isinstance(value, bool):
-        return None
-    try:
-        result = Decimal(str(value))
-    except ArithmeticError:
-        return None
-    return result if result.is_finite() else None
-
-
-def _gtin(value) -> str | None:
-    try:
-        normalize_gtin(str(value))
-    except ValueError:
-        return None
-    return str(value)
 
 
 def _gtin_candidates(gtin: str) -> list[str]:
@@ -80,7 +49,7 @@ def parse_package(raw: dict) -> tuple[Decimal, str] | None:
     if "x" in str(label or "").lower() or re.search(r"\d+\s*-?\s*pack", str(raw.get("name")), re.IGNORECASE):
         return None  # a multipack whose label we cannot read: size stays unknown
     unit = _UNITS.get(str(raw.get("packageSizeUnit") or "").lower())
-    value = _decimal(raw.get("packageSize"))
+    value = to_decimal(raw.get("packageSize"))
     if unit and value and value > 0:
         return parse_size(f"{format(value.normalize(), 'f')}{unit}")
     return None
@@ -89,7 +58,7 @@ def parse_package(raw: dict) -> tuple[Decimal, str] | None:
 def parse_item(raw: dict) -> PriceData | None:
     """One product record -> price data. None when the consumer price is unknown."""
     ean = str(raw.get("ean") or raw.get("id") or "")
-    price = _decimal((raw.get("salesPriceData") or {}).get("b2cPrice"))
+    price = to_decimal((raw.get("salesPriceData") or {}).get("b2cPrice"))
     if not ean or price is None or price < 0:
         return None
     name, brand = str(raw.get("name") or ""), raw.get("manufacturerName")
@@ -101,30 +70,28 @@ def parse_item(raw: dict) -> PriceData | None:
     return PriceData(
         sku=ean, name=title.strip(), current_price=price, regular_price=None, currency="SEK",
         channel="online", source_url=f"https://www.coop.se/handla/sok/?q={ean}",
-        gtin=_gtin(ean),
+        gtin=valid_gtin(ean),
         # `availableOnline` means orderable online; False is not evidence of being out of stock.
         availability="in_stock" if raw.get("availableOnline") is True else None,
         brand=brand, package_value=size[0] if size else None,
         package_unit=size[1] if size else None)
 
 
-class CoopConnector:
+class CoopConnector(HttpJsonConnector):
     id = "se.coop"
+    store_id_pattern = r"\d+"
 
-    def __init__(self, manifest: dict | None = None, client: PoliteClient | None = None):
-        manifest = manifest or {}
-        self.max_requests = manifest.get("max_requests_per_scan", 6)
+    def __init__(self, manifest: dict | None = None, client=None):
+        super().__init__(manifest, client)
         self.max_results = 2 * PAGE_SIZE
-        self.client = client or PoliteClient(
-            manifest.get("allowed_hosts") or ["external.api.coop.se"],
-            manifest.get("minimum_request_interval_seconds", 3))
+
+    def source_for(self, store: str) -> str:
+        return f"{SEARCH_URL}?store={store}"
 
     def _headers(self) -> dict:
-        if not settings.coop_api_key:
-            raise AuthRequired("COOP_API_KEY is not configured")
-        return {"Ocp-Apim-Subscription-Key": settings.coop_api_key}
+        return {"Ocp-Apim-Subscription-Key": self.require(KEY_SETTING)}
 
-    def discover_stores(self, postcode: str | None = None) -> list[StoreInfo]:
+    def discover(self, postcode: str | None = None, **inputs) -> list[StoreInfo]:
         """Coop resolves a postcode to the store serving it; there is no global store list."""
         postcode = re.sub(r"\s+", "", postcode or "")
         if not re.fullmatch(r"\d{5}", postcode):
@@ -174,42 +141,7 @@ class CoopConnector:
             found.update((str(item.get("ean") or item.get("id")), item) for item in items)
         return found
 
-    def scan(self, external_store_id: str, channel: str,
-             request: ScanRequest | None = None) -> Snapshot:
-        source = f"{SEARCH_URL}?store={external_store_id}"
-        if channel != "online":
-            return Snapshot([], [], False, source, status="unsupported",
-                            detail="Only online prices are supported")
-        if request is None or not request.targeted:
-            return Snapshot([], [], False, source, status="unsupported",
-                            detail="Only targeted searches and lookups are supported")
-        if not external_store_id.isdigit():
-            return Snapshot([], [], False, source, status="invalid_data",
-                            detail="Store code must be numeric")
-        self.client.begin_scan(self.max_requests)
-        before = self.client.requests_made
-
-        def result(status: str, detail: str, **extra) -> Snapshot:
-            return Snapshot([], [], False, source, status=status, detail=detail,
-                            requests=self.client.requests_made - before, **extra)
-
-        try:
-            return self._collect(external_store_id, request, source, before)
-        except AuthRequired as exc:
-            return result("auth_required", str(exc))
-        except AccessBlocked as exc:
-            return result("access_blocked", str(exc))
-        except RateLimited as exc:
-            return result("rate_limited", "Retailer asked us to slow down",
-                          retry_after=exc.retry_after)
-        except BudgetExceeded as exc:
-            return result("partial", str(exc))
-        except TransientError:
-            raise  # the worker retries with backoff
-        except ConnectorError as exc:
-            return result("extraction_failed", str(exc))
-
-    def _collect(self, store: str, request: ScanRequest, source: str, before: int) -> Snapshot:
+    def collect(self, store: str, request: ScanRequest) -> Collected:
         raw: dict[str, dict] = {}
         missing: list[str] = []
         truncated = False
@@ -232,16 +164,5 @@ class CoopConnector:
                 else:
                     missing.append(gtin)
         prices = [price for item in raw.values() if (price := parse_item(item))]
-        unpriced = len(raw) - len(prices)
-        notes = []
-        if truncated:
-            notes.append(f"only the first {len(raw)} results were fetched")
-        if unpriced:
-            notes.append(f"{unpriced} result(s) had no price and were skipped")
-        detail = "; ".join(notes) or None
-        requests = self.client.requests_made - before
-        if missing:
-            status = "not_found" if not prices else "partial"
-            return Snapshot(prices, [], False, source, status, detail, tuple(missing), truncated,
-                            True, requests)
-        return Snapshot(prices, [], True, source, "", detail, (), truncated, True, requests)
+        return Collected(prices=prices, missing=tuple(missing), truncated=truncated,
+                         fetched=len(raw), skipped=len(raw) - len(prices))

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 import uuid
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
@@ -9,6 +10,7 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from argon2.exceptions import VerifyMismatchError
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -17,15 +19,17 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import connector_state
+from app import connector_admin, connector_state
 from app.audit import record as audit
 from app.config import settings
-from app.connectors.registry import RETAILERS
+from app.connectors import packages, registry
 from app.db import get_db
 from app.gtin import normalize_gtin
 from app.models import (
     AuditLog,
     ClientGrant,
+    ConnectorPackage,
+    ConnectorSetting,
     ConnectorState,
     Credential,
     Delivery,
@@ -168,8 +172,8 @@ class MonitorRequest(BaseModel):
         return value
 
 
-class DiscoverRequest(BaseModel):
-    postcode: str | None = Field(default=None, pattern=r"^\d{3}\s?\d{2}$")
+class SettingValue(BaseModel):
+    value: str = Field(min_length=1, max_length=2000)
 
 
 class WebhookRequest(BaseModel):
@@ -447,23 +451,33 @@ def revoke_client(client_id: str, db: Session = Depends(get_db),
     db.commit()
 
 
+PUBLIC_CONNECTOR_FIELDS = ("id", "name", "country", "description", "enabled", "status",
+                            "capabilities", "connector_version", "access_review",
+                            "minimum_monitor_interval_minutes", "store_discovery_inputs")
+
+
+def public_connectors(db: Session) -> list[dict]:
+    return [{key: item[key] for key in PUBLIC_CONNECTOR_FIELDS}
+            for item in connector_admin.admin_view(db)["items"]]
+
+
 @app.get("/v1/retailers")
-def retailers(p: Principal = Depends(principal)):
+def retailers(db: Session = Depends(get_db), p: Principal = Depends(principal)):
     p.require("catalogue:read")
-    return {"items": RETAILERS}
+    return {"items": public_connectors(db)}
 
 
 @app.get("/v1/connectors")
-def connectors(p: Principal = Depends(principal)):
+def connectors(db: Session = Depends(get_db), p: Principal = Depends(principal)):
     p.require("catalogue:read")
-    return {"items": RETAILERS}
+    return {"items": public_connectors(db)}
 
 
 @app.get("/v1/connectors/{retailer_id}/health")
 def connector_health(retailer_id: str, db: Session = Depends(get_db),
                      p: Principal = Depends(principal)):
     p.require("catalogue:read")
-    retailer = next((item for item in RETAILERS if item["id"] == retailer_id), None)
+    retailer = registry.retailer(retailer_id)
     if not retailer:
         raise HTTPException(404, "Connector not found")
     last_job = db.scalar(select(Job).join(Monitor, Job.monitor_id == Monitor.id)
@@ -472,21 +486,21 @@ def connector_health(retailer_id: str, db: Session = Depends(get_db),
         .order_by(Job.created_at.desc()).limit(1))
     state = db.get(ConnectorState, retailer_id)
     paused = bool(state and state.state == "paused")
-    return {"id": retailer_id, "enabled": retailer["enabled"],
+    return {"id": retailer_id, "enabled": connector_state.is_enabled(db, retailer_id),
             "access_review": retailer["access_review"], "paused": paused,
             "pause_reason": state.reason if paused else None,
             "cooldown_until": state.cooldown_until if state else None,
             "requests_in_window": state.requests_in_window if state else 0,
             "daily_request_limit": retailer["max_requests_per_day"],
-            "status": "disabled" if not retailer["enabled"] else "paused" if paused else (
-                last_job.state if last_job else "no_checks"),
+            "status": "disabled" if not connector_state.is_enabled(db, retailer_id)
+            else "paused" if paused else (last_job.state if last_job else "no_checks"),
             "last_job_id": last_job.id if last_job else None,
             "last_result": last_job.result if last_job else None}
 
 
 @app.post("/v1/admin/connectors/{retailer_id}/pause", status_code=204)
 def pause_connector(retailer_id: str, db: Session = Depends(get_db), p: Principal = Depends(admin)):
-    if not any(item["id"] == retailer_id for item in RETAILERS):
+    if not registry.retailer(retailer_id):
         raise HTTPException(404, "Connector not found")
     connector_state.pause(db, retailer_id, "Paused by an administrator")
     audit(db, p.user.id, "connector.paused", "connector", retailer_id)
@@ -495,29 +509,173 @@ def pause_connector(retailer_id: str, db: Session = Depends(get_db), p: Principa
 
 @app.post("/v1/admin/connectors/{retailer_id}/resume", status_code=204)
 def resume_connector(retailer_id: str, db: Session = Depends(get_db), p: Principal = Depends(admin)):
-    if not any(item["id"] == retailer_id for item in RETAILERS):
+    if not registry.retailer(retailer_id):
         raise HTTPException(404, "Connector not found")
     connector_state.resume(db, retailer_id)
     audit(db, p.user.id, "connector.resumed", "connector", retailer_id)
     db.commit()
 
 
+@app.get("/v1/admin/connectors")
+def admin_connectors(db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Every installed connector with its state, settings (never values) and usage, plus any
+    packages that failed to load and stores left behind by connectors that were removed."""
+    return connector_admin.admin_view(db)
+
+
+def _loaded_connector(retailer_id: str):
+    entry = registry.entry(retailer_id)
+    if entry is None:
+        raise HTTPException(404, "Connector not found")
+    return entry
+
+
+@app.post("/v1/admin/connectors/{retailer_id}/enable", status_code=204)
+def enable_connector(retailer_id: str, db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    entry = _loaded_connector(retailer_id)
+    if entry.instance is None or entry.error:
+        raise HTTPException(409, entry.error or "This connector has no implementation to enable")
+    connector_state.set_enabled(db, retailer_id, True)
+    audit(db, p.user.id, "connector.enabled", "connector", retailer_id)
+    db.commit()
+
+
+@app.post("/v1/admin/connectors/{retailer_id}/disable", status_code=204)
+def disable_connector(retailer_id: str, db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    _loaded_connector(retailer_id)
+    connector_state.set_enabled(db, retailer_id, False)
+    audit(db, p.user.id, "connector.disabled", "connector", retailer_id)
+    db.commit()
+
+
+@app.put("/v1/admin/connectors/{retailer_id}/settings/{name}", status_code=204)
+def put_connector_setting(retailer_id: str, name: str, body: SettingValue,
+                          db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    _loaded_connector(retailer_id)
+    if not connector_admin.declared_setting(retailer_id, name):
+        raise HTTPException(404, "This connector does not declare that setting")
+    connector_admin.set_setting(db, retailer_id, name, body.value.strip())
+    audit(db, p.user.id, "connector.setting_set", "connector", retailer_id, {"setting": name})
+    db.commit()
+
+
+@app.delete("/v1/admin/connectors/{retailer_id}/settings/{name}", status_code=204)
+def delete_connector_setting(retailer_id: str, name: str, db: Session = Depends(get_db),
+                             p: Principal = Depends(admin)):
+    _loaded_connector(retailer_id)
+    if not connector_admin.clear_setting(db, retailer_id, name):
+        raise HTTPException(404, "No administrator-entered value for that setting")
+    audit(db, p.user.id, "connector.setting_cleared", "connector", retailer_id, {"setting": name})
+    db.commit()
+
+
+async def package_body(request: Request) -> bytes:
+    limit = settings.max_package_bytes
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        raise HTTPException(413, f"The package is too large (limit {limit} bytes)")
+    data = bytearray()
+    async for chunk in request.stream():
+        data += chunk
+        if len(data) > limit:
+            raise HTTPException(413, f"The package is too large (limit {limit} bytes)")
+    return bytes(data)
+
+
+@app.post("/v1/admin/connector-packages/inspect", status_code=201)
+async def inspect_connector_package(data: bytes = Depends(package_body),
+                                    p: Principal = Depends(admin)):
+    """Upload a connector zip (as the request body). Nothing is executed or installed; the
+    response is a preview to review, with an `upload_id` to install it with."""
+    try:
+        token, info = await run_in_threadpool(packages.stage, data)
+    except packages.PackageError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"upload_id": token, "package": info.summary()}
+
+
+@app.post("/v1/admin/connector-packages/{upload_id}/install", status_code=201)
+def install_connector_package(upload_id: str, db: Session = Depends(get_db),
+                              p: Principal = Depends(admin)):
+    """Install a previewed upload. A new connector starts disabled; enabling is a separate,
+    deliberate step. A package that fails to load is rolled back and reported."""
+    try:
+        info = packages.install_staged(upload_id)
+    except packages.PackageError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    retailer_id = info.manifest.id
+    row = db.get(ConnectorPackage, retailer_id)
+    if row:
+        row.version, row.sha256, row.installed_by, row.installed_at = (
+            info.manifest.connector_version, info.sha256, p.user.id, utcnow())
+    else:
+        db.add(ConnectorPackage(retailer_id=retailer_id, version=info.manifest.connector_version,
+                                sha256=info.sha256, installed_by=p.user.id))
+        connector_state.set_enabled(db, retailer_id, False)
+    audit(db, p.user.id, "connector.installed", "connector", retailer_id,
+          {"version": info.manifest.connector_version, "sha256": info.sha256,
+           "replaced": info.replaces is not None})
+    db.commit()
+    return {"package": info.summary(), "status": connector_admin.status_of(
+        db, registry.retailer(retailer_id))}
+
+
+@app.delete("/v1/admin/connector-packages/{retailer_id}", status_code=204)
+def uninstall_connector_package(retailer_id: str, disable_monitors: bool = False,
+                                db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Remove an installed connector. Its stores, prices and history are kept; monitors that
+    use it must be disabled first (or pass disable_monitors=true)."""
+    entry = registry.entry(retailer_id)
+    if entry is None or entry.source != "installed":
+        raise HTTPException(404, "No installed connector with that id")
+    active = db.scalars(select(Monitor).join(Store, Monitor.store_id == Store.id).where(
+        Store.retailer_id == retailer_id, Monitor.enabled.is_(True))).all()
+    if active and not disable_monitors:
+        raise HTTPException(409, f"{len(active)} active monitor(s) use this connector; "
+                                 "disable them first or pass disable_monitors=true")
+    for monitor in active:
+        monitor.enabled = False
+    try:
+        packages.uninstall(retailer_id)
+    except packages.PackageError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    db.execute(delete(ConnectorPackage).where(ConnectorPackage.retailer_id == retailer_id))
+    db.execute(delete(ConnectorSetting).where(ConnectorSetting.retailer_id == retailer_id))
+    connector_state.set_enabled(db, retailer_id, None)
+    audit(db, p.user.id, "connector.uninstalled", "connector", retailer_id,
+          {"monitors_disabled": len(active)})
+    db.commit()
+
+
 @app.post("/v1/admin/retailers/{retailer_id}/stores/discover", status_code=202)
-def discover_stores(retailer_id: str, body: DiscoverRequest | None = None,
+def discover_stores(retailer_id: str, body: dict[str, str] | None = None,
                     db: Session = Depends(get_db), p: Principal = Depends(admin)):
     """Queue a store lookup (one small request, run by the worker).
 
-    Retailers that resolve stores from a postcode (Coop) require `{"postcode": "11120"}`.
+    The body is a flat object of the inputs the connector's manifest declares under
+    `store_discovery_inputs` (Coop needs `{"postcode": "11120"}`; City Gross needs none).
     """
-    retailer = next((item for item in RETAILERS if item["id"] == retailer_id), None)
-    if not retailer or not retailer["enabled"]:
+    retailer = registry.retailer(retailer_id)
+    if not retailer or not connector_state.is_enabled(db, retailer_id):
         raise HTTPException(404, "Connector not found or not enabled")
     if retailer["capabilities"].get("store_discovery") != "supported":
         raise HTTPException(422, "This connector does not support store discovery")
-    postcode = body.postcode.replace(" ", "") if body and body.postcode else None
-    if retailer["store_discovery_requires_postcode"] and not postcode:
-        raise HTTPException(422, "This retailer resolves stores from a postcode; send {\"postcode\": \"11120\"}")
-    payload = {"retailer_id": retailer_id, "postcode": postcode}
+    inputs = {key: value.strip() for key, value in (body or {}).items()}
+    declared = {spec["name"]: spec for spec in retailer["store_discovery_inputs"]}
+    for key in inputs:
+        if key not in declared:
+            raise HTTPException(422, f"Unknown input '{key}'; this connector takes: "
+                                     f"{', '.join(declared) or 'none'}")
+    for name, spec in declared.items():
+        label = spec["label"] or name
+        if not inputs.get(name):
+            if spec["required"]:
+                raise HTTPException(422, f"Input '{name}' ({label}) is required")
+        elif spec["pattern"] and not re.fullmatch(spec["pattern"], inputs[name]):
+            raise HTTPException(422, f"Input '{name}' ({label}) has an invalid format")
+    inputs = {name: value.replace(" ", "") if name == "postcode" else value
+              for name, value in inputs.items()}
+    payload = {"retailer_id": retailer_id, "inputs": inputs}
     in_flight = db.scalars(select(Job).where(Job.kind == "discover_stores",
         Job.state.in_(["queued", "running"]))).all()
     pending = next((job for job in in_flight if job.payload == payload), None)
@@ -762,9 +920,9 @@ def create_monitor(body: MonitorRequest, db: Session = Depends(get_db),
     store = db.get(Store, body.store_id)
     if not store:
         raise HTTPException(404, "Store not found")
-    retailer = next((item for item in RETAILERS if item["id"] == store.retailer_id), None)
-    if not retailer or not retailer["enabled"]:
-        raise HTTPException(422, "Retailer connector has no verified enabled capability")
+    retailer = registry.retailer(store.retailer_id)
+    if not retailer or not connector_state.is_enabled(db, store.retailer_id):
+        raise HTTPException(422, "The retailer's connector is disabled or not installed")
     if body.interval_minutes < retailer["minimum_monitor_interval_minutes"]:
         raise HTTPException(
             422, f"The minimum check interval for this retailer is "

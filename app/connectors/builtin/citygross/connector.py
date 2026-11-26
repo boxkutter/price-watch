@@ -15,20 +15,8 @@ Notes learned from the live API (2026-11-26):
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from app.connectors.base import (
-    AccessBlocked,
-    BudgetExceeded,
-    ConnectorError,
-    ExtractionError,
-    OfferData,
-    PriceData,
-    RateLimited,
-    ScanRequest,
-    Snapshot,
-    StoreInfo,
-    TransientError,
-)
-from app.connectors.http import PoliteClient
+from app.connectors.base import ExtractionError, OfferData, PriceData, ScanRequest, StoreInfo
+from app.connectors.kit import Collected, HttpJsonConnector, to_decimal, valid_gtin
 from app.gtin import normalize_gtin
 from app.pricing import parse_size
 
@@ -37,16 +25,6 @@ SEARCH_URL = BASE + "/api/v1/Loop54/search"
 SITES_URL = BASE + "/api/v1/sites"
 PAGE_SIZE = 40
 STOCK_STATUS = {1: "in_stock"}  # other codes are unknown, so they stay unknown
-
-
-def _decimal(value) -> Decimal | None:
-    if value is None or isinstance(value, bool):
-        return None
-    try:
-        result = Decimal(str(value))
-    except ArithmeticError:
-        return None
-    return result if result.is_finite() else None
 
 
 def _money(value: Decimal) -> str:
@@ -58,14 +36,6 @@ def _datetime(value) -> datetime | None:
         return datetime.fromisoformat(value).astimezone(UTC) if value else None
     except (TypeError, ValueError):
         return None
-
-
-def _gtin(value) -> str | None:
-    try:
-        normalize_gtin(str(value))
-    except ValueError:
-        return None
-    return str(value)
 
 
 def _gtin14(value) -> str | None:
@@ -80,7 +50,7 @@ def parse_promotion(promo: dict, sku: str, title: str, url: str) -> OfferData | 
     if not promo_id:
         return None
     quantity = int(promo.get("minQuantity") or 1)
-    value = _decimal(promo.get("value"))
+    value = to_decimal(promo.get("value"))
     members = bool(promo.get("membersOnly"))
     if promo.get("effectType") == "ItemsTotal" and value is not None:
         # Built from the structured fields; the API does not supply the retailer's wording.
@@ -102,10 +72,10 @@ def parse_product(raw: dict) -> tuple[PriceData, list[OfferData]] | None:
     if not raw.get("id") or not raw.get("sellable") or not details.get("p_has_price"):
         return None
     prices = details.get("prices") or {}
-    price = _decimal((prices.get("currentPrice") or {}).get("price"))
+    price = to_decimal((prices.get("currentPrice") or {}).get("price"))
     if price is None or price < 0:
         return None
-    regular = _decimal((prices.get("ordinaryPrice") or {}).get("price"))
+    regular = to_decimal((prices.get("ordinaryPrice") or {}).get("price"))
     sku = str(raw["id"])
     title = " ".join(part for part in (raw.get("name"), raw.get("subtitle")) if part)
     url = BASE + raw["url"] if str(raw.get("url") or "").startswith("/") else BASE
@@ -115,7 +85,7 @@ def parse_product(raw: dict) -> tuple[PriceData, list[OfferData]] | None:
         if not offer:
             continue
         offers.append(offer)
-        single = _decimal((promo.get("priceDetails") or {}).get("price")) or offer.price
+        single = to_decimal((promo.get("priceDetails") or {}).get("price")) or offer.price
         if (offer.eligibility == "public" and int(promo.get("minQuantity") or 1) <= 1
                 and promo.get("effectType") == "ItemsTotal" and single is not None
                 and single < price):
@@ -123,24 +93,24 @@ def parse_product(raw: dict) -> tuple[PriceData, list[OfferData]] | None:
     size = parse_size(raw.get("descriptiveSize"))
     return PriceData(
         sku=sku, name=title, current_price=price, regular_price=regular, currency="SEK",
-        channel="online", source_url=url, gtin=_gtin(raw.get("gtin")),
+        channel="online", source_url=url, gtin=valid_gtin(raw.get("gtin")),
         availability=STOCK_STATUS.get(details.get("stockStatus")), brand=raw.get("brand"),
         package_value=size[0] if size else None, package_unit=size[1] if size else None,
     ), offers
 
 
-class CityGrossConnector:
+class CityGrossConnector(HttpJsonConnector):
     id = "se.citygross"
+    store_id_pattern = r"\d+"
 
-    def __init__(self, manifest: dict | None = None, client: PoliteClient | None = None):
-        manifest = manifest or {}
-        self.max_requests = manifest.get("max_requests_per_scan", 6)
+    def __init__(self, manifest: dict | None = None, client=None):
+        super().__init__(manifest, client)
         self.max_results = 2 * PAGE_SIZE
-        self.client = client or PoliteClient(
-            manifest.get("allowed_hosts") or ["www.citygross.se"],
-            manifest.get("minimum_request_interval_seconds", 3))
 
-    def discover_stores(self) -> list[StoreInfo]:
+    def source_for(self, store: str) -> str:
+        return f"{SEARCH_URL}?store={store}"
+
+    def discover(self, **inputs) -> list[StoreInfo]:
         data = self.client.get_json(SITES_URL, {"siteTypeId": 3})
         stores = []
         for site in data.get("sites") if isinstance(data, dict) else []:
@@ -177,43 +147,7 @@ class CityGrossConnector:
                 return found, False
         return found, True
 
-    def scan(self, external_store_id: str, channel: str,
-             request: ScanRequest | None = None) -> Snapshot:
-        source = f"{SEARCH_URL}?store={external_store_id}"
-        if channel != "online":
-            return Snapshot([], [], False, source, status="unsupported",
-                            detail="Only online prices are supported")
-        if request is None or not request.targeted:
-            return Snapshot([], [], False, source, status="unsupported",
-                            detail="Only targeted searches and lookups are supported")
-        if not external_store_id.isdigit():
-            return Snapshot([], [], False, source, status="invalid_data",
-                            detail="Store number must be numeric")
-        self.client.begin_scan(self.max_requests)
-        before = self.client.requests_made
-        try:
-            snapshot = self._collect(external_store_id, request, source)
-        except AccessBlocked as exc:
-            return Snapshot([], [], False, source, status="access_blocked", detail=str(exc),
-                            requests=self.client.requests_made - before)
-        except RateLimited as exc:
-            return Snapshot([], [], False, source, status="rate_limited",
-                            detail="Retailer asked us to slow down", retry_after=exc.retry_after,
-                            requests=self.client.requests_made - before)
-        except BudgetExceeded as exc:
-            return Snapshot([], [], False, source, status="partial", detail=str(exc),
-                            requests=self.client.requests_made - before)
-        except ConnectorError as exc:
-            if isinstance(exc, TransientError):
-                raise
-            return Snapshot([], [], False, source, status="extraction_failed", detail=str(exc),
-                            requests=self.client.requests_made - before)
-        # TransientError (network, timeout, 5xx) propagates so the worker retries with backoff.
-        return Snapshot(snapshot.prices, snapshot.offers, snapshot.complete, snapshot.source,
-                        snapshot.status, snapshot.detail, snapshot.missing, snapshot.truncated,
-                        True, self.client.requests_made - before)
-
-    def _collect(self, store: str, request: ScanRequest, source: str) -> Snapshot:
+    def collect(self, store: str, request: ScanRequest) -> Collected:
         raw: dict[str, dict] = {}
         missing: list[str] = []
         truncated = False
@@ -232,22 +166,12 @@ class CityGrossConnector:
             raw.update((str(hit.get("id")), hit) for hit in hits[:1])
             if not hits:
                 missing.append(gtin)
-        prices, offers, unpriced = [], [], 0
+        collected = Collected(missing=tuple(missing), truncated=truncated, fetched=len(raw))
         for product in raw.values():
             parsed = parse_product(product)
             if not parsed:
-                unpriced += 1
+                collected.skipped += 1
                 continue
-            prices.append(parsed[0])
-            offers.extend(parsed[1])
-        notes = []
-        if truncated:
-            notes.append(f"only the first {len(raw)} results were fetched")
-        if unpriced:
-            notes.append(f"{unpriced} result(s) had no price and were skipped")
-        detail = "; ".join(notes) or None
-        if missing:
-            # A missing product is unknown, not proof of discontinuation.
-            status = "not_found" if not prices else "partial"
-            return Snapshot(prices, offers, False, source, status, detail, tuple(missing), truncated)
-        return Snapshot(prices, offers, True, source, "", detail, (), truncated)
+            collected.prices.append(parsed[0])
+            collected.offers.extend(parsed[1])
+        return collected

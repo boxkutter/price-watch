@@ -34,10 +34,14 @@ City Gross prices and assortment are per store, and the API's `store` parameter 
 
 Coop's data API requires a subscription key. Coop publishes no developer programme; the key is the one coop.se's own pages send to every visitor, so this is an **undocumented interface that may change or be withdrawn**, and it is the owner's decision to use it (2026-11-26). The key is configuration only.
 
-1. Set `COOP_API_KEY` in `.env`. To find it, open coop.se in your browser, open the developer tools, and look at the `Ocp-Apim-Subscription-Key` request header on any request to `external.api.coop.se`. Never commit it. Without a key, Coop jobs finish as `auth_required` and nothing is requested. If Coop rotates the key, requests return 401, the connector pauses (`access_blocked`), and you update `.env` and resume.
+1. Provide the key: enter it under the Coop connector's settings in the admin page (stored encrypted), or set `COOP_API_KEY` in `.env`. To find it, open coop.se in your browser, open the developer tools, and look at the `Ocp-Apim-Subscription-Key` request header on any request to `external.api.coop.se`. Never commit it. Without a key the connector shows "Needs configuration", Coop jobs finish as `auth_required`, and nothing is requested. If Coop rotates the key, requests return 401, the connector pauses (`access_blocked`), and you update the setting and resume.
 2. Coop resolves **a postcode to the store that serves it**; there is no global store list. Register a store with `POST /v1/admin/retailers/se.coop/stores/discover` and `{"postcode": "11120"}`; it adds the store (for example `255700`, "Stora Coop Häggvik") for `GET /v1/stores`.
 3. Search, barcode lookup and `exact_product` / `generic_product` monitors work as for City Gross. The EAN is both the SKU and the GTIN, and one request can look up many products, so an exact monitor costs one request per check. Prices are online prices for that store; the minimum monitor interval is 60 minutes.
 4. **No offers.** Coop's anonymous catalogue marks products with deal *types* (`MULTI_BUY_FIXED_PRICE`, ...) but no amounts, and the site shows no deal on them. Deals are applied by the cart service. So Coop monitors report price and availability only, and nothing is invented.
+
+## Connectors
+
+Connectors are self-contained packages (a folder with `manifest.yaml` and a Python module) that are installed, enabled, configured and removed from the admin page without touching the core. City Gross, Coop and the fixture are built in; others can be uploaded as zip packages. See [docs/connectors.md](connectors.md) for the standard approach, the manifest, the authoring kit, the contract tests and the trust model, and `docs/connector-template/` for a working example to copy.
 
 ## Request politeness
 
@@ -67,6 +71,7 @@ The user-agent defaults to a generic browser string (`CONNECTOR_USER_AGENT`). It
 - PostgreSQL schema with Alembic migration; SQLite is supported for local tests.
 - Invite-only users with Argon2 passwords, a database-backed login failure limit, opaque revocable credentials, and redacted audit records for administrative changes.
 - Scoped client tokens and per-user grants, plus ownership checks for monitors, jobs, events, and webhooks.
+- Pluggable connectors: one folder per connector (built-in and installed alike), admin enable/disable and settings, upload/review/install/remove with automatic rollback, quarantine of broken packages, an authoring base class, a contract test kit and a template. Admin overrides, installed packages and encrypted settings are stored in the database; installed files live on a volume shared by the API and worker.
 - Connector protocol with targeted requests (text query, SKUs, GTINs), typed result statuses and errors, a polite HTTP client, and a shared retrieval gate (pause, cooldown, daily budget, cache). City Gross and Coop are the live connectors.
 - Manifest-loaded synthetic connector, queued name/verified-barcode search, catalogue listing, price and offer observations, exact/generic/store monitor evaluation. A fourth fixture connector is tested without a core registry edit.
 - Package quantities, normalized unit prices, generic brand/exclusion/weight/unit-price filters, and immutable offer revision details.
@@ -96,7 +101,10 @@ These are deliberate simplifications or gaps in the current slice, not spec chan
 - **Abuse limits.** Login lockout is per email address, so an attacker can lock out a known account for 15 minutes. The API rate limiter and the retailer request spacing/cache are in-process, so they assume one API process and one worker (as in `docker-compose.yml`); the daily budget, pause and cooldown are in the database and hold regardless. Behind a reverse proxy all unauthenticated callers share the proxy's address unless uvicorn is configured to trust forwarded headers.
 - **Retailer-asserted GTINs.** A GTIN the retailer publishes with a valid check digit is stored as a verified mapping without further review. A wrong retailer GTIN would link products incorrectly; correct it with the admin verified-GTIN route.
 - **Stock status.** City Gross `stockStatus` code 1 is mapped to `in_stock`; other codes are unknown and recorded as no availability, so no stock transition is emitted for them.
-- **Secrets.** Webhook signing secrets are encrypted with a key derived from `APP_SECRET`; changing `APP_SECRET` makes existing webhooks undeliverable until they are recreated. There is no key rotation.
+- **Connector code is not sandboxed.** An installed connector runs in the API and worker processes with their privileges. The allowlist and politeness limits apply to the standard HTTP client only, and an upload is checked statically (not executed) before install; the administrator is trusted to install only packages they trust. See [docs/connectors.md](connectors.md#trust-and-security).
+- **Reloading.** Each process notices installed, updated or removed connectors within about two seconds. Python cannot unload a module, so a replaced or removed connector's old code stays in memory until the process restarts (it is no longer used). The enabled state and settings are read from the database on use, so they take effect immediately.
+- **Single worker.** Request spacing, the result cache and the API rate limiter are per process; run one worker and one API process as the compose file does.
+- **Secrets.** Webhook signing secrets and connector settings are encrypted with a key derived from `APP_SECRET`; changing `APP_SECRET` makes existing webhooks undeliverable until they are recreated. There is no key rotation.
 - **Scan atomicity.** A scan with invalid or duplicate items stores the valid ones and reports `partial`. It does not complete the baseline or advance `last_success_at`, so the next scan is still treated as a baseline; valid items are otherwise processed under the normal event rules.
 
 ## Retailer access findings

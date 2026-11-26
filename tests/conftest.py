@@ -26,3 +26,26 @@ def fresh_db():
     Base.metadata.create_all(engine)
     bootstrap()
     yield
+
+
+@pytest.fixture
+def cg(fresh_db, monkeypatch):
+    """A simulated City Gross wired into the registry, a store row, and an admin API client."""
+    from types import SimpleNamespace
+
+    from app import retrieval
+    from app.connectors.registry import CONNECTORS
+    from app.db import SessionLocal
+    from app.models import Store
+    from tests.test_citygross import FakeSite, connector
+    from tests.test_regressions import admin_client
+
+    retrieval.clear_cache()
+    site = FakeSite()
+    monkeypatch.setitem(CONNECTORS, "se.citygross", connector(site))
+    with SessionLocal.begin() as db:
+        store = Store(retailer_id="se.citygross", external_id="3204", name="City Gross Borås")
+        db.add(store)
+        db.flush()
+        store_id = store.id
+    return SimpleNamespace(site=site, client=admin_client(), store_id=store_id)

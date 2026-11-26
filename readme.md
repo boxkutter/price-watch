@@ -86,7 +86,7 @@ Use async database sessions in API handlers; Celery tasks may wrap async connect
 
 ## 3. Repository layout
 
-This is the target layout. The current code is flatter (`app/main.py`, `app/models.py`, `app/monitoring.py`, `app/worker.py`, `app/connectors/`) and will be split as the API grows.
+This is the target layout. The current code is flatter (`app/main.py`, `app/models.py`, `app/monitoring.py`, `app/worker.py`), but connectors already follow it: one package per connector under `app/connectors/builtin/` (or installed from the admin page), described in [docs/connectors.md](docs/connectors.md).
 
 ```text
 retail-monitor/

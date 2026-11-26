@@ -9,9 +9,9 @@ import time
 
 from sqlalchemy.orm import Session
 
-from app import connector_state
+from app import connector_admin, connector_state
+from app.connectors import registry
 from app.connectors.base import ScanRequest, Snapshot
-from app.connectors.registry import RETAILERS
 from app.models import Store
 
 _CACHE: dict[tuple, tuple[float, Snapshot]] = {}
@@ -19,7 +19,7 @@ _CACHE_LIMIT = 256
 
 
 def retailer_info(retailer_id: str) -> dict:
-    return next((item for item in RETAILERS if item["id"] == retailer_id), {})
+    return registry.retailer(retailer_id) or {}
 
 
 def fetch(db: Session, store: Store, connector, channel: str,
@@ -35,6 +35,7 @@ def fetch(db: Session, store: Store, connector, channel: str,
         hit = _CACHE.get(key)
         if hit and time.monotonic() - hit[0] < ttl:
             return hit[1], None
+    connector_admin.apply_config(db, store.retailer_id, connector)
     snapshot = connector.scan(store.external_id, channel, request)
     connector_state.add_requests(db, store.retailer_id, snapshot.requests)
     status = snapshot.effective_status

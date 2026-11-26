@@ -8,7 +8,6 @@ import httpx
 import pytest
 
 from app import retrieval
-from app.config import settings
 from app.connectors.base import (
     AuthRequired,
     ConnectorError,
@@ -16,7 +15,7 @@ from app.connectors.base import (
     ScanRequest,
     TransientError,
 )
-from app.connectors.coop import CoopConnector, parse_item, parse_package
+from app.connectors.builtin.coop.connector import CoopConnector, parse_item, parse_package
 from app.connectors.http import PoliteClient
 from app.connectors.registry import CONNECTORS
 from app.db import SessionLocal
@@ -72,12 +71,15 @@ class FakeCoop:
 
 @pytest.fixture(autouse=True)
 def api_key(monkeypatch):
-    monkeypatch.setattr(settings, "coop_api_key", KEY)
+    monkeypatch.setenv("COOP_API_KEY", KEY)  # what the registry resolves for the end-to-end tests
 
 
-def connector(site, max_requests=6):
+def connector(site, max_requests=6, key=KEY):
     client = PoliteClient(["external.api.coop.se"], 0, transport=httpx.MockTransport(site))
-    return CoopConnector({"max_requests_per_scan": max_requests}, client)
+    coop = CoopConnector({"max_requests_per_scan": max_requests}, client)
+    if key:
+        coop.configure({"COOP_API_KEY": key})  # unit tests bypass the registry
+    return coop
 
 
 # ---- parsing ---------------------------------------------------------------------------
@@ -182,13 +184,12 @@ def test_search_pages_until_a_short_page_and_caps_results():
     assert len(short.prices) == 30 and len(site.calls) == 1 and not short.truncated
 
 
-def test_without_a_key_nothing_is_requested_and_it_is_not_a_failure(monkeypatch):
-    monkeypatch.setattr(settings, "coop_api_key", "")
+def test_without_a_key_nothing_is_requested_and_it_is_not_a_failure():
     site = FakeCoop()
-    snapshot = connector(site).scan("255700", "online", ScanRequest(query="havregryn"))
+    snapshot = connector(site, key=None).scan("255700", "online", ScanRequest(query="havregryn"))
     assert snapshot.effective_status == "auth_required" and site.calls == []
     with pytest.raises(AuthRequired):
-        connector(site).discover_stores("11120")
+        connector(site, key=None).discover_stores(postcode="11120")
 
 
 def test_untargeted_physical_and_non_numeric_store_make_no_request():
@@ -247,7 +248,7 @@ def test_only_the_api_host_is_ever_contacted():
 
 def test_a_postcode_resolves_to_the_serving_store():
     site = FakeCoop()
-    (store,) = connector(site).discover_stores("111 20")
+    (store,) = connector(site).discover_stores(postcode="111 20")
     assert (store.external_id, store.name) == ("255700", "Stora Coop Häggvik")
     (call,) = site.calls
     assert dict(call.url.params)["postCode"] == "11120" and call.headers["ocp-apim-subscription-key"] == KEY
@@ -256,9 +257,9 @@ def test_a_postcode_resolves_to_the_serving_store():
 def test_bad_postcodes_are_clear_errors():
     coop = connector(FakeCoop())
     with pytest.raises(ExtractionError, match="five-digit"):
-        coop.discover_stores("12")
+        coop.discover_stores(postcode="12")
     with pytest.raises(ExtractionError, match="No Coop store serves that postcode"):
-        coop.discover_stores("00000")
+        coop.discover_stores(postcode="00000")
 
 
 # ---- end to end through the API and worker ----------------------------------------------
@@ -301,7 +302,7 @@ def test_search_by_text_lists_products_and_creates_listings_per_store(coop):
 
 
 def test_a_missing_key_is_reported_without_pausing_or_counting_a_failure(coop, monkeypatch):
-    monkeypatch.setattr(settings, "coop_api_key", "")
+    monkeypatch.delenv("COOP_API_KEY")
     mid = monitor(coop, "generic_product", query="havregryn").json()["id"]
     assert check(coop, mid)["state"] == "auth_required" and coop.site.calls == []
     with SessionLocal() as db:

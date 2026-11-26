@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from sqlalchemy import select
 
+from app.connectors import registry
 from app.db import SessionLocal
 from app.discovery import process_discovery
 from app.models import Job, Monitor, utcnow
@@ -79,6 +80,7 @@ def run_delivery() -> bool:
 def main() -> None:
     while True:
         try:
+            registry.refresh()  # pick up connectors installed or removed through the API
             schedule_due()
             did_work = run_job()
             did_work = run_delivery() or did_work

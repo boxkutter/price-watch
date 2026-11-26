@@ -23,7 +23,10 @@ build-backend = "setuptools.build_meta"
 include = ["app*"]
 
 [tool.setuptools.package-data]
-"app.connectors" = ["manifests/*.yaml"]
+"app.connectors.builtin.citygross" = ["manifest.yaml"]
+"app.connectors.builtin.coop" = ["manifest.yaml"]
+"app.connectors.builtin.fixture" = ["manifest.yaml"]
+"app.connectors.builtin.ica" = ["manifest.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

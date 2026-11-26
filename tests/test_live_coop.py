@@ -19,7 +19,8 @@ EAN = "7300156599452"  # Coop Havregryn 1500 g
 
 def test_live_postcode_search_and_lookup():
     connector = CONNECTORS["se.coop"]
-    (store,) = connector.discover_stores("11120")  # neutral central-Stockholm postcode
+    connector.configure({"COOP_API_KEY": os.environ["COOP_API_KEY"]})
+    (store,) = connector.discover_stores(postcode="11120")  # neutral central-Stockholm postcode
     assert store.external_id.isdigit() and store.name
 
     found = connector.scan(store.external_id, "online", ScanRequest(query="havregryn"))

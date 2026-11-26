@@ -1,0 +1,48 @@
+# Everything the service needs to know about this connector, as data.
+# Copy this folder, change the id, and describe your store. Unknown keys are rejected.
+id: ex.exampleshop            # <2-10 letters>.<name>; globally unique. "test." ids may skip allowed_hosts
+name: Example Shop
+country: SE
+protocol_version: 1           # the connector protocol this was written for
+connector_version: 0.1.0
+description: A fictional shop used as the template for new connectors.
+author: your name
+
+# Default state. Installing never turns a connector on by itself; an administrator enables it.
+enabled: false
+access_review: unverified     # informational: approved | unverified | denied
+access_note: >-
+  Why it is acceptable to automate this site, and any caveats you found.
+
+implementation: connector:ExampleShopConnector   # module in this folder : class
+
+# What the connector can do. The service only offers monitors it supports.
+capabilities:
+  store_discovery: supported
+  product_search: supported
+  barcode_search: supported
+  online_prices: supported
+  physical_store_prices: unsupported
+  store_offers: unsupported    # live connectors never scan a whole store
+
+# The only hosts this connector may contact (HTTPS only). Bare host names or *.domain.
+allowed_hosts: [api.exampleshop.example.org]
+
+# Values the administrator provides (an API key, a token). Shown in the admin page; secret ones
+# are write-only and never returned, logged or stored in plain text.
+settings:
+  - name: EXAMPLESHOP_TOKEN
+    label: Example Shop API token
+    description: Created in your Example Shop account under Developer settings.
+    secret: true
+    required: true
+
+# Inputs a store lookup needs (none here). Coop, for example, declares a postcode.
+store_discovery_inputs: []
+
+# Politeness. The service enforces these for you; stay well inside what a person could do by hand.
+minimum_request_interval_seconds: 3     # between requests to the site
+minimum_monitor_interval_minutes: 60    # how often one monitor may check
+max_requests_per_scan: 6
+max_requests_per_day: 400
+cache_seconds: 600                      # identical lookups within this window share one fetch

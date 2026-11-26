@@ -1,38 +1,20 @@
 """Never spammy: our API limits, per-user quotas, and how we behave toward a retailer."""
 from datetime import timedelta
-from types import SimpleNamespace
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app import connector_state, retrieval
 from app.config import settings
-from app.connectors.registry import CONNECTORS
 from app.db import SessionLocal
 from app.main import app
 from app.models import ConnectorState, Store, aware, utcnow
 from app.monitoring import next_due
 from app.ratelimit import SlidingWindow
 from app.worker import run_job
-from tests.test_citygross import FakeSite, connector
-from tests.test_regressions import admin_client
 
 AXA = "7310130321085"          # 1,5KG AXA havregryn, no promotion
 GYLLEN = "100132394_ST"        # 1KG Gyllenhamars, single-item promotion
-
-
-@pytest.fixture
-def cg(fresh_db, monkeypatch):
-    retrieval.clear_cache()
-    site = FakeSite()
-    monkeypatch.setitem(CONNECTORS, "se.citygross", connector(site))
-    with SessionLocal.begin() as db:
-        store = Store(retailer_id="se.citygross", external_id="3204", name="City Gross Borås")
-        db.add(store)
-        db.flush()
-        store_id = store.id
-    return SimpleNamespace(site=site, client=admin_client(), store_id=store_id)
 
 
 def job_of(cg, response):

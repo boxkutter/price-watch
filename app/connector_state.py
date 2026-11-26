@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.connectors import registry
 from app.models import ConnectorState, aware, utcnow
 
 FAILURE_PAUSE_THRESHOLD = 5      # consecutive extraction failures before pausing for review
@@ -25,10 +26,29 @@ def get_state(db: Session, retailer_id: str) -> ConnectorState:
     return state
 
 
+def is_enabled(db: Session, retailer_id: str) -> bool:
+    """Effective state: the administrator's override if set, else the manifest default.
+
+    A connector that is not installed, has no implementation, or failed to load is never enabled.
+    """
+    entry = registry.entry(retailer_id)
+    if entry is None or entry.instance is None or entry.error:
+        return False
+    state = db.get(ConnectorState, retailer_id)
+    return state.enabled if state is not None and state.enabled is not None else entry.manifest.enabled
+
+
+def set_enabled(db: Session, retailer_id: str, enabled: bool | None) -> None:
+    state = get_state(db, retailer_id)
+    state.enabled, state.updated_at = enabled, utcnow()
+
+
 def refusal(db: Session, retailer_id: str, daily_limit: int,
             now: datetime | None = None) -> tuple[str, str] | None:
     """(status, detail) if a request must not be made right now, else None."""
     now = now or utcnow()
+    if not is_enabled(db, retailer_id):
+        return "disabled", "The connector is disabled or not installed"
     state = get_state(db, retailer_id)
     if state.state == "paused":
         return "paused", state.reason or "Paused for review"

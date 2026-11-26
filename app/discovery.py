@@ -1,10 +1,8 @@
 """Store directory refresh, run by the worker so only one process contacts retailers."""
-import inspect
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import connector_state
+from app import connector_admin, connector_state
 from app.connectors.base import AccessBlocked, AuthRequired, ExtractionError, RateLimited
 from app.connectors.registry import connector_for
 from app.models import Job, Store
@@ -21,11 +19,10 @@ def process_discovery(db: Session, job: Job) -> dict:
     if refused:
         return {"status": refused[0], "detail": refused[1]}
     before = getattr(getattr(connector, "client", None), "requests_made", 0)
-    options = {}
-    if "postcode" in inspect.signature(connector.discover_stores).parameters:
-        options["postcode"] = (job.payload or {}).get("postcode")
+    inputs = (job.payload or {}).get("inputs") or {}
+    connector_admin.apply_config(db, retailer_id, connector)
     try:
-        stores = connector.discover_stores(**options)
+        stores = connector.discover_stores(**inputs)
     except AuthRequired as exc:
         return {"status": "auth_required", "detail": str(exc)}
     except AccessBlocked as exc:
@@ -36,9 +33,8 @@ def process_discovery(db: Session, job: Job) -> dict:
         connector_state.start_cooldown(db, retailer_id, exc.retry_after)
         return {"status": "rate_limited", "detail": "Retailer asked us to slow down"}
     except ExtractionError as exc:
-        # A bad postcode is the caller's mistake, not a layout failure, so it is not counted.
-        if not options.get("postcode") or "postcode" not in str(exc).lower():
-            connector_state.record_failure(db, retailer_id)
+        # Discovery is operator-triggered with operator-supplied inputs, so a failure may be a
+        # mistyped input rather than a layout change; it does not count towards pausing.
         return {"status": "extraction_failed", "detail": str(exc)}
     finally:
         made = getattr(getattr(connector, "client", None), "requests_made", 0) - before
