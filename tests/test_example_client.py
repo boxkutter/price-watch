@@ -243,3 +243,22 @@ def test_the_example_client_can_scan_a_barcode_with_the_camera(fresh_db):
     assert script.status_code == 200 and script.headers["content-type"].startswith("text/javascript")
     assert len(script.content) > 200_000 and b"fetch(" not in script.content and b"eval(" not in script.content
     assert "max-age" in script.headers["cache-control"]
+
+
+def test_the_example_client_has_a_sign_in_page_and_an_invitation_form(fresh_db):
+    page = TestClient(app).get("/demo").text
+    assert 'id="signin-form"' in page and 'type="password"' in page and 'autocomplete="current-password"' in page
+    assert 'id="accept-form"' in page and 'minlength="16"' in page              # an invitation, then a password
+    assert 'id="signout"' in page and "priceWatchToken" in page                 # a session is kept on the phone
+    assert 'id="use-example"' in page                                           # the admin-opened example user remains
+
+
+def test_accepting_an_invitation_returns_the_email_so_the_page_can_sign_the_new_user_in(fresh_db):
+    admin = admin_client()
+    invited = admin.post("/v1/admin/invitations", json={"email": "New.Person@Example.invalid"}).json()
+    accepted = TestClient(app).post("/v1/auth/accept-invitation", json={
+        "token": invited["invitation_token"], "password": "a-long-enough-password"})
+    assert accepted.status_code == 201 and accepted.json()["email"] == "new.person@example.invalid"
+    signed_in = TestClient(app).post("/v1/auth/login", json={
+        "email": accepted.json()["email"], "password": "a-long-enough-password"})
+    assert signed_in.status_code == 200

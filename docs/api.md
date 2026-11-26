@@ -8,7 +8,7 @@ limits, the workflows with examples, events and webhooks, and a full endpoint re
 - **Machine-readable spec:** `/openapi.json` (also committed as [`openapi.json`](openapi.json))
 - **This guide, served by the app:** `/api-guide`; a short index for agents: `/llms.txt`
 - **A working client you can copy:** [`examples/shopper_client.py`](../examples/shopper_client.py)
-- **See it in action:** the example client page at `/demo` (sign in on `/admin` first)
+- **See it in action:** the example client page at `/demo` (sign in there with your email and password, or paste an invitation code to create your account; it works on a phone and can scan a barcode with the camera)
 
 The project is in development. There is no compatibility promise yet: paths, fields and behaviour
 may change.
@@ -58,7 +58,7 @@ token. The person accepts it and signs in:
 ```bash
 curl -X POST $BASE/v1/auth/accept-invitation -H 'Content-Type: application/json' \
   -d '{"token": "<invitation token>", "password": "a password of at least 16 characters"}'
-# 201 {"user_id": "..."}
+# 201 {"user_id": "...", "email": "you@example.org"}
 
 curl -X POST $BASE/v1/auth/login -H 'Content-Type: application/json' \
   -d '{"email": "you@example.org", "password": "..."}'
@@ -591,7 +591,7 @@ Not available to client tokens; listed so the full surface is documented.
 | GET | `/v1/admin/audit` | Recent audit log |
 | GET | `/v1/admin/jobs` | Recent jobs of all users |
 | POST | `/v1/admin/jobs/{job_id}/retry` | Retry a finished job that did not succeed |
-| POST | `/v1/admin/example-user` | Open an example-user session for the `/demo` page |
+| POST | `/v1/admin/example-user` | Open an example-user session for the `/demo` page (for testing: the "Open as the example user" button there) |
 | DELETE | `/v1/admin/example-user/data` | Reset the example user's data |
 | GET | `/v1/admin/connectors` | Connectors with status, settings, usage |
 | POST | `/v1/admin/connectors/{retailer_id}/enable` | Enable a connector |

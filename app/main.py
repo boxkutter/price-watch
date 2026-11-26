@@ -614,7 +614,7 @@ def accept_invitation(body: AcceptRequest, db: Session = Depends(get_db)):
     audit(db, user.id, "user.created", "user", user.id)
     invite.used_at = utcnow()
     db.commit()
-    return {"user_id": user.id}
+    return {"user_id": user.id, "email": user.email}
 
 
 @app.get("/v1/me")

@@ -105,6 +105,9 @@ button.primary{background:#0b6b3a;color:#fff;border:0;border-radius:8px;padding:
  .toolbar{gap:.6rem}.toolbar select{max-width:100%}
  #lightbox img{max-height:75vh}
 }
+.signin{max-width:26rem;margin:1.2rem auto;padding:1.2rem 1.3rem;border:1px solid #dce1e7;border-radius:12px;background:#fff}
+.signin form{display:grid;gap:.8rem}.signin label{display:grid;gap:.25rem;font-size:.9rem;color:#44505c}.signin input{font:inherit;padding:.6rem .7rem;border:1px solid #b9c3cf;border-radius:8px;min-height:44px;box-sizing:border-box;width:100%;color:#18212b}
+.signin button.primary{min-height:46px}.signin details.invite{margin-top:1rem}.signin details.invite>summary{cursor:pointer;color:#0b57a8}
 code,pre{background:#f1f4f7;border-radius:4px}code{padding:0 .25rem}pre{padding:.6rem;overflow:auto;font-size:.85rem}
 .err{color:#a1281a}.chip{border:1px solid #ccd3db;border-radius:1rem;background:#fff;padding:.15rem .6rem;font-size:.85rem}
 details.group{border:1px solid #dce1e7;border-radius:8px;margin:.4rem 0;padding:.3rem .7rem}details.group summary{cursor:pointer;font-weight:600}details.group[open] summary{margin-bottom:.4rem}details.group .list{max-height:18rem;overflow:auto}
@@ -112,11 +115,28 @@ label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid
 </style>
 <header>
  <div><h1>Price Watch</h1>
- <div class="muted small" id="who">Signing in as the example user...</div></div>
- <div class="row"><a href="/admin">Admin page</a><a href="/docs" target="_blank" rel="noopener">API reference</a>
-  <button id="reset">Reset example data</button></div>
+ <div class="muted small" id="who">Not signed in</div></div>
+ <div class="row"><a href="/admin" id="adminlink" hidden>Admin page</a><a href="/docs" target="_blank" rel="noopener">API reference</a>
+  <button id="reset" hidden>Reset example data</button><button id="signout" hidden>Sign out</button></div>
 </header>
-<p id="gate" class="err" hidden>Sign in on the <a href="/admin">admin page</a> first, then open this page from there. It opens a session as a regular example user.</p>
+<section id="signin" class="signin" hidden>
+ <h2>Sign in</h2>
+ <form id="signin-form">
+  <label>Email<input name="email" type="email" autocomplete="username" autocapitalize="off" required></label>
+  <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+  <button class="primary">Sign in</button>
+ </form>
+ <p id="signin-msg" class="err" role="alert"></p>
+ <details class="invite"><summary>I have an invitation</summary>
+  <p class="muted small">Paste the invitation code you were sent and choose a password of at least 16 characters (a few words work well).</p>
+  <form id="accept-form">
+   <label>Invitation code<input name="token" autocomplete="off" autocapitalize="off" required></label>
+   <label>Choose a password<input name="password" type="password" autocomplete="new-password" minlength="16" required></label>
+   <button class="primary">Create my account</button>
+  </form>
+ </details>
+ <p id="example-row" class="muted small" hidden>You are signed in to the admin page in this browser. <button type="button" id="use-example" class="btn-sm">Open as the example user</button></p>
+</section>
 <p id="msg" role="status" class="muted"></p>
 <main id="app" hidden>
 <input type="file" id="photo-input" accept="image/*" hidden>
@@ -198,15 +218,19 @@ const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const adminToken=sessionStorage.getItem('retailToken');
+const TOKEN_KEY='priceWatchToken';let mode='person',refreshTimer=null;
 let retailerLogos={},userToken=null,clientToken=null,stores=[],mine=new Set(),monitors=[],names={},events=[],callLog=[],busy=false,retailerNames={},openGroups=new Set(),groupFilter={},storesHtml='';
 const say=t=>{$('msg').textContent=t||''};
 
 // ---- the client's API helper: user token + client token on every call -----------------------
+// the headers every request of a signed-in person carries (the client token only in the example session)
+const authHeaders=extra=>({...extra,'Authorization':'Bearer '+userToken,...(clientToken?{'X-Client-Token':clientToken}:{})});
 async function call(method,path,body){
  const t0=performance.now();
- const res=await fetch(path,{method,headers:{'Content-Type':'application/json','Authorization':'Bearer '+userToken,'X-Client-Token':clientToken},body:body===undefined?undefined:JSON.stringify(body)});
+ const res=await fetch(path,{method,headers:authHeaders({'Content-Type':'application/json'}),body:body===undefined?undefined:JSON.stringify(body)});
  const data=res.status===204?{}:await res.json().catch(()=>({}));
  callLog.unshift({at:new Date(),method,path,status:res.status,ms:Math.round(performance.now()-t0)});callLog.length=80;renderLog();
+ if(res.status===401&&userToken){showSignin('Your session ended. Sign in again.');throw Error('Signed out')}
  if(!res.ok){const e=Error(data.message||('HTTP '+res.status));e.status=res.status;e.data=data;throw e}
  return data;
 }
@@ -227,7 +251,7 @@ document.addEventListener('click',e=>{const g=e.target.closest('[data-goto]');if
 $('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.tab==='history'&&!hist.productId)renderHistory();if(b.dataset.tab==='add'&&!wordsLoaded)loadWords().catch(err=>say(err.message));
  document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id==='tab-'+b.dataset.tab))};
-$('reset').onclick=async()=>{if(!adminToken){say('Sign in on the admin page first');return}
+$('reset').onclick=async()=>{if(!adminToken||mode!=='example'){say('Only the example user can be reset');return}
  if(!confirm('Forget everything the example user did (watchlist, activity, stores)? The shared price history stays.'))return;
  try{const r=await admin('DELETE','/v1/admin/example-user/data');say(`Reset: ${r.monitors} monitor(s), ${r.stores} store(s) cleared`);if(userToken)await loadAll()}catch(e){say(e.message)}};
 
@@ -543,7 +567,7 @@ async function afterPhoto(productId,image){
 }
 async function uploadPhoto(productId,file){
  if(!file.type.startsWith('image/')){say('Choose an image file.');return}
- const res=await fetch('/v1/products/'+productId+'/image',{method:'PUT',headers:{'Content-Type':file.type,'Authorization':'Bearer '+userToken,'X-Client-Token':clientToken},body:file});
+ const res=await fetch('/v1/products/'+productId+'/image',{method:'PUT',headers:authHeaders({'Content-Type':file.type}),body:file});
  const data=await res.json().catch(()=>({}));
  callLog.unshift({at:new Date(),method:'PUT',path:'/v1/products/'+productId+'/image',status:res.status,ms:0});renderLog();
  if(!res.ok)throw Error(data.message||('HTTP '+res.status));
@@ -949,14 +973,49 @@ function renderActivity(){
 }
 function renderLog(){$('log').innerHTML='<table><tr><th>When</th><th>Request</th><th>Status</th><th>ms</th></tr>'+callLog.map(c=>`<tr><td class="muted small">${c.at.toLocaleTimeString()}</td><td><code>${esc(c.method)} ${esc(c.path)}</code></td><td class="${c.status>=400?'err':''}">${c.status}</td><td class="muted small">${c.ms}</td></tr>`).join('')+'</table>'}
 
+// ---- signing in and out ---------------------------------------------------------------------
+function showSignin(message){
+ userToken=null;clientToken=null;mode='person';localStorage.removeItem(TOKEN_KEY);
+ if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null}
+ $('app').hidden=true;$('signin').hidden=false;$('signout').hidden=true;$('reset').hidden=true;$('adminlink').hidden=true;
+ $('example-row').hidden=!adminToken;$('who').textContent='Not signed in';$('signin-msg').textContent=message||'';
+}
+async function enter(){
+ const me=await call('GET','/v1/me');
+ $('who').textContent=mode==='example'?`${me.email} · example user (opened from the admin page)`:`${me.email}${me.is_admin?' · administrator':''}`;
+ $('adminlink').hidden=!me.is_admin;$('signout').hidden=false;$('reset').hidden=mode!=='example';
+ $('signin').hidden=true;$('app').hidden=false;$('signin-msg').textContent='';
+ await loadAll();if(!refreshTimer)refreshTimer=setInterval(quickRefresh,15000);
+}
+async function signIn(email,password){
+ const res=await fetch('/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+ const data=await res.json().catch(()=>({}));
+ if(!res.ok)throw Error(res.status===429?'Too many attempts. Wait a few minutes and try again.':res.status===401?'That email and password do not match.':(data.message||'Could not sign in'));
+ userToken=data.access_token;mode='person';localStorage.setItem(TOKEN_KEY,userToken);
+ await enter();
+}
+$('signin-form').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);$('signin-msg').textContent='';
+ try{await signIn(f.get('email').trim(),f.get('password'));e.target.reset()}catch(err){if(err.message!=='Signed out')$('signin-msg').textContent=err.message}};
+$('accept-form').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);$('signin-msg').textContent='';
+ try{
+  const res=await fetch('/v1/auth/accept-invitation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:f.get('token').trim(),password:f.get('password')})});
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok)throw Error(res.status===400?'That invitation code is not valid or has expired. Ask for a new one.':res.status===409?'That account already exists. Sign in instead.':(data.message||'Could not create the account'));
+  await signIn(data.email,f.get('password'));e.target.reset();
+ }catch(err){if(err.message!=='Signed out')$('signin-msg').textContent=err.message}};
+$('use-example').onclick=async()=>{
+ try{const s=await admin('POST','/v1/admin/example-user');userToken=s.user_token;clientToken=s.client_token;mode='example';await enter()}
+ catch(err){showSignin('Could not open the example session: '+err.message)}};
+$('signout').onclick=async()=>{
+ try{if(mode==='person'&&userToken)await fetch('/v1/auth/logout',{method:'POST',headers:authHeaders()})}catch(_){}
+ showSignin('You are signed out.')};
+
 // ---- start ---------------------------------------------------------------------------------
 (async()=>{
- if(!adminToken){$('gate').hidden=false;$('who').textContent='';return}
- try{
-  const s=await admin('POST','/v1/admin/example-user');userToken=s.user_token;clientToken=s.client_token;
-  $('who').textContent=`${s.user.email} · regular user · client permissions: ${s.scopes.join(', ')}`;
-  $('app').hidden=false;await loadAll();setInterval(quickRefresh,15000);
- }catch(err){$('gate').hidden=false;$('gate').textContent='Could not open the example session: '+err.message+'. Sign in on the admin page first.'}
+ const saved=localStorage.getItem(TOKEN_KEY);
+ if(!saved)return showSignin();
+ userToken=saved;
+ try{await enter()}catch(err){if(err.message!=='Signed out')showSignin('Sign in to continue.')}
 })();
 </script>
 </html>
