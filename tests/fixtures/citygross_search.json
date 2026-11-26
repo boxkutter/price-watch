@@ -320,9 +320,44 @@
      "availableTo": null,
      "id": "3204"
     }
+   },
+   {
+    "id": "100142800_KG",
+    "gtin": "2090219100002",
+    "sellable": true,
+    "url": "/matvaror/frukt-och-gront/frukt/äpple-ingrid-marie-p100142800_KG",
+    "name": "Äpple Ingrid Marie",
+    "subtitle": "CA140G KLASS 1",
+    "descriptiveSize": "CA140G",
+    "netContent": {
+     "unitOfMeasure": 0,
+     "value": 140
+    },
+    "productStoreDetails": {
+     "p_has_price": true,
+     "stockStatus": 1,
+     "prices": {
+      "currentPrice": {
+       "price": 34.95,
+       "unit": "KGM",
+       "comparativePrice": 34.95,
+       "comparativePriceUnit": "KGM"
+      },
+      "ordinaryPrice": {
+       "price": 34.95,
+       "unit": "KGM",
+       "comparativePrice": 34.95,
+       "comparativePriceUnit": "KGM"
+      },
+      "memberPrice": null,
+      "promotions": [],
+      "hasDiscount": false,
+      "hasPromotion": false
+     }
+    }
    }
   ],
-  "totalCount": 4,
+  "totalCount": 5,
   "pageSize": 40,
   "currentPage": 0,
   "totalPages": 1

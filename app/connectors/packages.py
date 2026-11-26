@@ -65,7 +65,7 @@ class PackageInfo:
 
 
 def installed_dir() -> Path:
-    path = Path(settings.connectors_dir)
+    path = Path(settings.installed_connectors_dir)
     path.mkdir(parents=True, exist_ok=True)
     return path
 

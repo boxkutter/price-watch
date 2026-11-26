@@ -9,21 +9,36 @@ from pathlib import Path
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from argon2.exceptions import VerifyMismatchError
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import delete, func, select, text, tuple_
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import connector_admin, connector_state
+from app import connector_admin, connector_state, declared_stores
 from app.audit import record as audit
+from app.barcodes import (
+    BarcodeConflict,
+    BarcodeError,
+    BarcodeTaken,
+    clean_barcode,
+    clear_barcode,
+    merge_products,
+    product_for_gtin,
+    product_summary,
+    set_barcode,
+)
+from app.compare import known_rows, summarize
 from app.config import settings
 from app.connectors import packages, registry
+from app.connectors.urls import match_product_url
 from app.db import get_db
+from app.example_user import open_session as open_example_session
+from app.example_user import reset_data as reset_example_data
 from app.gtin import normalize_gtin
 from app.models import (
     AuditLog,
@@ -46,10 +61,13 @@ from app.models import (
     Product,
     Store,
     User,
+    UserStore,
     Webhook,
     aware,
     utcnow,
 )
+from app.openapi import install as install_openapi
+from app.products import delete_monitor_permanently, existing_monitor, parse_threshold
 from app.ratelimit import SlidingWindow
 from app.security import (
     Principal,
@@ -65,6 +83,7 @@ from app.security import (
 from app.webhooks import validate_destination
 
 app = FastAPI(title="Retail Monitor", version="0.1.0")
+install_openapi(app)
 # Per-credential (or per-address, when unauthenticated) request cap. It is a backstop: the
 # expensive operations that can reach retailers also have their own quotas below.
 api_limiter = SlidingWindow(settings.api_rate_limit_per_minute)
@@ -110,14 +129,54 @@ async def validation_error(request: Request, exc: RequestValidationError):
                                  "details": details, "request_id": request.state.request_id})
 
 
-ADMIN_PAGE = Path(__file__).resolve().parent.parent / "static" / "admin.html"
+STATIC = Path(__file__).resolve().parent.parent / "static"
 
 
 @app.get("/admin", include_in_schema=False)
 def admin_page():
-    return FileResponse(ADMIN_PAGE)
+    return FileResponse(STATIC / "admin.html")
 
 
+LLMS_TXT = """# Retail Monitor
+
+> Tracks prices and promotions for the specific products you choose, across stores. A JSON REST API.
+
+## Docs
+
+- [API guide](/api-guide): authentication, asynchronous jobs, limits, workflows, events, webhooks, endpoint reference (Markdown)
+- [OpenAPI spec](/openapi.json): the machine-readable description of every endpoint
+- [Interactive reference](/docs)
+
+## Key facts for an agent
+
+- Send `Authorization: Bearer <user token>` on every /v1 call; an app also sends `X-Client-Token`.
+- Anything that contacts a store returns 202 with a job: poll GET /v1/jobs/{job_id} every 1-2 seconds.
+- Money is a decimal string, times are ISO 8601 UTC, unknown is null (never zero).
+- Prices are per store: always send store_id. Never call /v1/admin/*.
+- Errors are {code, message, details, request_id}. On 429 wait Retry-After. Use Idempotency-Key on creating calls.
+- To try things without real stores, use the Demo Shop stores (their prices move every minute).
+"""
+
+
+@app.get("/api-guide", include_in_schema=False)
+def api_guide():
+    """The API guide (docs/api.md), served by the app so a deployed instance documents itself."""
+    return PlainTextResponse((STATIC.parent / "docs" / "api.md").read_text(encoding="utf-8"),
+                             media_type="text/markdown; charset=utf-8")
+
+
+@app.get("/llms.txt", include_in_schema=False)
+def llms_txt():
+    return PlainTextResponse(LLMS_TXT, media_type="text/plain; charset=utf-8")
+
+
+@app.get("/demo", include_in_schema=False)
+def demo_page():
+    """The example client: a regular user working through the public API (see app/example_user.py)."""
+    return FileResponse(STATIC / "demo.html")
+
+
+LIVE_LOOKUP_KINDS = ("search", "compare")  # share one per-user budget of live retailer lookups
 RETRYABLE_JOB_STATES = {"failed", "partial", "paused", "rate_limited", "access_blocked",
                         "extraction_failed", "not_found", "invalid_data", "auth_required"}
 USER_SCOPES = ["catalogue:read", "monitors:read", "monitors:write", "events:read",
@@ -176,6 +235,27 @@ class SettingValue(BaseModel):
     value: str = Field(min_length=1, max_length=2000)
 
 
+class BarcodeLinkRequest(BaseModel):
+    gtin: str = Field(min_length=8, max_length=24)
+    merge: bool = False
+
+
+class CompareRequest(BaseModel):
+    gtin: str = Field(min_length=8, max_length=24)
+    here_store_id: str | None = None
+    store_ids: list[str] | None = Field(default=None, max_length=50)
+    refresh: bool = True
+
+
+class ProductLinkRequest(BaseModel):
+    url: str = Field(min_length=10, max_length=2000)
+    store_id: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    interval_minutes: int = Field(default=60, ge=15, le=10080)
+    maximum_price: str | None = None
+    notify_existing_offers: bool = False
+
+
 class WebhookRequest(BaseModel):
     url: str
 
@@ -210,12 +290,40 @@ class GtinMappingRequest(BaseModel):
     gtin: str
 
 
-def monitor_dict(row: Monitor) -> dict:
+def monitor_dict(row: Monitor, db: Session) -> dict:
+    """A monitor as a client wants it: the product, its barcode, and the latest price and how it
+    moved, so a watchlist can be drawn from this one response."""
+    product, listing, latest = None, None, None
+    if row.type == "exact_product":
+        listing = db.get(Listing, str(row.conditions.get("listing_id")))
+        product = db.get(Product, listing.product_id) if listing and listing.product_id else None
+        seen = db.scalars(select(PriceObservation).where(
+            PriceObservation.listing_id == (listing.id if listing else None),
+            PriceObservation.account_id.is_(None), PriceObservation.eligibility == "public")
+            .order_by(PriceObservation.observed_at.desc()).limit(2)).all() if listing else []
+        if seen and seen[0].current_price is not None:
+            latest = {"current_price": str(seen[0].current_price), "currency": seen[0].currency,
+                      "previous_price": str(seen[1].current_price) if len(seen) > 1 and seen[1].current_price is not None else None,
+                      "unit_price": ({"amount": str(seen[0].unit_price), "unit": seen[0].unit_price_unit}
+                                     if seen[0].unit_price is not None else None),
+                      "availability": seen[0].availability, "observed_at": seen[0].observed_at}
+    store = db.get(Store, row.store_id)
+    return {"product_id": product.id if product else None,
+            "product_name": listing.name if listing else None,
+            "store_name": store.name if store else None,
+            "retailer_id": store.retailer_id if store else None,
+            "latest": latest,
+            "barcode": ({"gtin14": product.gtin14, "source": product.gtin_source}
+                        if product and product.gtin14 else None),
+            **_monitor_fields(row)}
+
+
+def _monitor_fields(row: Monitor) -> dict:
     return {"id": row.id, "name": row.name, "type": row.type, "store_id": row.store_id,
             "channel": row.channel, "conditions": row.conditions, "enabled": row.enabled,
             "interval_minutes": row.interval_minutes,
             "last_success_at": row.last_success_at, "next_due_at": row.next_due_at,
-            "baseline_complete": row.baseline_complete}
+            "baseline_complete": row.baseline_complete, "removed_at": row.removed_at}
 
 
 def public_listing(db: Session, listing_id: str) -> Listing:
@@ -516,6 +624,20 @@ def resume_connector(retailer_id: str, db: Session = Depends(get_db), p: Princip
     db.commit()
 
 
+@app.post("/v1/admin/example-user", tags=["Administration"])
+def example_user_session(db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Open a session as the example user (a regular, non-admin user with a scoped API client) for
+    the /demo page. Creates the user the first time, revokes the previous example client credential
+    and returns a fresh user token and client token, both shown only here."""
+    return open_example_session(db, p.user.id, USER_SCOPES)
+
+
+@app.delete("/v1/admin/example-user/data", tags=["Administration"])
+def reset_example_user(db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Forget everything the example user did (monitors, events, stores, lookups). The catalogue stays."""
+    return reset_example_data(db, p.user.id)
+
+
 @app.get("/v1/admin/connectors")
 def admin_connectors(db: Session = Depends(get_db), p: Principal = Depends(admin)):
     """Every installed connector with its state, settings (never values) and usage, plus any
@@ -612,6 +734,7 @@ def install_connector_package(upload_id: str, db: Session = Depends(get_db),
         db.add(ConnectorPackage(retailer_id=retailer_id, version=info.manifest.connector_version,
                                 sha256=info.sha256, installed_by=p.user.id))
         connector_state.set_enabled(db, retailer_id, False)
+    declared_stores.seed(db)
     audit(db, p.user.id, "connector.installed", "connector", retailer_id,
           {"version": info.manifest.connector_version, "sha256": info.sha256,
            "replaced": info.replaces is not None})
@@ -693,7 +816,8 @@ def discover_stores(retailer_id: str, body: dict[str, str] | None = None,
 def stores(db: Session = Depends(get_db), p: Principal = Depends(principal)):
     p.require("catalogue:read")
     return {"items": [{"id": s.id, "name": s.name, "retailer_id": s.retailer_id,
-                       "country": s.country} for s in db.scalars(select(Store))]}
+                       "country": s.country}
+                      for s in db.scalars(select(Store).order_by(Store.retailer_id, Store.name))]}
 
 
 @app.get("/v1/retailers/{retailer_id}/stores")
@@ -741,11 +865,12 @@ def create_search_job(body: SearchRequest, db: Session = Depends(get_db),
         return {"job_id": job.id, "status": job.state,
                 "status_url": f"/v1/jobs/{job.id}"}
     pending = db.scalar(select(func.count()).select_from(Job).where(
-        Job.owner_id == p.user.id, Job.kind == "search", Job.state.in_(["queued", "running"])))
+        Job.owner_id == p.user.id, Job.kind.in_(LIVE_LOOKUP_KINDS),
+        Job.state.in_(["queued", "running"])))
     if pending >= settings.max_pending_searches_per_user:
         raise HTTPException(429, "Too many searches in progress", headers={"Retry-After": "60"})
     recent = db.scalar(select(func.count()).select_from(Job).where(
-        Job.owner_id == p.user.id, Job.kind == "search",
+        Job.owner_id == p.user.id, Job.kind.in_(LIVE_LOOKUP_KINDS),
         Job.created_at >= utcnow() - timedelta(hours=1)))
     if recent >= settings.max_searches_per_hour:
         raise HTTPException(429, "Search limit reached for this hour", headers={"Retry-After": "600"})
@@ -790,6 +915,7 @@ def get_product(product_id: str, db: Session = Depends(get_db),
     listings = db.scalars(select(Listing).where(Listing.product_id == product.id)).all()
     return {"id": product.id, "name": product.name, "brand": product.brand,
             "gtin14": product.gtin14, "verified": product.verified,
+            "gtin_source": product.gtin_source, "gtin_set_at": product.gtin_set_at,
             "package_quantity": {"value": str(product.package_value), "unit": product.package_unit}
             if product.package_value is not None else None,
             "listings": [{"id": x.id, "retailer_id": x.retailer_id, "sku": x.sku,
@@ -831,19 +957,20 @@ def product_history(product_id: str, db: Session = Depends(get_db),
 
 @app.post("/v1/admin/products/{product_id}/verified-gtin")
 def verify_gtin(product_id: str, body: GtinMappingRequest,
-                      db: Session = Depends(get_db), p: Principal = Depends(admin)):
+                db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Administrator override: link a barcode to a product (same rules and provenance as a person
+    linking one, recorded as source "admin")."""
     product = db.get(Product, product_id)
     if not product:
         raise HTTPException(404, "Product not found")
     try:
-        normalized = normalize_gtin(body.gtin)
-    except ValueError as exc:
+        set_barcode(db, product, clean_barcode(body.gtin), "admin", p.user.id)
+    except BarcodeError as exc:
         raise HTTPException(422, str(exc)) from exc
-    other = db.scalar(select(Product.id).where(Product.gtin14 == normalized, Product.id != product_id))
-    if other:
-        raise HTTPException(409, "GTIN is already mapped")
-    product.gtin14 = normalized
-    product.verified = True
+    except BarcodeTaken as exc:
+        raise HTTPException(409, "GTIN is already mapped") from exc
+    except BarcodeConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
     audit(db, p.user.id, "product.gtin_verified", "product", product.id)
     db.commit()
     return {"id": product.id, "gtin14": product.gtin14, "verified": True}
@@ -916,7 +1043,7 @@ def create_monitor(body: MonitorRequest, db: Session = Depends(get_db),
     digest = request_digest(body.model_dump())
     existing_id = idempotent_resource(db, p.user.id, "create_monitor", idempotency_key, digest)
     if existing_id:
-        return monitor_dict(db.get(Monitor, existing_id))
+        return monitor_dict(db.get(Monitor, existing_id), db)
     store = db.get(Store, body.store_id)
     if not store:
         raise HTTPException(404, "Store not found")
@@ -943,6 +1070,9 @@ def create_monitor(body: MonitorRequest, db: Session = Depends(get_db),
             raise HTTPException(422, "Listing is not in the selected store and channel")
     if body.type == "generic_product" and not str(body.conditions.get("query", "")).strip():
         raise HTTPException(422, "query required")
+    if body.type == "generic_product" and retailer["capabilities"].get("product_search") != "supported":
+        raise HTTPException(422, "This retailer cannot be searched, so a search monitor is not "
+                                 "possible; add its products by their page link")
     if len(str(body.conditions.get("query", ""))) > 100:
         raise HTTPException(422, "query must be at most 100 characters")
     allowed_conditions = {
@@ -1001,15 +1131,104 @@ def create_monitor(body: MonitorRequest, db: Session = Depends(get_db),
         existing_id = idempotent_resource(db, p.user.id, "create_monitor", idempotency_key, digest)
         if not existing_id:
             raise
-        return monitor_dict(db.get(Monitor, existing_id))
-    return monitor_dict(monitor)
+        return monitor_dict(db.get(Monitor, existing_id), db)
+    return monitor_dict(monitor, db)
+
+
+@app.post("/v1/monitors/from-url", status_code=202)
+def add_product_from_url(body: ProductLinkRequest, response: Response,
+                         db: Session = Depends(get_db), p: Principal = Depends(principal),
+                         idempotency_key: str | None = Header(None)):
+    """Start monitoring a product from its page link on a supported store.
+
+    The link is only read for the store's own product id; the page is never fetched. A job looks
+    the product up once and, if the store lists it, creates the product and its monitor together
+    (poll `status_url`; the result holds `monitor_id` and the product). If you already monitor the
+    product, the existing monitor is returned straight away with 200.
+    """
+    p.require("monitors:write")
+    digest = request_digest(body.model_dump())
+    existing_id = idempotent_resource(db, p.user.id, "add_product", idempotency_key, digest)
+    if existing_id:
+        job = db.get(Job, existing_id)
+        return {"job_id": job.id, "status": job.state, "status_url": f"/v1/jobs/{job.id}"}
+    try:
+        threshold = parse_threshold(body.maximum_price)
+        matches = [(info, sku) for info in registry.retailers() if info["product_urls"]
+                   if (sku := match_product_url(info["product_urls"], body.url))]
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if not matches:
+        supported = ", ".join(i["name"] for i in registry.retailers() if i["product_urls"])
+        raise HTTPException(422, "That link is not a product page on a supported store"
+                                 f" (supported: {supported or 'none'})")
+    retailer, sku = matches[0]
+    retailer_id = retailer["id"]
+    if not connector_state.is_enabled(db, retailer_id):
+        raise HTTPException(422, f"The {retailer['name']} connector is disabled or not installed")
+    if retailer["capabilities"].get("online_prices") != "supported":
+        raise HTTPException(422, f"{retailer['name']} online prices are not supported")
+    if body.interval_minutes < retailer["minimum_monitor_interval_minutes"]:
+        raise HTTPException(422, f"The minimum check interval for {retailer['name']} is "
+                                 f"{retailer['minimum_monitor_interval_minutes']} minutes")
+    if body.store_id:
+        store = db.get(Store, body.store_id)
+        if not store:
+            raise HTTPException(404, "Store not found")
+        if store.retailer_id != retailer_id:
+            raise HTTPException(422, f"That link is a {retailer['name']} product, but the "
+                                     "store you chose belongs to a different retailer")
+    else:
+        stores = db.scalars(select(Store).where(Store.retailer_id == retailer_id)).all()
+        if len(stores) != 1:
+            raise HTTPException(422, f"Prices differ by store: send store_id. {retailer['name']} has "
+                                     f"{len(stores)} registered store(s)" + (
+                                         "; register one first" if not stores else ""))
+        store = stores[0]
+    listing = db.scalar(select(Listing).where(
+        Listing.retailer_id == retailer_id, Listing.sku == sku, Listing.store_id == store.id,
+        Listing.channel == "online"))
+    already = existing_monitor(db, p.user.id, store.id, listing.id) if listing else None
+    if already:
+        response.status_code = 200
+        return {"already_monitored": True, "monitor": monitor_dict(already, db)}
+    active = db.scalar(select(func.count()).select_from(Monitor).where(
+        Monitor.owner_id == p.user.id, Monitor.enabled.is_(True)))
+    if active >= settings.max_monitors_per_user:
+        raise HTTPException(429, "Monitor limit reached; remove one before adding another")
+    payload = {"retailer_id": retailer_id, "sku": sku, "store_id": store.id,
+               "name": body.name, "interval_minutes": body.interval_minutes,
+               "maximum_price": threshold, "notify_existing_offers": body.notify_existing_offers}
+    pending = next((j for j in db.scalars(select(Job).where(
+        Job.owner_id == p.user.id, Job.kind == "add_product",
+        Job.state.in_(["queued", "running"]))) if j.payload == payload), None)
+    if pending:
+        return {"job_id": pending.id, "status": pending.state, "status_url": f"/v1/jobs/{pending.id}"}
+    job = Job(owner_id=p.user.id, kind="add_product", payload=payload)
+    db.add(job)
+    db.flush()
+    remember_request(db, p.user.id, "add_product", idempotency_key, digest, job.id)
+    audit(db, p.user.id, "monitor.add_from_link_queued", "job", job.id, {"retailer": retailer_id})
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        replay = idempotent_resource(db, p.user.id, "add_product", idempotency_key, digest)
+        if not replay:
+            raise
+        job = db.get(Job, replay)
+    return {"job_id": job.id, "status": job.state, "status_url": f"/v1/jobs/{job.id}"}
 
 
 @app.get("/v1/monitors")
-def list_monitors(db: Session = Depends(get_db), p: Principal = Depends(principal)):
+def list_monitors(include_removed: bool = False, db: Session = Depends(get_db),
+                  p: Principal = Depends(principal)):
+    """Your monitors. Removed ones are hidden unless `include_removed=true`."""
     p.require("monitors:read")
-    return {"items": [monitor_dict(x) for x in db.scalars(
-        select(Monitor).where(Monitor.owner_id == p.user.id).limit(100))]}
+    query = select(Monitor).where(Monitor.owner_id == p.user.id)
+    if not include_removed:
+        query = query.where(Monitor.removed_at.is_(None))
+    return {"items": [monitor_dict(x, db) for x in db.scalars(query.order_by(Monitor.name).limit(100))]}
 
 
 @app.get("/v1/monitors/{monitor_id}")
@@ -1018,7 +1237,7 @@ def get_monitor(monitor_id: str, db: Session = Depends(get_db), p: Principal = D
     row = db.get(Monitor, monitor_id)
     if not row or row.owner_id != p.user.id:
         raise HTTPException(404, "Monitor not found")
-    return monitor_dict(row)
+    return monitor_dict(row, db)
 
 
 @app.get("/v1/monitors/{monitor_id}/events")
@@ -1034,14 +1253,192 @@ def monitor_events(monitor_id: str, db: Session = Depends(get_db),
 
 
 @app.delete("/v1/monitors/{monitor_id}", status_code=204)
-def delete_monitor(monitor_id: str, db: Session = Depends(get_db), p: Principal = Depends(principal)):
+def delete_monitor(monitor_id: str, permanent: bool = False, db: Session = Depends(get_db),
+                   p: Principal = Depends(principal)):
+    """Remove a monitor: it stops, leaves your list, and its events are kept (it can still be read
+    by id or with `include_removed=true`). With `permanent=true` the monitor and its events are
+    deleted for good. The product's price history is kept either way."""
     p.require("monitors:write")
     row = db.get(Monitor, monitor_id)
     if not row or row.owner_id != p.user.id:
         raise HTTPException(404, "Monitor not found")
-    row.enabled = False
-    audit(db, p.user.id, "monitor.disabled", "monitor", row.id)
+    if permanent:
+        delete_monitor_permanently(db, row)
+        audit(db, p.user.id, "monitor.deleted", "monitor", monitor_id)
+    elif row.removed_at is None:
+        row.enabled, row.removed_at = False, utcnow()
+        audit(db, p.user.id, "monitor.removed", "monitor", row.id)
     db.commit()
+
+
+def _monitor_product(db: Session, p: Principal, monitor_id: str) -> Product:
+    row = db.get(Monitor, monitor_id)
+    if not row or row.owner_id != p.user.id:
+        raise HTTPException(404, "Monitor not found")
+    if row.type != "exact_product":
+        raise HTTPException(422, "A barcode belongs to one specific product; this monitor follows "
+                                 "a search or a whole store")
+    listing = db.get(Listing, str(row.conditions.get("listing_id")))
+    product = db.get(Product, listing.product_id) if listing and listing.product_id else None
+    if not product:
+        raise HTTPException(422, "This monitor has no product to attach a barcode to")
+    return product
+
+
+@app.post("/v1/monitors/{monitor_id}/barcode")
+def link_barcode(monitor_id: str, body: BarcodeLinkRequest, request: Request,
+                 db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    """Link the barcode you scanned to this monitor's product. The link is shared: it lets the
+    product be found by barcode and compared with the same item in other stores.
+
+    If the barcode already belongs to another product you get 409 naming it; resend with
+    `merge: true` to say the two are the same item (your product's listings then move to it).
+    A barcode published by the store itself cannot be changed.
+    """
+    p.require("monitors:write")
+    product = _monitor_product(db, p, monitor_id)
+    try:
+        gtin14 = clean_barcode(body.gtin)
+    except BarcodeError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    merged = 0
+    try:
+        outcome = set_barcode(db, product, gtin14, "user", p.user.id)
+    except BarcodeConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except BarcodeTaken as taken:
+        if not body.merge:
+            return JSONResponse(status_code=409, content={
+                "code": "conflict", "request_id": request.state.request_id,
+                "message": f"That barcode already belongs to '{taken.product.name}'. If they are "
+                           "the same item, resend with merge=true.",
+                "details": [{"existing_product": product_summary(db, taken.product)}]})
+        try:
+            merged = merge_products(db, product, taken.product)
+        except BarcodeConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+        product, outcome = taken.product, "merged"
+    audit(db, p.user.id, "product.barcode_" + outcome, "product", product.id,
+          {"gtin14": gtin14, "monitor_id": monitor_id, "listings_moved": merged})
+    db.commit()
+    return {"outcome": outcome, "merged_listings": merged, "product": product_summary(db, product)}
+
+
+@app.delete("/v1/monitors/{monitor_id}/barcode", status_code=204)
+def unlink_barcode(monitor_id: str, db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    """Remove a barcode that was linked by a person (for example after a wrong scan). One the
+    store publishes cannot be removed."""
+    p.require("monitors:write")
+    product = _monitor_product(db, p, monitor_id)
+    gtin14 = product.gtin14
+    try:
+        clear_barcode(db, product)
+    except BarcodeConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+    audit(db, p.user.id, "product.barcode_cleared", "product", product.id, {"gtin14": gtin14})
+    db.commit()
+
+
+@app.get("/v1/me/stores")
+def my_stores(db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    """The stores you compare prices across (see POST /v1/compare/barcode)."""
+    p.require("monitors:read")
+    rows = db.execute(select(Store).join(UserStore, UserStore.store_id == Store.id)
+                      .where(UserStore.user_id == p.user.id).order_by(Store.name)).scalars()
+    return {"items": [{"store_id": s.id, "name": s.name, "retailer_id": s.retailer_id} for s in rows]}
+
+
+@app.put("/v1/me/stores/{store_id}", status_code=204)
+def add_my_store(store_id: str, db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    p.require("monitors:write")
+    if not db.get(Store, store_id):
+        raise HTTPException(404, "Store not found")
+    if db.get(UserStore, (p.user.id, store_id)):
+        return
+    count = db.scalar(select(func.count()).select_from(UserStore).where(UserStore.user_id == p.user.id))
+    if count >= settings.max_my_stores:
+        raise HTTPException(429, f"You can compare across at most {settings.max_my_stores} stores")
+    db.add(UserStore(user_id=p.user.id, store_id=store_id))
+    db.commit()
+
+
+@app.delete("/v1/me/stores/{store_id}", status_code=204)
+def remove_my_store(store_id: str, db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    p.require("monitors:write")
+    db.execute(delete(UserStore).where(UserStore.user_id == p.user.id, UserStore.store_id == store_id))
+    db.commit()
+
+
+@app.post("/v1/compare/barcode", status_code=202)
+def compare_barcode(body: CompareRequest, response: Response, db: Session = Depends(get_db),
+                    p: Principal = Depends(principal),
+                    idempotency_key: str | None = Header(None)):
+    """Standing in a store with a barcode: find the same item in your other stores and compare.
+
+    The stores are `store_ids`, or else the ones in `GET /v1/me/stores` (plus `here_store_id`, the
+    store you are standing in, which is listed first). You get what the catalogue already knows
+    immediately (`known`, each with its age), and a job that checks every store live (`status_url`;
+    one request per store, spaced and cached like any lookup, at most `max_compare_stores`
+    stores). With `refresh: false` you get the known prices only, at once, with status 200.
+    """
+    p.require("catalogue:read")
+    digest = request_digest(body.model_dump())
+    existing_id = idempotent_resource(db, p.user.id, "compare", idempotency_key, digest)
+    if existing_id:
+        job = db.get(Job, existing_id)
+        return {"job_id": job.id, "status": job.state, "status_url": f"/v1/jobs/{job.id}"}
+    try:
+        gtin14 = clean_barcode(body.gtin)
+    except BarcodeError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    ids = list(body.store_ids) if body.store_ids else [
+        row.store_id for row in db.scalars(select(UserStore).where(UserStore.user_id == p.user.id))]
+    if body.here_store_id:
+        ids = [body.here_store_id] + [i for i in ids if i != body.here_store_id]
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        raise HTTPException(422, "Choose the stores to compare first: PUT /v1/me/stores/{store_id} "
+                                 "for each, or pass store_ids")
+    if len(ids) > settings.max_compare_stores:
+        raise HTTPException(422, f"At most {settings.max_compare_stores} stores can be compared "
+                                 "at once")
+    stores = [db.get(Store, sid) for sid in ids]
+    if any(store is None for store in stores):
+        raise HTTPException(404, "Store not found")
+    rows = known_rows(db, gtin14, stores)
+    summary = summarize(rows, body.here_store_id)
+    product = product_for_gtin(db, gtin14)
+    shown = {"gtin14": gtin14, "here_store_id": body.here_store_id,
+             "product": product_summary(db, product) if product else None,
+             "known": rows, **summary}
+    if not body.refresh:
+        response.status_code = 200
+        return shown
+    pending = db.scalar(select(func.count()).select_from(Job).where(
+        Job.owner_id == p.user.id, Job.kind.in_(LIVE_LOOKUP_KINDS),
+        Job.state.in_(["queued", "running"])))
+    if pending >= settings.max_pending_searches_per_user:
+        raise HTTPException(429, "Too many lookups in progress", headers={"Retry-After": "60"})
+    recent = db.scalar(select(func.count()).select_from(Job).where(
+        Job.owner_id == p.user.id, Job.kind.in_(LIVE_LOOKUP_KINDS),
+        Job.created_at >= utcnow() - timedelta(hours=1)))
+    if recent >= settings.max_searches_per_hour:
+        raise HTTPException(429, "Lookup limit reached for this hour", headers={"Retry-After": "600"})
+    payload = {"gtin14": gtin14, "given": body.gtin, "store_ids": ids,
+               "here_store_id": body.here_store_id}
+    job = Job(owner_id=p.user.id, kind="compare", payload=payload)
+    db.add(job)
+    db.flush()
+    remember_request(db, p.user.id, "compare", idempotency_key, digest, job.id)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        replay = idempotent_resource(db, p.user.id, "compare", idempotency_key, digest)
+        if not replay:
+            raise
+        job = db.get(Job, replay)
+    return {"job_id": job.id, "status": job.state, "status_url": f"/v1/jobs/{job.id}", **shown}
 
 
 @app.post("/v1/monitors/{monitor_id}/check", status_code=202)
@@ -1093,7 +1490,7 @@ def get_job(job_id: str, db: Session = Depends(get_db), p: Principal = Depends(p
     monitor = db.get(Monitor, job.monitor_id) if job and job.monitor_id else None
     if not job or (job.owner_id != p.user.id and (not monitor or monitor.owner_id != p.user.id)):
         raise HTTPException(404, "Job not found")
-    p.require("catalogue:read" if job.kind == "search" else "monitors:read")
+    p.require("catalogue:read" if job.kind in LIVE_LOOKUP_KINDS else "monitors:read")
     return {"id": job.id, "state": job.state, "result": job.result,
             "attempts": job.attempts, "created_at": job.created_at}
 

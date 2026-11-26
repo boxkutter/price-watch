@@ -1,0 +1,28 @@
+id: test.demoshop
+name: Demo shop (synthetic)
+country: SE
+protocol_version: 1
+connector_version: 0.1.0
+description: >-
+  A synthetic store whose prices move over time, for trying the app (the example client page, price
+  alerts, comparison by barcode) without any real retailer. It never contacts anything.
+enabled: true
+access_review: approved
+access_note: Synthetic data generated locally. Nothing is requested from anywhere.
+implementation: connector:DemoShopConnector
+capabilities:
+  product_search: supported
+  barcode_search: supported
+  online_prices: supported
+  physical_store_prices: unsupported
+  store_offers: unsupported
+allowed_hosts: []
+stores:
+  - {external_id: north, name: Demo Shop North}
+  - {external_id: south, name: Demo Shop South}
+# Example links the demo shop understands (never fetched), so "add a product by link" can be tried.
+product_urls:
+  - pattern: '^https://demo\.example\.org/p/(?P<sku>[a-z0-9-]+)/?$'
+    example: 'https://demo.example.org/p/oats-1kg'
+minimum_request_interval_seconds: 1
+minimum_monitor_interval_minutes: 15

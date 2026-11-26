@@ -1,0 +1,347 @@
+{
+  "$defs": {
+    "DiscoveryInput": {
+      "additionalProperties": false,
+      "description": "An input the store lookup needs (for example a postcode).",
+      "properties": {
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,30}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pattern"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "DiscoveryInput",
+      "type": "object"
+    },
+    "ProductUrl": {
+      "additionalProperties": false,
+      "description": "How to read one kind of this store's product page link (the link is parsed, not fetched).",
+      "properties": {
+        "pattern": {
+          "maxLength": 500,
+          "minLength": 5,
+          "title": "Pattern",
+          "type": "string"
+        },
+        "example": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Example"
+        }
+      },
+      "required": [
+        "pattern"
+      ],
+      "title": "ProductUrl",
+      "type": "object"
+    },
+    "SettingSpec": {
+      "additionalProperties": false,
+      "description": "A value the connector needs from the operator (an API key, a token).",
+      "properties": {
+        "name": {
+          "pattern": "^[A-Z][A-Z0-9_]{2,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "secret": {
+          "default": true,
+          "title": "Secret",
+          "type": "boolean"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "SettingSpec",
+      "type": "object"
+    },
+    "StoreSpec": {
+      "additionalProperties": false,
+      "description": "A store the connector always has, so nobody has to discover it (for example a retailer\nwith one national online assortment). The service creates it on start-up and on install.",
+      "properties": {
+        "external_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,40}$",
+          "title": "External Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "external_id",
+        "name"
+      ],
+      "title": "StoreSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "pattern": "^[a-z]{2,10}\\.[a-z0-9_-]+$",
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "country": {
+      "maxLength": 2,
+      "minLength": 2,
+      "title": "Country",
+      "type": "string"
+    },
+    "protocol_version": {
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "connector_version": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Connector Version",
+      "type": "string"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "author": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Author"
+    },
+    "enabled": {
+      "default": false,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "access_review": {
+      "default": "unverified",
+      "enum": [
+        "approved",
+        "unverified",
+        "denied"
+      ],
+      "title": "Access Review",
+      "type": "string"
+    },
+    "access_note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Access Note"
+    },
+    "implementation": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Implementation"
+    },
+    "capabilities": {
+      "additionalProperties": {
+        "enum": [
+          "supported",
+          "unsupported",
+          "unverified"
+        ],
+        "type": "string"
+      },
+      "title": "Capabilities",
+      "type": "object"
+    },
+    "allowed_hosts": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Allowed Hosts",
+      "type": "array"
+    },
+    "settings": {
+      "items": {
+        "$ref": "#/$defs/SettingSpec"
+      },
+      "title": "Settings",
+      "type": "array"
+    },
+    "store_discovery_inputs": {
+      "items": {
+        "$ref": "#/$defs/DiscoveryInput"
+      },
+      "title": "Store Discovery Inputs",
+      "type": "array"
+    },
+    "stores": {
+      "items": {
+        "$ref": "#/$defs/StoreSpec"
+      },
+      "title": "Stores",
+      "type": "array"
+    },
+    "product_urls": {
+      "items": {
+        "$ref": "#/$defs/ProductUrl"
+      },
+      "title": "Product Urls",
+      "type": "array"
+    },
+    "minimum_request_interval_seconds": {
+      "default": 60,
+      "minimum": 1,
+      "title": "Minimum Request Interval Seconds",
+      "type": "integer"
+    },
+    "minimum_monitor_interval_minutes": {
+      "default": 15,
+      "minimum": 1,
+      "title": "Minimum Monitor Interval Minutes",
+      "type": "integer"
+    },
+    "max_requests_per_scan": {
+      "default": 6,
+      "minimum": 1,
+      "title": "Max Requests Per Scan",
+      "type": "integer"
+    },
+    "max_requests_per_day": {
+      "default": 500,
+      "minimum": 1,
+      "title": "Max Requests Per Day",
+      "type": "integer"
+    },
+    "cache_seconds": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Cache Seconds",
+      "type": "integer"
+    },
+    "scheduled_window_utc": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scheduled Window Utc"
+    },
+    "follow_redirects": {
+      "default": false,
+      "title": "Follow Redirects",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "country",
+    "protocol_version",
+    "connector_version"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}

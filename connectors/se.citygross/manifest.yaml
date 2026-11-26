@@ -1,0 +1,32 @@
+id: se.citygross
+name: City Gross
+country: SE
+description: Targeted product search, barcode lookup and per-store prices from citygross.se.
+author: price-watch
+protocol_version: 1
+connector_version: 0.1.0
+enabled: true
+# Owner decision 2026-11-26: private, targeted use of what a normal visitor can see.
+access_review: approved
+access_note: >-
+  Public JSON API used by citygross.se itself. Answers a plain HTTP client; targeted
+  search and lookup only, spaced requests, no circumvention.
+implementation: connector:CityGrossConnector
+capabilities:
+  store_discovery: supported
+  product_search: supported
+  barcode_search: supported
+  online_prices: supported
+  physical_store_prices: unsupported
+  store_offers: unsupported
+allowed_hosts: [www.citygross.se]
+# The id is the `-p<ID>` at the end of the page address (ids ending _ST are packaged, _KG are
+# sold by weight). The page itself is never fetched.
+product_urls:
+  - pattern: '^https://(www\.)?citygross\.se/.+-p(?P<sku>\d+_[A-Za-z]{2})/?$'
+    example: 'https://www.citygross.se/matvaror/frukt-och-gront/frukt/%C3%A4pple-ingrid-marie-p100142800_KG'
+minimum_request_interval_seconds: 3
+minimum_monitor_interval_minutes: 60
+max_requests_per_scan: 6
+max_requests_per_day: 400
+cache_seconds: 600

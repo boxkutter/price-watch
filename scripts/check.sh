@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "== lint";           uv run --no-sync ruff check app tests migrations
+echo "== lint";           uv run --no-sync ruff check app tests migrations examples connectors
 echo "== tests (SQLite)"; uv run --no-sync pytest -q
 [ "${1:-}" = "--fast" ] && { echo "OK (fast)"; exit 0; }
 

@@ -15,15 +15,18 @@ from app.connectors.base import (
     ScanRequest,
     TransientError,
 )
-from app.connectors.builtin.coop.connector import CoopConnector, parse_item, parse_package
 from app.connectors.http import PoliteClient
 from app.connectors.registry import CONNECTORS
 from app.db import SessionLocal
 from app.models import ConnectorState, Store
 from app.worker import run_job
+from tests.connector_modules import module_of
 from tests.test_politeness import check, job_of, listing_id, monitor, search
 from tests.test_regressions import admin_client
 
+_module = module_of("se.coop")
+CoopConnector, parse_item, parse_package = (_module.CoopConnector, _module.parse_item,
+                                            _module.parse_package)
 FIXTURES = Path(__file__).parent / "fixtures"
 KEY = "k" * 32
 HAVREGRYN, MJOLK, PEPSI, INTERNAL = "7300156599452", "7310865067883", "7310074715087", "2097825700008"

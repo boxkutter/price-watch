@@ -1,0 +1,202 @@
+{
+ "breadcrumbs": [
+  {
+   "url": "/alla-varor/c/",
+   "name": "Alla varor",
+   "linkClass": null,
+   "categoryCode": "N00"
+  },
+  {
+   "url": "dryck",
+   "name": "Dryck",
+   "linkClass": null,
+   "categoryCode": "N10"
+  },
+  {
+   "url": "dryck/kaffe",
+   "name": "Kaffe",
+   "linkClass": null,
+   "categoryCode": "N1001"
+  },
+  {
+   "url": "dryck/kaffe/bonkaffe",
+   "name": "Bönkaffe",
+   "linkClass": null,
+   "categoryCode": "N100101"
+  },
+  {
+   "url": "/produkt/Bryggkaffe-Mellanrost-101261204_ST",
+   "name": "Bryggkaffe Mellanrost",
+   "linkClass": "active",
+   "categoryCode": null
+  }
+ ],
+ "labels": [],
+ "potentialPromotions": [
+  {
+   "validUntil": 1795993199000,
+   "comparePrice": "110,00 kr",
+   "redeemLimitLabel": "Max 1 köp",
+   "splashTitleText": "",
+   "realMixAndMatch": true,
+   "qualifyingCount": 2,
+   "cartLabel": "Välj & blanda! 2 för 99,00",
+   "timesUsed": 0,
+   "conditionLabel": "Välj & blanda! 2 för",
+   "rewardLabel": "99,00",
+   "textLabel": "",
+   "mainProductCode": "101880385_ST",
+   "promotionRedeemLimit": 1,
+   "promotionPercentage": null,
+   "cartLabelFormatted": "2 för 99,00",
+   "conditionLabelFormatted": "2 för",
+   "code": "2500327409",
+   "productCodes": [
+    "101880385_ST",
+    "101241262_ST",
+    "101880382_ST",
+    "101880381_ST",
+    "101880383_ST",
+    "101241280_ST",
+    "101261136_ST",
+    "101261197_ST",
+    "101261204_ST",
+    "101261205_ST",
+    "101759233_ST"
+   ],
+   "threshold": null,
+   "price": {
+    "currencyIso": "SEK",
+    "value": 49.5,
+    "priceType": "BUY",
+    "formattedValue": "49,50 kr",
+    "minQuantity": null,
+    "maxQuantity": null,
+    "sapUnit": null
+   },
+   "applied": false,
+   "textLabelGenerated": "",
+   "promotionType": "MixMatchPricePromotion",
+   "campaignType": "LOYALTY",
+   "textLabelManual": null,
+   "offerStatus": "Aktiv",
+   "promotionTheme": {
+    "code": "Z020",
+    "visible": true
+   },
+   "lowestHistoricalPrice": {
+    "currencyIso": "SEK",
+    "value": 66.9,
+    "priceType": "BUY",
+    "formattedValue": "66,90 kr",
+    "minQuantity": null,
+    "maxQuantity": null,
+    "sapUnit": null
+   },
+   "priority": 608
+  }
+ ],
+ "inactivePotentialPromotions": [],
+ "foodContactName": "JACOBS DOUWE EGBERTS S.E. AB",
+ "minStorageTemperature": "10°C",
+ "maxStorageTemperature": "25°C",
+ "foodContactAddress": "Oosterdoksstraat 80\n1011 DK Amsterdam\nThe Netherlands",
+ "breadCrumbs": [
+  {
+   "url": "/alla-varor/c/",
+   "name": "Alla varor",
+   "linkClass": null,
+   "categoryCode": "N00"
+  },
+  {
+   "url": "dryck",
+   "name": "Dryck",
+   "linkClass": null,
+   "categoryCode": "N10"
+  },
+  {
+   "url": "dryck/kaffe",
+   "name": "Kaffe",
+   "linkClass": null,
+   "categoryCode": "N1001"
+  },
+  {
+   "url": "dryck/kaffe/bonkaffe",
+   "name": "Bönkaffe",
+   "linkClass": null,
+   "categoryCode": "N100101"
+  },
+  {
+   "url": "/produkt/Bryggkaffe-Mellanrost-101261204_ST",
+   "name": "Bryggkaffe Mellanrost",
+   "linkClass": "active",
+   "categoryCode": null
+  }
+ ],
+ "isDrugProduct": false,
+ "extraInfoCode": "",
+ "activeSubstance": "",
+ "originCountry": "",
+ "medicineType": "",
+ "saleStop": null,
+ "medicineLink": "",
+ "categoryGroupText": "",
+ "tradeItemCountryOfOrigin": "Sverige",
+ "salableOnline": true,
+ "compulsoryAdditiveLabelInformation": "",
+ "batteryInformation": [],
+ "nutritionalClaim": "",
+ "preparationType": "",
+ "regulatoryAct": "(EU) 2023/1115",
+ "servingSize": null,
+ "countryOfOriginStatement": "",
+ "animalData": null,
+ "areBatteriesIncluded": false,
+ "areBatteriesRequired": false,
+ "provinceStatement": "Kenya, Ghana and Ivory Coast",
+ "googleAnalyticsCategory": "dryck|kaffe|bonkaffe",
+ "variantType": "",
+ "ean": "8711000530085",
+ "otherCountries": [],
+ "fruitAndVegetableVariety": "",
+ "comparePriceUnit": "kg",
+ "comparePrice": "159,78 kr",
+ "averageWeight": null,
+ "depositPrice": "",
+ "solrSearchScore": null,
+ "ranking": null,
+ "newsSplashProduct": false,
+ "notAllowedAnonymous": false,
+ "notAllowedB2b": false,
+ "pickupProductLine2": "GEVALIA, 450g",
+ "gdprTrackingIncompliant": false,
+ "savingsAmount": 44.8,
+ "priceNoUnit": "71,90",
+ "priceUnit": "kr/st",
+ "productLine2": "GEVALIA, 450g",
+ "precautionaryStatements": [],
+ "hazards": [],
+ "nicotineMedicalProduct": false,
+ "showGoodPriceIcon": false,
+ "nonEkoProduct": false,
+ "tobaccoFreeNicotineProduct": false,
+ "tobaccoProduct": false,
+ "price": "71,90 kr",
+ "priceValue": 71.9,
+ "manufacturer": "Gevalia",
+ "incrementValue": 1.0,
+ "productBasketType": {
+  "code": "ST",
+  "type": "ProductBasketTypeEnum"
+ },
+ "bargainProduct": false,
+ "addToCartMessage": "",
+ "online": true,
+ "displayVolume": "450g",
+ "outOfStock": false,
+ "addToCartDisabled": false,
+ "code": "101261204_ST",
+ "maxOrderQuantity": null,
+ "seoTitle": "",
+ "name": "Bryggkaffe Mellanrost"
+}

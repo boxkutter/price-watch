@@ -1,0 +1,44 @@
+id: se.willys
+name: Willys
+country: SE
+description: Targeted product search, product-link lookup and member offers from willys.se.
+author: price-watch
+protocol_version: 1
+connector_version: 0.1.0
+enabled: true
+# Owner decision 2026-11-26: private, targeted use of what a normal visitor can see.
+access_review: approved
+access_note: >-
+  Uses the public JSON that willys.se's own pages load (search and product detail), the same
+  requests a visitor's browser makes, with no key or login. Targeted lookups only. Willys' robots.txt
+  asks automated visitors for 10 seconds between page requests (honoured here as the request
+  spacing), lists /sok and a few account and basket paths as disallowed (this connector never
+  requests them; /sok is the HTML search page, whose data comes from /search), and states a
+  04:00-08:45 UTC visit window (honoured for scheduled checks, see scheduled_window_utc; a person's
+  own search, add-by-link or "check now" is not scheduled and is not delayed). Prices are what an
+  anonymous visitor sees for the online assortment; Willys can price some items differently per
+  store, which is not modelled. Anonymous search cannot look up a barcode, but a product's detail
+  carries its EAN, so a product added by link or search has its barcode recorded. Unofficial and
+  undocumented: a 401/403 pauses the connector.
+implementation: connector:WillysConnector
+capabilities:
+  store_discovery: unsupported
+  product_search: supported
+  barcode_search: unsupported
+  online_prices: supported
+  physical_store_prices: unsupported
+  store_offers: unsupported
+allowed_hosts: [www.willys.se]
+# The one national online assortment, as an anonymous visitor sees it.
+stores:
+  - {external_id: online, name: Willys (online)}
+# The product id is the last part of the page address (the page itself is never fetched).
+product_urls:
+  - pattern: '^https://www\.willys\.se/produkt/.+-(?P<sku>\d{6,12}_[A-Za-z]{2,3})$'
+    example: 'https://www.willys.se/produkt/Mellanmjolk-Langre-Hallbarhet-1-5procent-101233933_ST'
+minimum_request_interval_seconds: 10
+minimum_monitor_interval_minutes: 60
+max_requests_per_scan: 6
+max_requests_per_day: 300
+cache_seconds: 600
+scheduled_window_utc: "04:00-08:45"

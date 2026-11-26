@@ -1,6 +1,9 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.barcodes import product_for_gtin  # noqa: F401
+from app.compare import request_for_barcode
+from app.connectors import registry
 from app.connectors.base import ScanRequest
 from app.connectors.registry import connector_for
 from app.gtin import normalize_gtin
@@ -23,7 +26,6 @@ def process_search(db: Session, job: Job) -> dict:
                 Listing.product_id == product.id)).all())
     channel = payload.get("channel", "online")
     run_id = new_id()  # per execution, so an admin retry cannot collide with the first run
-    request = ScanRequest(query=query or None, gtins=(gtin,) if gtin else ())
     items = []
     coverage = []
     barcode_found = False
@@ -33,6 +35,24 @@ def process_search(db: Session, job: Job) -> dict:
         if not connector:
             coverage.append({"store_id": store_id, "status": "unsupported"})
             continue
+        # Ask a store only for what its manifest says it can do.
+        searchable = (registry.retailer(store.retailer_id) or {}).get(
+            "capabilities", {}).get("product_search") == "supported"
+        if query and not searchable and not gtin14:
+            coverage.append({"store_id": store_id, "status": "unsupported",
+                             "detail": "This store cannot be searched by name; add its products "
+                                       "by their page link"})
+            continue
+        request = ScanRequest(query=(query or None) if searchable else None)
+        if gtin14:
+            by_barcode = request_for_barcode(db, store.retailer_id, gtin14, gtin)
+            if by_barcode is None and not request.query:
+                coverage.append({"store_id": store_id, "status": "unknown_mapping",
+                                 "detail": "This store cannot search by barcode and no listing of "
+                                           "this product is linked to it yet"})
+                continue
+            if by_barcode is not None:
+                request = ScanRequest(query=request.query, skus=by_barcode.skus, gtins=by_barcode.gtins)
         snapshot, skipped = fetch(db, store, connector, channel, request)
         if skipped:
             coverage.append({"store_id": store_id, "status": skipped["status"],

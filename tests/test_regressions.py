@@ -57,7 +57,7 @@ def scripted(fresh_db, monkeypatch):
 def make_monitor(kind="store", **fields):
     with SessionLocal.begin() as db:
         owner = db.scalar(select(User))
-        store = db.scalar(select(Store))
+        store = db.scalar(select(Store).where(Store.retailer_id == "test.fixture"))
         monitor = Monitor(owner_id=owner.id, name="m", type=kind, store_id=store.id, **fields)
         db.add(monitor)
         db.flush()
@@ -139,7 +139,7 @@ def test_offer_that_flips_back_and_forth_notifies_every_change(scripted):
 def test_delivery_claim_locks_only_the_row_it_sends(fresh_db):
     with SessionLocal.begin() as db:
         owner = db.scalar(select(User))
-        store = db.scalar(select(Store))
+        store = db.scalar(select(Store).where(Store.retailer_id == "test.fixture"))
         monitor = Monitor(owner_id=owner.id, name="m", type="store", store_id=store.id)
         hook = Webhook(owner_id=owner.id, url="https://example.com/h",
                        secret_hash=hash_token("s"), secret_ciphertext=encrypt_secret("s"))

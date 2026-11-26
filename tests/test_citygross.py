@@ -7,11 +7,13 @@ import httpx
 import pytest
 
 from app.connectors.base import ConnectorError, ScanRequest, TransientError
-from app.connectors.builtin.citygross.connector import CityGrossConnector, parse_product
 from app.connectors.http import PoliteClient, RateLimiter, host_allowed
 from app.pricing import parse_size
+from tests.connector_modules import module_of
 
 FIXTURES = Path(__file__).parent / "fixtures"
+_module = module_of("se.citygross")
+CityGrossConnector, parse_product = _module.CityGrossConnector, _module.parse_product
 
 
 def load(name):
@@ -114,6 +116,18 @@ def test_bad_gtin_and_unknown_stock_and_size_stay_unknown():
     raw["productStoreDetails"]["stockStatus"] = 7
     price, _ = parse_product(raw)
     assert price.gtin is None and price.availability is None and price.package_value is None
+
+
+def test_a_product_sold_by_weight_is_priced_per_kilogram_not_per_piece():
+    """The apple's 34.95 is per kg ("CA140G" is about one apple). Recording it with a 1 kg basis
+    makes the price and unit price read as kr/kg instead of looking like the price of one apple."""
+    price, offers = parse_product(products()["100142800_KG"])
+    assert price.current_price == Decimal("34.95") and offers == []
+    assert (price.package_value, price.package_unit) == (Decimal(1), "kg")
+    from app.pricing import unit_price
+    assert unit_price(price.current_price, price.package_value, price.package_unit) == (
+        Decimal("34.95"), "kg")
+    assert price.availability == "in_stock" and price.name == "Äpple Ingrid Marie CA140G KLASS 1"
 
 
 def test_swedish_package_labels():

@@ -2,9 +2,9 @@
 
 > Self-hosted retail discovery, price history and promotion monitoring service.
 
-**Specification:** v1.0 | **Status:** implementation in progress; City Gross and Coop live connectors working, ICA blocked | **Initial market:** Sweden (SE)
+**Specification:** v1.0 | **Status:** implementation in progress; City Gross, Coop, Willys and Lidl (link-only) live connectors working, ICA blocked | **Initial market:** Sweden (SE)
 
-The code currently implements invitation-based users, scoped client credentials with per-user grants, a fixture-backed store, basic catalogue/prices/offers, three public monitor types, database-backed jobs, signed webhook delivery, a small admin page, and a Docker image. It does **not** yet meet the full MVP checklist below, and City Gross and Coop have live retrieval (ICA is blocked). See the [access policy](#access-policy) and [Implementation status](docs/implementation-status.md) for setup and remaining work.
+The code currently implements invitation-based users, scoped client credentials with per-user grants, a fixture-backed store, basic catalogue/prices/offers, three public monitor types, database-backed jobs, signed webhook delivery, a small admin page, and a Docker image. It does **not** yet meet the full MVP checklist below, and City Gross and Coop have live retrieval (ICA is blocked). See the [access policy](#access-policy) and [Implementation status](docs/implementation-status.md) for setup and remaining work, and the [API guide](docs/api.md) to build an app on the service (served at `/api-guide`; example client at `/demo`).
 
 ## 1. Purpose
 
@@ -22,7 +22,7 @@ Retail Monitor is an always-on, API-first FastAPI service for individuals and ho
 - Webhooks, SMTP email, self-hosted push (ntfy, optionally Gotify).
 - Anonymous and authenticated browsing, including user-mediated login where required.
 - Historical observations, source provenance, freshness and reliable event deduplication.
-- Docker Compose deployment on an always-on home server; compatible with Unraid, Keycloak and Nginx Proxy Manager.
+- Docker Compose deployment on an always-on home server; compatible with Unraid (a ready single-file setup is in [deploy/unraid/](deploy/unraid/README.md)), Keycloak and Nginx Proxy Manager.
 
 ### Non-goals
 
@@ -86,7 +86,7 @@ Use async database sessions in API handlers; Celery tasks may wrap async connect
 
 ## 3. Repository layout
 
-This is the target layout. The current code is flatter (`app/main.py`, `app/models.py`, `app/monitoring.py`, `app/worker.py`), but connectors already follow it: one package per connector under `app/connectors/builtin/` (or installed from the admin page), described in [docs/connectors.md](docs/connectors.md).
+This is the target layout. The current code is flatter (`app/main.py`, `app/models.py`, `app/monitoring.py`, `app/worker.py`), but connectors already follow it: one folder per connector in [`connectors/`](connectors/README.md) at the repository root (or installed from the admin page), described in [docs/connectors.md](docs/connectors.md).
 
 ```text
 retail-monitor/

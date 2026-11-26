@@ -6,7 +6,8 @@ do things in, how to investigate a site, and the mistakes already made on three 
 
 **You will produce:** a folder `<id>/` with `manifest.yaml`, `connector.py`, `test_connector.py`
 and fixtures, which `python -m app.connectors.build` turns into a zip you upload in the admin
-page. Start from a copy of [connector-template/](connector-template/).
+page. Start from a copy of [connectors/_template/](../connectors/_template/); finished connectors live in
+[connectors/](../connectors/README.md).
 
 ## 0. Ground rules (read once)
 
@@ -37,6 +38,14 @@ Pick the capabilities you can actually verify, and mark the rest `unsupported`:
 | `online_prices` | Are the prices the online-shop prices for a specific store or area? |
 | `store_discovery` | Is there a way to list stores, or resolve one from a postcode? |
 | `physical_store_prices`, `store_offers` | Almost always `unsupported`: in-store prices are rarely published, and whole-store offer lists are enumeration |
+
+Two more decisions shape the manifest:
+
+- **Does price depend on the store?** If the site has a store directory and prices differ per
+  store, implement `discover()` (or declare the `store_discovery_inputs`). If it has one national
+  online assortment, declare it with `stores:` and have `store_id_pattern` accept only that id.
+- **Is there an API or only pages?** Prefer the JSON the site's own pages load. If there is only HTML,
+  use `self.client.get_text()` and `json_ld(html)`; most shops embed schema.org `Product` data.
 
 ## 2. Investigate the site
 
@@ -106,12 +115,24 @@ requests, `60` minutes between checks, `6` requests per scan, a few hundred per 
 editor with `manifest.schema.json` (the template already points at it) or at the command line with
 `python -m app.connectors.build --schema`.
 
+### Product links
+
+If the store's product page addresses contain the id your lookups accept, add `product_urls` so a
+person can paste a link. Collect two or three **real** product page links (a normal product, one with
+an accented character in the address, and, if the store sells by weight, a weight-priced one), write
+one anchored pattern with `(?P<sku>...)`, and put a real link in `example`. The link is parsed, never
+fetched, so the pattern only has to find the id. If the id is not in the address, omit the block.
+
 ## 6. Write the connector
 
 Subclass `HttpJsonConnector`. Implement `collect(store, request)` and, if the store has a
 directory, `discover(**inputs)`. The template is a complete, commented example; the built-in
-`builtin/citygross/connector.py` and `builtin/coop/connector.py` are real ones.
+`connectors/se.citygross/connector.py` and `connectors/se.coop/connector.py` are real ones.
 
+- If the site cannot be searched (Lidl) set `product_search: unsupported`; the service then never
+  sends a query, and `collect()` only handles `request.skus`.
+- If the retailer's `robots.txt` states a crawl delay or visit window, honour it: the delay becomes
+  `minimum_request_interval_seconds`, the window `scheduled_window_utc`. Never request a path it disallows.
 - `request.query` → one or two search requests, stopping at a **short page**.
 - `request.skus` / `request.gtins` → direct lookups; batch them if the API allows. Put what was
   not found in `missing`.
@@ -165,6 +186,13 @@ the install is rolled back and the reason is shown.
 | Coop | `availableOnline` means orderable, not in stock | `False` is recorded as unknown |
 | Coop | Business price next to the consumer price; multipack sizes in names or labels | Uses only the consumer price; a multipack with an unreadable label has unknown size |
 | Both | EANs beginning with `2` are store-internal codes | Never matched across stores as a global barcode |
+| Willys | Search cannot find a barcode, but the product detail carries the `ean` | `barcode_search: unsupported`; a product added by link or search has its barcode recorded from the detail |
+| Willys | Weight items (`_KG`) are priced per kg while the label shows one piece (`ca: 140g`) | Basis is 1 kg, like City Gross |
+| Willys | The member price (`campaignType: LOYALTY`, "Klubbpris", often "2 för 99") sits next to the shelf price | An offer with `eligibility: member`; never the shelf price |
+| Willys | robots.txt: 10 s crawl delay, a 04:00-08:45 UTC visit window, and `/sok` disallowed | 10 s spacing, `scheduled_window_utc`, and the JSON `/search` is used, never the `/sok` page |
+| Lidl | No search or product API, and grocery prices are not on lidl.se (only in the app and the leaflet) | Link-only, `product_search: unsupported`, covers just the online shop's products |
+| Lidl | A page needs its name in the address; the bare id 301-redirects to it | `follow_redirects: true` (same host only); both hops are counted |
+| Lidl | Some pages state no price at all (`InStoreOnly`, some out-of-stock) | Reported as "no online price", never as a price |
 | ICA | Product data endpoint refuses automated clients (HTTP 403) while a person's browser works | **Not built.** Documented as a placeholder; getting past it would mean disguising the client |
 
 ## 11. Troubleshooting
@@ -186,6 +214,7 @@ the install is rolled back and the reason is shown.
 - [ ] Manifest validates; `allowed_hosts` is exactly the hosts contacted; capabilities are honest
 - [ ] Unit tests pass on trimmed **real** fixtures, with no keys or personal data in them
 - [ ] `check_connector(...)` passes
+- [ ] `product_urls` (if the store's links carry an id) reads real example links
 - [ ] No request on untargeted scans; no secrets in code, URLs or results
 - [ ] `python -m app.connectors.build` produces the zip with no warnings you cannot explain
 - [ ] (Optional) the live smoke test passes with about six requests

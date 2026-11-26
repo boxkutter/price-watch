@@ -2,6 +2,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.barcodes import is_restricted
 from app.connectors.base import PriceData
 from app.gtin import normalize_gtin
 from app.models import Listing, PriceObservation, Product, Store
@@ -21,15 +22,16 @@ def _product_for(db: Session, item: PriceData) -> Product:
             gtin = normalize_gtin(item.gtin)
         except ValueError:
             gtin = None
-    if gtin and gtin[1:].startswith("2"):
-        # EAN-13 prefix 2 is "restricted circulation": store-internal codes for loose or
-        # weighed items, not global product numbers. Matching on them would link unrelated products.
+    if gtin and is_restricted(gtin):
+        # "Restricted circulation" codes are store-internal (loose or weighed items), not global
+        # product numbers. Matching on them would link unrelated products.
         gtin = None
     if gtin:
         existing = db.scalar(select(Product).where(Product.gtin14 == gtin))
         if existing:
             return existing
     product = Product(name=item.name, brand=item.brand, gtin14=gtin, verified=gtin is not None,
+                      gtin_source="retailer" if gtin else None,
                       package_value=item.package_value, package_unit=item.package_unit)
     db.add(product)
     db.flush()

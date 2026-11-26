@@ -5,16 +5,18 @@ the connector; the core (monitors, history, events, notifications, politeness li
 page) knows nothing about any particular store. Connectors are installed, enabled and removed
 without touching the core, in the admin page or by dropping a folder on the server.
 
-Built-in connectors (`app/connectors/builtin/`) and installed ones have exactly the same structure.
-Read `builtin/citygross/` for a real example and `docs/connector-template/` for one to copy.
+Bundled connectors live in [`connectors/`](../connectors/README.md) at the repository root; ones
+installed from the admin page live in `INSTALLED_CONNECTORS_DIR`. Both have exactly the same
+structure and the same loader. Read `connectors/se.citygross/` for a real example and
+`connectors/_template/` for one to copy.
 
 ## Where to start
 
 | You are | Start with |
 |---|---|
-| A developer adding a store | [connector-guide.md](connector-guide.md): the steps, how to investigate a site, the pitfalls found on real stores |
-| An AI coding agent | [connector-template/AGENTS.md](connector-template/AGENTS.md): hard rules, workflow, commands, checklist |
-| Editing a manifest | [connector-template/manifest.schema.json](connector-template/manifest.schema.json) (JSON Schema, regenerate with `python -m app.connectors.build --schema`) and the table below |
+| A developer adding a store | [connector-guide.md](connector-guide.md) and the [connectors folder](../connectors/README.md): the steps, how to investigate a site, the pitfalls found on real stores |
+| An AI coding agent | [connectors/_template/AGENTS.md](../connectors/_template/AGENTS.md): hard rules, workflow, commands, checklist |
+| Editing a manifest | [connectors/_template/manifest.schema.json](../connectors/_template/manifest.schema.json) (JSON Schema, regenerate with `python -m app.connectors.build --schema`) and the table below |
 | An administrator | The [Administration](#administration) section |
 
 This page is the reference. The template folder is also what a package built with the build
@@ -42,7 +44,7 @@ modules, JSON fixtures and docs are allowed (`.py .yaml .yml .json .md .txt`).
 
 ## Quick start
 
-1. Copy `docs/connector-template/` and rename it.
+1. Copy `connectors/_template/` to `connectors/<id>/` (or anywhere, if you will upload it).
 2. Edit `manifest.yaml` (id, allowed hosts, settings, limits) and `connector.py` (`collect()`, and
    `discover()` if the store has a directory).
 3. Describe the real API with a fake site in `test_connector.py` and run `pytest -q` in the folder.
@@ -68,10 +70,14 @@ Unknown keys are rejected, so a typo is an error rather than a silently ignored 
 | `allowed_hosts` | The only hosts it may contact (HTTPS only): bare host names or `*.domain`. Required for any connector with an implementation |
 | `settings` | Values the administrator provides: `name` (UPPER_CASE), `label`, `description`, `secret`, `required` |
 | `store_discovery_inputs` | Inputs a store lookup needs: `name`, `label`, `pattern` (regex), `required` (Coop declares `postcode`) |
+| `stores` | Optional. Stores the connector always has, as `{external_id, name}`, created by the service on start-up and install. For a retailer with one national online assortment there is nothing to discover (Willys, Lidl) |
+| `product_urls` | Optional. How to read this store's product page links so a person can add a product by pasting one: a list of `{pattern, example}` (see [Product links](#product-links)) |
 | `minimum_request_interval_seconds` | Gap between requests to the site |
 | `minimum_monitor_interval_minutes` | How often one monitor may check |
 | `max_requests_per_scan` / `max_requests_per_day` | Hard caps (per scan; per rolling 24 hours, kept in the database) |
 | `cache_seconds` | Identical lookups within this window share one fetch |
+| `follow_redirects` | `false` by default: any redirect is a refusal. Set `true` when the site's canonical page address differs from the one you can build from an id (Lidl). Only a redirect (GET, up to 2 hops) to another host in `allowed_hosts` over HTTPS is followed; each hop counts as a request, is spaced and checked like any other, and a redirect anywhere else is still `access_blocked` |
+| `scheduled_window_utc` | Optional `HH:MM-HH:MM` in UTC (may cross midnight). When the retailer states when automated visits are welcome (Willys' robots.txt does), *scheduled* monitor checks start only inside it; a monitor that comes due outside simply waits. Searches, add-by-link, comparisons and "check now" are requests a person made, are not scheduled work, and are never delayed by it |
 
 ## Writing `connector.py`
 
@@ -93,7 +99,8 @@ or unsupported-channel scan before any request, enforces the per-scan budget, co
 every failure to a standard status, and never lets a secret into a result.
 
 Helpers: `self.client` (a `PoliteClient`: host allowlist, spacing, no redirects, size and time
-limits; use `get_json` / `post_json`), `self.require("SETTING")`, `to_decimal()`, `valid_gtin()`,
+limits; use `get_json` / `post_json`, or `get_text` for an HTML page), `self.require("SETTING")`,
+`to_decimal()`, `valid_gtin()`, `json_ld(html)` (the schema.org objects a product page embeds),
 and `parse_size()` from `app.pricing` for Swedish package labels.
 
 ### Rules the contract tests enforce
@@ -117,6 +124,52 @@ You raise or return; the service reacts.
 | `access_blocked` | 401/403/redirect to a challenge | **Connector paused** until an administrator resumes it |
 | `extraction_failed` | Response is not in the expected shape | Counts toward the pause threshold (5 in a row) |
 | `TransientError` (raised) | Network error, timeout, 5xx | The job retries with backoff (at most 5) |
+
+## Protocol notes: what Willys and Lidl taught us
+
+Writing Willys (a public JSON API with national prices) and Lidl (product pages only, no search)
+tested whether the protocol is general. It held, and gained these, all optional and off by default:
+
+| Difference | Handled by |
+|---|---|
+| A retailer with one national online assortment has no store directory | `stores` in the manifest: the service creates them on start-up and install, so nobody has to run discovery |
+| The site publishes pages, not an API | `PoliteClient.get_text()` and `json_ld(html)` in the kit (the schema.org data a product page embeds) |
+| A page's canonical address needs a name the id does not give | `follow_redirects` (same allowed host only) |
+| The site cannot be searched, or cannot look up a barcode | The service now **asks only for what `capabilities` says**: a store without `product_search` answers a name search with `unsupported` (no request is made) and refuses a search monitor; one without `barcode_search` is asked about the SKUs already linked to a barcode (`unknown_mapping` when none are) |
+| The retailer states when automated visits are welcome | `scheduled_window_utc` (background checks only; people's own requests are never delayed) |
+| A product exists but shows no price | `Collected.notes` explains it ("in store only"); the product is `missing`, never a zero price |
+| Member-only prices | Already supported: `OfferData.eligibility = "member"`; the shelf price is never replaced by a member price |
+| The barcode appears only on the product detail, not in search results | Already supported: a lookup by id returns the `gtin`, which records the barcode (source `retailer`) |
+
+Not (yet) modelled: prices that differ per store inside one online assortment (Willys can price some
+items per store; the connector shows what an anonymous visitor sees), and weekly leaflet offers
+(Lidl's grocery prices are only in the Lidl Plus app and the leaflet, which a bounded `store`
+monitor could one day follow).
+
+## Product links
+
+A person can add a product by pasting its page link (`POST /v1/monitors/from-url`). The connector
+makes that possible by declaring `product_urls`:
+
+```yaml
+product_urls:
+  - pattern: '^https://(www\.)?citygross\.se/.+-p(?P<sku>\d+_[A-Za-z]{2})/?$'
+    example: 'https://www.citygross.se/matvaror/frukt-och-gront/frukt/%C3%A4pple-ingrid-marie-p100142800_KG'
+```
+
+- The link is **parsed, never fetched**. The service only takes the product id from it, then looks
+  that one product up through the connector like any other request (rate limits, pause and cache
+  apply). A link can therefore never point the service at another host.
+- The pattern runs on the *normalised* link: `https://` + lower-case host + percent-decoded path,
+  with no query string, fragment, credentials or port. Anchor it (`^`, `$`) and capture the id in
+  a named group `sku`, which must be the id your `collect()` accepts in `request.skus`. Only `https`
+  links are accepted.
+- Give a real `example`. The loader refuses a manifest whose pattern cannot read its own example,
+  and the contract tests check that the pattern rejects unrelated links.
+- The host does not have to be in `allowed_hosts` (Coop's pages are on `www.coop.se`, but only the
+  API host is contacted), because the page is never requested.
+- The link does not say which store, and prices differ by store, so the caller names a store (or the
+  retailer has exactly one registered).
 
 ## Settings and secrets
 
@@ -188,10 +241,18 @@ also enforces what it can without being a sandbox:
 
 ## Deployment
 
-Installed packages live in `CONNECTORS_DIR` (default `./data/connectors`; `/data/connectors` in
-Docker). The API installs into it and the worker runs from it, so it must be shared storage: the
-`connectors_data` volume in `docker-compose.yml`. Each process notices changes on disk within a
-couple of seconds, so no restart is needed. You may also drop a folder there by hand.
+There are two places connectors live, with the same structure and the same loader:
+
+| Location | What | In Docker |
+|---|---|---|
+| `connectors/` in the repository root | Bundled connectors, kept in git. Add a folder to add one, delete it to remove one | Copied into the image **and** bind-mounted read-only by `docker-compose.yml` (`./connectors:/service/connectors:ro,z`), so a folder you add or delete on the host takes effect without a rebuild |
+| `INSTALLED_CONNECTORS_DIR` (default `./data/connectors`) | Connectors installed from the admin page | The `connectors_data` volume, shared by the API and the worker |
+
+The API installs into the second location and the worker runs from both, so it must be shared
+storage. Each process notices changes on disk within a couple of seconds, so no restart is needed.
+The `z` on the bind mount is for SELinux hosts (Fedora, RHEL), which otherwise deny the container
+access to the folder; other systems ignore it. An unreadable connectors directory is reported in
+the admin page and never stops the service.
 
 ## Beyond HTTP and JSON
 

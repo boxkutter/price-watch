@@ -1,0 +1,83 @@
+# Retail Monitor for Unraid: one compose file, one env file (.env next to this file).
+#
+#   1. cp .env.example .env   and fill in the four required values (see the comments in it)
+#   2. docker compose up -d --build
+#   3. open http://<server-ip>:8085/admin and sign in with ADMIN_EMAIL / ADMIN_PASSWORD
+#
+# Works from the Unraid terminal or the "Docker Compose Manager" plugin (point the stack at this
+# folder). The full walk-through, backups and updates are in README.md next to this file.
+name: retail-monitor
+
+x-app: &app
+  # Built from this repository (the build context is the repo root, two folders up). To use a
+  # prebuilt image instead, set RETAIL_IMAGE in .env and run `docker compose pull`.
+  build: {context: ../.., dockerfile: Dockerfile}
+  image: ${RETAIL_IMAGE:-retail-monitor:local}
+  # Run as Unraid's nobody:users so files in appdata belong to the usual owner.
+  user: "${PUID:-99}:${PGID:-100}"
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://retail:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/retail
+    TZ: ${TZ:-Europe/Stockholm}
+  # Connector packages installed from the admin page are kept here, so they survive updates.
+  # (`z` lets SELinux hosts read the mount; Unraid ignores it.)
+  volumes: ["${DATA_DIR:-/mnt/user/appdata/retail-monitor}/connectors:/data/connectors:z"]
+  restart: unless-stopped
+  logging: {driver: json-file, options: {max-size: "10m", max-file: "3"}}
+
+services:
+  # Runs once, then exits: makes the data folders and gives them to the user the app runs as.
+  init:
+    image: alpine:3
+    command: >-
+      sh -c "mkdir -p /data/connectors /data/postgres &&
+      chown -R ${PUID:-99}:${PGID:-100} /data/connectors"
+    volumes: ["${DATA_DIR:-/mnt/user/appdata/retail-monitor}:/data:z"]
+    restart: "no"
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: retail
+      POSTGRES_USER: retail
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: ${TZ:-Europe/Stockholm}
+    volumes: ["${DATA_DIR:-/mnt/user/appdata/retail-monitor}/postgres:/var/lib/postgresql/data:z"]
+    depends_on:
+      init: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U retail -d retail"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    logging: {driver: json-file, options: {max-size: "10m", max-file: "3"}}
+
+  api:
+    <<: *app
+    # Applies database migrations, creates the administrator and the stores connectors declare,
+    # then serves the API, the admin page (/admin), the example client (/demo) and /docs.
+    command: sh -c "alembic upgrade head && python -m app.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports: ["${BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-8085}:8000"]
+    depends_on:
+      init: {condition: service_completed_successfully}
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 40s
+    labels:
+      net.unraid.docker.managed: composeman
+      net.unraid.docker.webui: "http://[IP]:[PORT:8000]/admin"
+
+  # The only process that contacts stores. Keep exactly one.
+  worker:
+    <<: *app
+    command: python -m app.worker
+    depends_on:
+      api: {condition: service_healthy}
+    labels:
+      net.unraid.docker.managed: composeman

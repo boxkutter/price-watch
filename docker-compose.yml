@@ -4,7 +4,10 @@ services:
     env_file: .env
     command: sh -c "alembic upgrade head && python -m app.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports: ["127.0.0.1:8085:8000"]
-    volumes: ["connectors_data:/data/connectors"]
+    # connectors/ is mounted read-only so adding or removing a folder on the host takes effect without
+    # a rebuild; connectors_data holds the ones installed from the admin page. The `z` label lets
+    # SELinux hosts (Fedora, RHEL) read the mount; other systems ignore it.
+    volumes: ["./connectors:/service/connectors:ro,z", "connectors_data:/data/connectors"]
     depends_on:
       postgres: {condition: service_healthy}
     healthcheck:
@@ -17,7 +20,7 @@ services:
     build: .
     env_file: .env
     command: python -m app.worker
-    volumes: ["connectors_data:/data/connectors"]
+    volumes: ["./connectors:/service/connectors:ro,z", "connectors_data:/data/connectors"]
     depends_on:
       api: {condition: service_healthy}
     restart: unless-stopped

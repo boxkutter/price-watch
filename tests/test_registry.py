@@ -1,4 +1,5 @@
 """The registry: folder-per-connector packages, safe loading and live reload."""
+import os
 from pathlib import Path
 
 import pytest
@@ -9,7 +10,7 @@ from app.connectors import registry
 
 @pytest.fixture
 def installed_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "connectors_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "installed_connectors_dir", str(tmp_path))
     registry.refresh(force=True)
     yield tmp_path
     monkeypatch.undo()
@@ -121,3 +122,16 @@ def test_changes_are_noticed_and_unchanged_folders_are_not_reloaded(installed_di
     (installed_dir / "test.fourth" / "connector.py").write_text(CODE + "\n# edited\n")
     registry._checked_at = 0.0
     assert registry.refresh() is True and registry.CONNECTORS["test.fourth"] is not first
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can read anything, so permissions prove nothing")
+def test_an_unreadable_connectors_directory_is_reported_and_never_stops_the_service(installed_dir):
+    installed_dir.chmod(0)
+    try:
+        registry.refresh(force=True)  # must not raise
+        assert [e for e in registry.LOAD_ERRORS if "Cannot read the connectors directory" in e["error"]]
+        assert {"se.citygross", "se.coop"} <= set(registry.CONNECTORS)  # the bundled ones still load
+    finally:
+        installed_dir.chmod(0o755)
+    registry.refresh(force=True)
+    assert registry.LOAD_ERRORS == []

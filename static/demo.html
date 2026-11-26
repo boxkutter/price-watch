@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Retail Monitor: example client</title>
+<style>
+body{font:16px system-ui,sans-serif;max-width:860px;margin:1rem auto;padding:0 1rem;color:#18212b}
+header{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;justify-content:space-between;margin-bottom:.4rem}
+h1{font-size:1.3rem;margin:.2rem 0}h2{font-size:1.05rem;margin:.2rem 0 .5rem}
+a,button{font:inherit}button{cursor:pointer;padding:.4rem .7rem}input,select{font:inherit;padding:.4rem}
+.muted{color:#5c6874}.small{font-size:.85rem}.row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.4rem 0}
+nav{display:flex;gap:.3rem;flex-wrap:wrap;border-bottom:1px solid #ccd3db;margin:.6rem 0}
+nav button{border:0;border-bottom:3px solid transparent;background:none;padding:.5rem .8rem}
+nav button.on{border-color:#0b6b3a;font-weight:600}
+section.panel{display:none}section.panel.on{display:block}
+.card{border:1px solid #ccd3db;border-radius:10px;padding:.8rem;margin:.6rem 0}
+.price{font-size:1.5rem;font-weight:650}.chg{font-weight:600;margin-left:.4rem}.down{color:#0b6b3a}.up{color:#a1281a}
+.badge{display:inline-block;padding:.1rem .5rem;border-radius:1rem;font-size:.8rem;background:#e6eaef}
+.badge.ok{background:#d4f0dc;color:#14532d}.badge.warn{background:#fdf1cf;color:#7a5200}
+table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.4rem;border-bottom:1px solid #dce1e7;vertical-align:top}
+code,pre{background:#f1f4f7;border-radius:4px}code{padding:0 .25rem}pre{padding:.6rem;overflow:auto;font-size:.85rem}
+.err{color:#a1281a}.chip{border:1px solid #ccd3db;border-radius:1rem;background:#fff;padding:.15rem .6rem;font-size:.85rem}
+label.inline{display:flex;gap:.4rem;align-items:center}fieldset{border:1px solid #dce1e7;border-radius:8px;margin:.6rem 0}
+</style>
+<header>
+ <div><h1>Retail Monitor: example client</h1>
+ <div class="muted small" id="who">Signing in as the example user...</div></div>
+ <div class="row"><a href="/admin">Admin page</a><a href="/docs" target="_blank" rel="noopener">API reference</a>
+  <button id="reset">Reset example data</button></div>
+</header>
+<p id="gate" class="err" hidden>Sign in on the <a href="/admin">admin page</a> first, then open this page from there. It opens a session as a regular example user.</p>
+<p id="msg" role="status" class="muted"></p>
+<main id="app" hidden>
+<p class="muted small">This page is a client app: a <b>regular user</b> (not an admin) calling the public API with a user token and a client token, the way a phone app or script would. Everything you do here is an ordinary API call; see the "API calls" tab.</p>
+<nav id="tabs"><button data-tab="watch" class="on">Watchlist</button><button data-tab="add">Add a product</button><button data-tab="compare">Compare in a shop</button><button data-tab="activity">Activity</button><button data-tab="api">API calls</button></nav>
+<label class="inline small"><input type="checkbox" id="auto" checked> Refresh every 15 seconds</label>
+
+<section class="panel on" id="tab-watch"><h2>Watchlist</h2><div id="watchlist"></div></section>
+
+<section class="panel" id="tab-add">
+ <h2>Your stores</h2>
+ <p class="muted small">Tick the stores you shop in. Searches and price comparisons use these.</p>
+ <div id="stores"></div>
+ <fieldset><legend>Try it offline</legend>
+  <p class="small">The demo shop is a made-up store whose prices move every minute, so you can watch monitoring work without any real retailer.</p>
+  <button id="try-demo">Use the demo shop and search "demo"</button></fieldset>
+ <fieldset><legend>Add by product page link</legend>
+  <form id="link-form" class="row"><input name="url" size="46" required placeholder="https://..."><select id="link-store"></select>
+   <input name="maximum_price" size="8" placeholder="alert at ≤ kr" inputmode="decimal"><button>Add</button></form>
+  <div class="row small muted">Examples: <button type="button" class="chip" data-fill="https://demo.example.org/p/oats-1kg">demo oats</button>
+   <button type="button" class="chip" data-fill="https://www.citygross.se/matvaror/frukt-och-gront/frukt/%C3%A4pple-ingrid-marie-p100142800_KG">City Gross apple</button></div>
+  <div id="link-result" role="status"></div></fieldset>
+ <fieldset><legend>Add by name</legend>
+  <form id="search-form" class="row"><input name="q" size="30" required minlength="2" placeholder="e.g. oats"><button>Search my stores</button></form>
+  <div id="search-result" role="status"></div></fieldset>
+</section>
+
+<section class="panel" id="tab-compare">
+ <h2>Compare in a shop</h2>
+ <p class="muted small">Standing in a store? Type the barcode and say where you are. Prices we already know appear at once; live prices follow. Uses the stores you ticked.</p>
+ <form id="compare-form" class="row"><input name="gtin" size="18" inputmode="numeric" required placeholder="barcode digits"><select id="compare-here"></select><button>Compare</button></form>
+ <div class="row small muted">Demo barcodes: <button type="button" class="chip" data-gtin="9999990000019">demo oats</button> <button type="button" class="chip" data-gtin="9999990000026">demo coffee</button></div>
+ <div id="compare-result" role="status"></div>
+</section>
+
+<section class="panel" id="tab-activity"><h2>Activity</h2><div id="activity"></div></section>
+
+<section class="panel" id="tab-api">
+ <h2>API calls this page made</h2>
+ <p class="small">Every call sends <code>Authorization: Bearer &lt;user token&gt;</code> and <code>X-Client-Token: &lt;client token&gt;</code>. The effective permissions are what the user granted this client. Full guide: <a href="/api-guide" target="_blank" rel="noopener">/api-guide</a>.</p>
+ <pre>curl -H "Authorization: Bearer $USER_TOKEN" -H "X-Client-Token: $CLIENT_TOKEN" \
+     http://localhost:8085/v1/monitors</pre>
+ <div id="log"></div>
+</section>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const adminToken=sessionStorage.getItem('retailToken');
+let userToken=null,clientToken=null,stores=[],mine=new Set(),monitors=[],names={},events=[],callLog=[],open=new Set(),busy=false;
+const say=t=>{$('msg').textContent=t||''};
+
+// ---- the client's API helper: user token + client token on every call -----------------------
+async function call(method,path,body){
+ const t0=performance.now();
+ const res=await fetch(path,{method,headers:{'Content-Type':'application/json','Authorization':'Bearer '+userToken,'X-Client-Token':clientToken},body:body===undefined?undefined:JSON.stringify(body)});
+ const data=res.status===204?{}:await res.json().catch(()=>({}));
+ callLog.unshift({at:new Date(),method,path,status:res.status,ms:Math.round(performance.now()-t0)});callLog.length=80;renderLog();
+ if(!res.ok){const e=Error(data.message||('HTTP '+res.status));e.status=res.status;e.data=data;throw e}
+ return data;
+}
+async function admin(method,path){
+ const res=await fetch(path,{method,headers:{'Authorization':'Bearer '+adminToken}});
+ const data=await res.json().catch(()=>({}));if(!res.ok)throw Error(data.message||('HTTP '+res.status));return data;
+}
+async function waitJob(id,tries=60){
+ let job={state:'queued'};
+ for(let i=0;i<tries&&['queued','running','retry_wait'].includes(job.state);i++){await sleep(i?1200:400);job=await call('GET','/v1/jobs/'+id)}
+ return job;
+}
+const ago=d=>{if(!d)return 'never';const s=Math.max(0,Math.round((Date.now()-new Date(d.endsWith&&!/Z|[+-]\d\d:?\d\d$/.test(d)?d+'Z':d))/1000));return s<60?'just now':s<3600?Math.round(s/60)+' min ago':s<86400?Math.round(s/3600)+' h ago':Math.round(s/86400)+' days ago'};
+const until=d=>{if(!d)return '';const s=Math.round((new Date(/Z|[+-]\d\d:?\d\d$/.test(d)?d:d+'Z')-Date.now())/1000);return s<=0?'due now':s<3600?'in '+Math.max(1,Math.round(s/60))+' min':'in '+Math.round(s/3600)+' h'};
+
+// ---- tabs, header --------------------------------------------------------------------------
+$('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;
+ document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
+ document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id==='tab-'+b.dataset.tab))};
+$('reset').onclick=async()=>{if(!adminToken){say('Sign in on the admin page first');return}
+ if(!confirm('Forget everything the example user did (watchlist, activity, stores)? The shared price history stays.'))return;
+ try{const r=await admin('DELETE','/v1/admin/example-user/data');say(`Reset: ${r.monitors} monitor(s), ${r.stores} store(s) cleared`);if(userToken)await loadAll()}catch(e){say(e.message)}};
+
+// ---- loading -------------------------------------------------------------------------------
+async function loadAll(){
+ const [s,m,my,ev]=await Promise.all([call('GET','/v1/stores'),call('GET','/v1/monitors?include_removed=true'),call('GET','/v1/me/stores'),call('GET','/v1/events?limit=200')]);
+ stores=s.items;mine=new Set(my.items.map(x=>x.store_id));events=ev.items;
+ monitors=m.items.filter(x=>!x.removed_at);names={};m.items.forEach(x=>names[x.id]=x.name);
+ renderStores();renderWatch();renderActivity();
+}
+async function quickRefresh(){if(busy||document.hidden||!$('auto').checked)return;try{busy=true;await loadAll()}catch(e){}finally{busy=false}}
+
+// ---- watchlist ----------------------------------------------------------------------------
+function spark(items){
+ const pts=items.slice().reverse().map(x=>Number(x.current_price)).filter(Number.isFinite);if(pts.length<2)return '<span class="muted small">Not enough history yet: check again in a minute.</span>';
+ const w=320,h=64,lo=Math.min(...pts),hi=Math.max(...pts),span=(hi-lo)||1;
+ const xy=pts.map((p,i)=>`${(i/(pts.length-1)*(w-8)+4).toFixed(1)},${(h-6-(p-lo)/span*(h-12)).toFixed(1)}`).join(' ');
+ return `<svg width="${w}" height="${h}" role="img" aria-label="price history"><polyline points="${xy}" fill="none" stroke="#0b6b3a" stroke-width="2"/></svg><div class="muted small">low ${lo.toFixed(2)} &middot; high ${hi.toFixed(2)} &middot; ${pts.length} prices</div>`;
+}
+function card(m){
+ const l=m.latest,alert=m.conditions&&m.conditions.maximum_price,id=esc(m.id);
+ let delta='';if(l&&l.previous_price){const d=Number(l.current_price)-Number(l.previous_price);if(d)delta=`<span class="chg ${d<0?'down':'up'}">${d<0?'▼':'▲'} ${Math.abs(d).toFixed(2)}</span>`}
+ const hit=alert&&l&&Number(l.current_price)<=Number(alert)?' <span class="badge ok">at or below your alert</span>':'';
+ const code=m.barcode?`Barcode ${esc(m.barcode.gtin14.replace(/^0+/,''))} <span class="muted">(${esc(m.barcode.source)})</span>${m.barcode.source!=='retailer'?` <button data-unlink="${id}">Unlink</button>`:''}`:'No barcode';
+ const link=m.type==='exact_product'&&!(m.barcode&&m.barcode.source==='retailer')?` <input data-code="${id}" placeholder="scan barcode" size="13" inputmode="numeric"> <button data-link="${id}">Link</button>`:'';
+ return `<div class="card" data-id="${id}"><div class="row" style="justify-content:space-between"><div><b>${esc(m.name)}</b><div class="muted small">${esc(m.store_name||'')}${alert?` &middot; alert at ≤ ${esc(alert)} kr`:''}</div></div>
+  <div style="text-align:right"><span class="price">${l?esc(l.current_price)+' '+esc(l.currency):'<span class="muted">no price yet</span>'}</span>${delta}${hit}
+  ${l&&l.unit_price?`<div class="muted small">${esc(l.unit_price.amount)} per ${esc(l.unit_price.unit)}</div>`:''}</div></div>
+  <div class="muted small">Checked ${ago(m.last_success_at)} &middot; next check ${until(m.next_due_at)} &middot; ${code}${link}</div>
+  <div class="row"><button data-check="${id}">Check now</button><button data-history="${id}">${open.has(m.id)?'Hide':'Show'} history</button><button data-remove="${id}">Remove</button></div>
+  <div class="hist" id="hist-${id}">${open.has(m.id)?'<span class="muted small">Loading...</span>':''}</div></div>`;
+}
+function renderWatch(){
+ $('watchlist').innerHTML=monitors.length?monitors.map(card).join(''):'<p class="muted">Nothing watched yet. Open <b>Add a product</b> to get started.</p>';
+ open.forEach(id=>loadHistory(id));
+}
+async function loadHistory(id){
+ const m=monitors.find(x=>x.id===id),box=$('hist-'+id);if(!m||!box)return;
+ try{
+  const [prices,ev]=await Promise.all([call('GET','/v1/listings/'+m.conditions.listing_id+'/prices'),call('GET','/v1/monitors/'+id+'/events')]);
+  const evs=ev.items.slice(0,8).map(e=>`<li>${esc(eventText(e))} <span class="muted small">${ago(e.created_at)}</span></li>`).join('');
+  box.innerHTML=spark(prices.items)+(evs?`<ul class="small">${evs}</ul>`:'<p class="muted small">No events yet. Events appear when the price moves or an offer starts.</p>');
+ }catch(e){box.textContent=e.message}
+}
+$('watchlist').onclick=async e=>{
+ const b=e.target.closest('button');if(!b)return;const d=b.dataset;
+ try{
+  if(d.check){say('Checking...');const r=await call('POST','/v1/monitors/'+d.check+'/check');const job=await waitJob(r.job_id);
+   say(job.state==='succeeded'?'Checked.':'Check finished: '+job.state+(job.result&&job.result.detail?' ('+job.result.detail+')':''));await loadAll()}
+  else if(d.history){open.has(d.history)?open.delete(d.history):open.add(d.history);renderWatch()}
+  else if(d.remove){await call('DELETE','/v1/monitors/'+d.remove);open.delete(d.remove);say('Removed. Its activity is kept.');await loadAll()}
+  else if(d.unlink){await call('DELETE','/v1/monitors/'+d.unlink+'/barcode');say('Barcode removed');await loadAll()}
+  else if(d.link){await linkBarcode(d.link)}
+ }catch(err){say(err.message)}};
+async function linkBarcode(id){
+ const input=document.querySelector(`[data-code="${CSS.escape(id)}"]`);const gtin=input.value.trim();if(!gtin){say('Enter the barcode first');return}
+ const path='/v1/monitors/'+id+'/barcode';
+ try{const r=await call('POST',path,{gtin});say('Barcode linked ('+r.outcome+')')}
+ catch(err){
+  const ex=err.status===409&&err.data&&err.data.details&&err.data.details[0]&&err.data.details[0].existing_product;if(!ex)throw err;
+  if(!confirm(`That barcode already belongs to "${ex.name}" (${ex.retailers.join(', ')||'no store'}). Are they the same item? Merging treats your product as that one.`))return;
+  const r=await call('POST',path,{gtin,merge:true});say('Merged ('+r.merged_listings+' listing moved)')}
+ await loadAll();
+}
+
+// ---- stores, adding products ---------------------------------------------------------------
+function renderStores(){
+ const real=s=>s.retailer_id!=='test.fixture';
+ $('stores').innerHTML=stores.filter(real).map(s=>`<label class="inline"><input type="checkbox" data-store="${esc(s.id)}" ${mine.has(s.id)?'checked':''}> ${esc(s.name)} <span class="muted small">${esc(s.retailer_id)}</span></label>`).join('')||'<p class="muted">No stores yet. An administrator registers them on the admin page.</p>';
+ const options=stores.filter(real).map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+ const keep=$('link-store').value;$('link-store').innerHTML='<option value="">(store: automatic if only one)</option>'+options;$('link-store').value=keep;
+ const here=$('compare-here').value;$('compare-here').innerHTML='<option value="">I am in: (not specified)</option>'+stores.filter(s=>mine.has(s.id)&&real(s)).map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');$('compare-here').value=here;
+}
+$('stores').onchange=async e=>{const b=e.target;if(!b.dataset.store)return;
+ try{await call(b.checked?'PUT':'DELETE','/v1/me/stores/'+b.dataset.store);b.checked?mine.add(b.dataset.store):mine.delete(b.dataset.store);renderStores()}
+ catch(err){b.checked=!b.checked;say(err.message)}};
+document.addEventListener('click',e=>{const f=e.target.closest('[data-fill]');if(f){document.querySelector('#link-form [name=url]').value=f.dataset.fill}
+ const g=e.target.closest('[data-gtin]');if(g){document.querySelector('#compare-form [name=gtin]').value=g.dataset.gtin}});
+
+$('link-form').onsubmit=async e=>{e.preventDefault();const out=$('link-result');
+ try{
+  const f=new FormData(e.target);const body={url:f.get('url').trim()};
+  if($('link-store').value)body.store_id=$('link-store').value;
+  if(f.get('maximum_price').trim())body.maximum_price=f.get('maximum_price').trim().replace(',','.');
+  out.textContent='Looking the product up...';
+  const first=await call('POST','/v1/monitors/from-url',body);
+  if(first.already_monitored){out.textContent='You already watch this: '+first.monitor.name;return}
+  const job=await waitJob(first.job_id);const r=job.result||{};
+  if(job.state==='succeeded'){const p=r.product;out.textContent=(r.already_monitored?'Already watching: ':'Added: ')+p.name+', '+p.current_price+' '+p.currency+(p.unit_price?' ('+p.unit_price.amount+' per '+p.unit_price.unit+')':'');e.target.reset();await loadAll()}
+  else out.textContent='Could not add it ('+job.state+'): '+(r.detail||'no details');
+ }catch(err){out.textContent=err.message}};
+
+async function searchStores(query,ids){
+ const first=await call('POST','/v1/search/jobs',{query,store_ids:ids});const job=await waitJob(first.job_id);return job;
+}
+function showResults(job){
+ const out=$('search-result');const items=(job.result&&job.result.items)||[];
+ if(!items.length){out.innerHTML='<p class="muted">No products found'+(job.result&&job.result.coverage?': '+esc(job.result.coverage.map(c=>c.status).join(', ')):'')+'.</p>';return}
+ const sname=id=>(stores.find(s=>s.id===id)||{}).name||'';
+ out.innerHTML='<table>'+items.map(i=>`<tr><td>${esc(i.name)}<div class="muted small">${esc(sname(i.store_id))}</div></td><td>${esc(i.current_price)} ${esc(i.currency)}</td><td><button data-watch="${esc(i.listing_id)}" data-store-id="${esc(i.store_id)}" data-name="${esc(i.name)}">Watch</button></td></tr>`).join('')+'</table>';
+}
+$('search-form').onsubmit=async e=>{e.preventDefault();const out=$('search-result');
+ try{const ids=[...mine].slice(0,5);if(!ids.length){out.textContent='Tick at least one store above first.';return}
+  out.textContent='Searching...';showResults(await searchStores(new FormData(e.target).get('q').trim(),ids))}catch(err){out.textContent=err.message}};
+$('try-demo').onclick=async()=>{const out=$('search-result');
+ try{const demo=stores.filter(s=>s.retailer_id==='test.demoshop');if(!demo.length){out.textContent='The demo shop is not installed.';return}
+  for(const s of demo)if(!mine.has(s.id)){await call('PUT','/v1/me/stores/'+s.id);mine.add(s.id)}renderStores();
+  out.textContent='Searching the demo shops...';showResults(await searchStores('demo',demo.map(s=>s.id)))}catch(err){out.textContent=err.message}};
+$('search-result').onclick=async e=>{const b=e.target.closest('[data-watch]');if(!b)return;
+ try{await call('POST','/v1/monitors',{name:b.dataset.name,type:'exact_product',store_id:b.dataset.storeId,conditions:{listing_id:b.dataset.watch},interval_minutes:60});
+  b.textContent='Watching';b.disabled=true;await loadAll();say('Added to your watchlist.')}catch(err){say(err.message)}};
+
+// ---- comparing in a shop -------------------------------------------------------------------
+const stText={unknown:'not checked yet',not_found:'does not sell it',unknown_mapping:'cannot search by barcode here',paused:'paused',disabled:'disabled',rate_limited:'busy, try later',unsupported:'unavailable'};
+function renderCompare(data,live,note){
+ const rows=live?live.rows:data.known,sum=live||data;
+ const head=data.product?`<p><b>${esc((rows.find(r=>r.status==='found')||{}).product_name||data.product.name)}</b> <span class="muted small">barcode ${esc(data.gtin14.replace(/^0+/,''))}</span></p>`:'';
+ const saving=sum.saving_vs_here?`<p><b>${esc(sum.cheapest.store_name)}</b> is ${Math.abs(Number(sum.saving_vs_here.amount)).toFixed(2)} kr (${Math.abs(Number(sum.saving_vs_here.percent))}%) cheaper than where you are.</p>`:(sum.cheapest&&data.here_store_id?'<p>Where you are is already the cheapest we know.</p>':'');
+ const body=rows.map(r=>{const here=r.store_id===data.here_store_id?' <span class="badge">here</span>':'';
+  if(r.status!=='found')return `<tr class="muted"><td>${esc(r.store_name)}${here}</td><td colspan="3">${esc(stText[r.status]||r.status)}</td></tr>`;
+  return `<tr${r.is_cheapest?' style="font-weight:600"':''}><td>${esc(r.store_name)}${here}</td><td>${esc(r.current_price)} ${esc(r.currency)}</td><td>${r.is_cheapest?'cheapest':'+'+Number(r.vs_cheapest.amount).toFixed(2)+' kr'}</td><td class="muted small">${r.source==='live'?'live':'known '+Math.round(r.age_seconds/60)+' min ago'}</td></tr>`}).join('');
+ $('compare-result').innerHTML=head+saving+`<table><tr><th>Store</th><th>Price</th><th>vs cheapest</th><th>Source</th></tr>${body}</table>`+(note?`<p class="muted small">${esc(note)}</p>`:'');
+}
+$('compare-form').onsubmit=async e=>{e.preventDefault();
+ try{const body={gtin:new FormData(e.target).get('gtin').trim()};if($('compare-here').value)body.here_store_id=$('compare-here').value;
+  $('compare-result').textContent='Looking...';const first=await call('POST','/v1/compare/barcode',body);
+  renderCompare(first,null,'Known prices shown; checking each store live...');
+  const job=await waitJob(first.job_id);
+  job.result&&job.result.rows?renderCompare(first,job.result,job.result.complete?'Live prices.':'Some stores could not be checked.'):renderCompare(first,null,'Live check did not finish ('+job.state+').');
+  await loadAll();
+ }catch(err){$('compare-result').textContent=err.message}};
+
+// ---- activity ------------------------------------------------------------------------------
+function eventText(e){const p=e.payload||{},n=names[e.monitor_id]||'a product';
+ switch(e.type){
+  case'price.decreased':return `${n}: price dropped from ${p.old} to ${p.new}`;
+  case'price.increased':return `${n}: price rose from ${p.old} to ${p.new}`;
+  case'price.threshold_reached':return `${n}: reached your alert (${p.price} ≤ ${p.threshold})`;
+  case'offer.detected':return `${n}: new offer ${p.terms||p.title||''}`;
+  case'offer.changed':return `${n}: offer changed to ${p.terms||''}`;
+  case'product.discovered':return `New match found: ${p.name||n}`;
+  case'product.restocked':return `${n}: back in stock`;
+  case'product.unavailable':return `${n}: no longer available`;
+  default:return `${n}: ${e.type}`}}
+function renderActivity(){
+ const list=events.slice(-40).reverse();
+ $('activity').innerHTML=list.length?'<table>'+list.map(e=>`<tr><td>${esc(eventText(e))}</td><td class="muted small">${ago(e.created_at)}</td></tr>`).join('')+'</table>':'<p class="muted">Nothing yet. Events appear when a watched price moves, an alert is reached or an offer starts. Use <b>Check now</b> on a demo shop product a minute apart.</p>';
+}
+function renderLog(){$('log').innerHTML='<table><tr><th>When</th><th>Request</th><th>Status</th><th>ms</th></tr>'+callLog.map(c=>`<tr><td class="muted small">${c.at.toLocaleTimeString()}</td><td><code>${esc(c.method)} ${esc(c.path)}</code></td><td class="${c.status>=400?'err':''}">${c.status}</td><td class="muted small">${c.ms}</td></tr>`).join('')+'</table>'}
+
+// ---- start ---------------------------------------------------------------------------------
+(async()=>{
+ if(!adminToken){$('gate').hidden=false;$('who').textContent='';return}
+ try{
+  const s=await admin('POST','/v1/admin/example-user');userToken=s.user_token;clientToken=s.client_token;
+  $('who').textContent=`${s.user.email} · regular user · client permissions: ${s.scopes.join(', ')}`;
+  $('app').hidden=false;await loadAll();setInterval(quickRefresh,15000);
+ }catch(err){$('gate').hidden=false;$('gate').textContent='Could not open the example session: '+err.message+'. Sign in on the admin page first.'}
+})();
+</script>
+</html>

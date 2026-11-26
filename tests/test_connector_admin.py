@@ -25,13 +25,13 @@ from tests.test_coop import connector as coop_connector
 from tests.test_politeness import check, job_of, monitor, search
 from tests.test_regressions import admin_client
 
-TEMPLATE = Path(__file__).parent.parent / "docs" / "connector-template"
+TEMPLATE = Path(__file__).parent.parent / "connectors" / "_template"
 ZIP = {"Content-Type": "application/zip"}
 
 
 @pytest.fixture
 def lab(fresh_db, tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "connectors_dir", str(tmp_path / "connectors"))
+    monkeypatch.setattr(settings, "installed_connectors_dir", str(tmp_path / "connectors"))
     monkeypatch.delenv("COOP_API_KEY", raising=False)
     registry.refresh(force=True)
     retrieval.clear_cache()
@@ -279,6 +279,10 @@ BAD = {
         "allowed_hosts: [api.exampleshop.example.org]", "allowed_hosts: []")})), "allowed_hosts"),
     "url instead of host": (zipped(template_files(**{"manifest.yaml": BAD_MANIFEST.replace(
         "[api.exampleshop.example.org]", "['https://api.exampleshop.example.org/v1']")})), "allowed_hosts"),
+    "invalid regex in product_urls": (zipped(template_files(**{"manifest.yaml": BAD_MANIFEST.replace(
+        "(?P<sku>[A-Za-z0-9]+)/?$'", "(?P<sku>[A-Za-z0-9]+(/?$'")})), "regular expression"),
+    "product_urls without a sku group": (zipped(template_files(**{"manifest.yaml": BAD_MANIFEST.replace(
+        "(?P<sku>[A-Za-z0-9]+)", "(?P<id>[A-Za-z0-9]+)")})), "named group"),
     "future protocol": (zipped(template_files(**{"manifest.yaml": BAD_MANIFEST.replace(
         "protocol_version: 1", "protocol_version: 2")})), "protocol"),
     "missing module": (zipped({"manifest.yaml": BAD_MANIFEST}), "is not in the package"),

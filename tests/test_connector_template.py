@@ -3,7 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-TEMPLATE = Path(__file__).parent.parent / "docs" / "connector-template"
+TEMPLATE = Path(__file__).parent.parent / "connectors" / "_template"
 
 
 def test_the_template_connectors_own_tests_pass_as_documented():

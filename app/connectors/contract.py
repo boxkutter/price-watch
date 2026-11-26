@@ -8,7 +8,7 @@ checks every connector must pass, in plain asserts, so it works under pytest or 
         check_connector(make, handler, manifest=manifest, store="123",
                         request=ScanRequest(query="milk"), secrets={"MY_API_KEY": "s3cret"})
 
-See docs/connectors.md and docs/connector-template/.
+See docs/connectors.md and connectors/_template/.
 """
 from collections.abc import Callable
 from decimal import Decimal
@@ -36,7 +36,8 @@ class _Site:
 
 def client_for(manifest: Manifest, transport: httpx.BaseTransport) -> PoliteClient:
     """A client that honours the manifest's host allowlist but never sleeps; for factories."""
-    return PoliteClient(manifest.allowed_hosts or ["shop.example.org"], 0, transport=transport)
+    return PoliteClient(manifest.allowed_hosts or ["shop.example.org"], 0, transport=transport,
+                        follow_redirects=manifest.follow_redirects)
 
 
 def check_connector(make: Callable[[httpx.BaseTransport, dict], object],
@@ -157,6 +158,18 @@ def check_connector(make: Callable[[httpx.BaseTransport, dict], object],
                 assert all(value not in str(call.url) for call in site.calls), \
                     "a secret was sent in a URL; use a header"
         ok("secrets_stay_secret")
+
+    # 8b. Product links, when declared: every rule reads its own real example and nothing else
+    if manifest.product_urls:
+        from app.connectors.urls import match_product_url
+        rules = [{"pattern": rule.pattern} for rule in manifest.product_urls]
+        for rule in manifest.product_urls:
+            assert rule.example, "give every product_urls rule a real example link"
+            assert match_product_url(rules, rule.example), f"product_urls cannot read {rule.example}"
+        for unrelated in ("https://example.org/", "https://www.google.com/search?q=milk"):
+            assert match_product_url(rules, unrelated) is None, \
+                "a product_urls pattern is too loose: it accepts an unrelated link"
+        ok("product_urls")
 
     # 9. Store discovery, when declared
     if manifest.capabilities.get("store_discovery") == "supported":

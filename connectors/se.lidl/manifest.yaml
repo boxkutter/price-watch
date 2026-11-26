@@ -1,0 +1,39 @@
+id: se.lidl
+name: Lidl
+country: SE
+description: Price and stock of products on lidl.se's online shop, added by their page link.
+author: price-watch
+protocol_version: 1
+connector_version: 0.1.0
+enabled: true
+# Owner decision 2026-11-26: private, targeted use of what a normal visitor can see.
+access_review: approved
+access_note: >-
+  Reads the schema.org product data embedded in an ordinary lidl.se product page, one page per
+  product a person added by its link: the same page a visitor opens. Lidl publishes no search or
+  product API this connector may use (robots.txt disallows /q/search?id=*), so there is no search by
+  name or barcode, and no crawling: only pages whose links a person gave. Lidl's grocery prices are
+  not published on lidl.se at all (they are in the Lidl Plus app and the weekly leaflet), so this
+  covers only what lidl.se's online shop lists, mostly non-food. A page that shows no online price
+  ("in store only") is reported as such, never as a price. Unofficial: a 401/403 pauses the connector.
+implementation: connector:LidlConnector
+capabilities:
+  store_discovery: unsupported
+  product_search: unsupported
+  barcode_search: unsupported
+  online_prices: supported
+  physical_store_prices: unsupported
+  store_offers: unsupported
+allowed_hosts: [www.lidl.se]
+# The product page address is /p/<name>/p<id>; the id alone redirects to it (hence follow_redirects).
+follow_redirects: true
+stores:
+  - {external_id: online, name: Lidl (online shop)}
+product_urls:
+  - pattern: '^https://www\.lidl\.se/p/[^/]+/p(?P<sku>\d{6,12})/?$'
+    example: 'https://www.lidl.se/p/favorina-mandlar/p11000943'
+minimum_request_interval_seconds: 5
+minimum_monitor_interval_minutes: 60
+max_requests_per_scan: 6
+max_requests_per_day: 200
+cache_seconds: 600

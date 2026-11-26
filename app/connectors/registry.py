@@ -1,10 +1,10 @@
 """Connector registry: finds connector packages, loads each safely, and reloads on change.
 
 A connector package is a folder holding `manifest.yaml` and the module its `implementation`
-names. Packages come from two places, with exactly the same structure:
+names. Packages come from two places, with exactly the same structure and the same loader:
 
-- built-in: `app/connectors/builtin/<name>/`, shipped with the service
-- installed: `<CONNECTORS_DIR>/<id>/`, put there by the admin interface
+- bundled: `connectors/<id>/` in the repository root, shipped with the service
+- installed: `<INSTALLED_CONNECTORS_DIR>/<id>/`, put there by the admin interface
 
 A package that fails to load (bad manifest, import error, wrong class) is quarantined and shown
 to the administrator; it never stops the service or the other connectors. The API and the worker
@@ -23,12 +23,14 @@ import threading
 import time
 import types
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.config import settings
 from app.connectors.manifest import Manifest, load_manifest
 
-BUILTIN_DIR = Path(__file__).parent / "builtin"
+# <repo>/connectors, next to app/ (in the image: /service/connectors)
+BUILTIN_DIR = Path(__file__).resolve().parents[2] / "connectors"
 CHECK_INTERVAL_SECONDS = 2.0
 
 
@@ -59,23 +61,33 @@ _checked_at = 0.0
 
 
 def connector_dirs() -> list[tuple[Path, str]]:
-    dirs = [(BUILTIN_DIR, "builtin")]
-    installed = Path(settings.connectors_dir)
+    dirs = [(BUILTIN_DIR, "builtin")] if BUILTIN_DIR.is_dir() else []
+    installed = Path(settings.installed_connectors_dir)
     if installed.is_dir():
         dirs.append((installed, "installed"))
     return dirs
 
 
-def package_folders(directory: Path) -> list[Path]:
-    return sorted(path for path in directory.iterdir()
-                  if path.is_dir() and not path.name.startswith((".", "_"))
-                  and (path / "manifest.yaml").exists())
+def package_folders(directory: Path, problems: list[str] | None = None) -> list[Path]:
+    """Connector folders in a directory. An unreadable directory is reported, never fatal."""
+    try:
+        return sorted(path for path in directory.iterdir()
+                      if path.is_dir() and not path.name.startswith((".", "_"))
+                      and (path / "manifest.yaml").exists())
+    except OSError as exc:
+        if problems is not None:
+            problems.append(f"Cannot read the connectors directory {directory}: "
+                            f"{type(exc).__name__}: {exc.strerror or exc}")
+        return []
 
 
 def package_files(folder: Path) -> list[Path]:
-    return sorted(path for path in folder.rglob("*")
-                  if path.is_file() and "__pycache__" not in path.parts
-                  and path.suffix in {".py", ".yaml", ".yml", ".json"})
+    try:
+        return sorted(path for path in folder.rglob("*")
+                      if path.is_file() and "__pycache__" not in path.parts
+                      and path.suffix in {".py", ".yaml", ".yml", ".json"})
+    except OSError:
+        return []
 
 
 def folder_hash(folder: Path) -> str:
@@ -89,27 +101,30 @@ def _scan_fingerprint(dirs: list[tuple[Path, str]]) -> tuple:
     parts: list = []
     for directory, source in dirs:
         generation = directory / ".generation"
-        parts.append((source, generation.stat().st_mtime_ns if generation.exists() else 0))
+        try:
+            parts.append((source, generation.stat().st_mtime_ns if generation.exists() else 0))
+        except OSError:
+            parts.append((source, -1))
         for folder in package_folders(directory):
-            parts.extend((str(path), path.stat().st_mtime_ns, path.stat().st_size)
-                         for path in package_files(folder))
+            for path in package_files(folder):
+                try:
+                    parts.append((str(path), path.stat().st_mtime_ns, path.stat().st_size))
+                except OSError:
+                    parts.append((str(path), -1, -1))
     return tuple(parts)
 
 
 def _load_class(folder: Path, source: str, manifest: Manifest, sha: str):
     module_name, _, class_name = manifest.implementation.partition(":")
     if "." not in module_name and (folder / f"{module_name}.py").exists():
-        if source == "builtin":
-            module = importlib.import_module(f"app.connectors.builtin.{folder.name}.{module_name}")
-        else:
-            # A uniquely named synthetic package per content hash, so an updated package is
-            # imported afresh and sibling imports (`from . import helpers`) work.
-            package = f"_connector_{manifest.id.replace('.', '_').replace('-', '_')}_{sha[:12]}"
-            if package not in sys.modules:
-                holder = types.ModuleType(package)
-                holder.__path__ = [str(folder)]
-                sys.modules[package] = holder
-            module = importlib.import_module(f"{package}.{module_name}")
+        # A uniquely named synthetic package per content hash, so an edited or updated package is
+        # imported afresh and sibling imports (`from . import helpers`) work.
+        package = f"_connector_{manifest.id.replace('.', '_').replace('-', '_')}_{sha[:12]}"
+        if package not in sys.modules:
+            holder = types.ModuleType(package)
+            holder.__path__ = [str(folder)]
+            sys.modules[package] = holder
+        module = importlib.import_module(f"{package}.{module_name}")
     else:
         module = importlib.import_module(module_name)
     factory = getattr(module, class_name, None)
@@ -145,6 +160,10 @@ def retailer_dict(entry: Entry) -> dict:
             "capabilities": manifest.capabilities, "connector_version": manifest.connector_version,
             "settings": [spec.model_dump() for spec in manifest.settings],
             "store_discovery_inputs": [spec.model_dump() for spec in manifest.store_discovery_inputs],
+            "stores": [spec.model_dump() for spec in manifest.stores],
+            "scheduled_window_utc": manifest.scheduled_window_utc,
+            "follow_redirects": manifest.follow_redirects,
+            "product_urls": [rule.model_dump() for rule in manifest.product_urls],
             "allowed_hosts": manifest.allowed_hosts,
             "minimum_monitor_interval_minutes": manifest.minimum_monitor_interval_minutes,
             "max_requests_per_day": manifest.max_requests_per_day,
@@ -155,7 +174,11 @@ def _load_all(dirs: list[tuple[Path, str]]) -> None:
     entries: dict[str, Entry] = {}
     errors: list[dict] = []
     for directory, source in dirs:
-        for folder in package_folders(directory):
+        unreadable: list[str] = []
+        folders = package_folders(directory, unreadable)
+        errors.extend({"folder": str(directory), "source": source, "error": message}
+                      for message in unreadable)
+        for folder in folders:
             try:
                 entry = _load_folder(folder, source)
             except Exception as exc:  # noqa: BLE001
@@ -198,6 +221,22 @@ def refresh(force: bool = False) -> bool:
         _fingerprint = fingerprint
         _load_all(dirs)
         return True
+
+
+def in_scheduled_window(retailer_id: str, now: datetime | None = None) -> bool:
+    """False only when the connector states a window for scheduled checks and it is closed now."""
+    window = (retailer(retailer_id) or {}).get("scheduled_window_utc")
+    if not window:
+        return True
+    start, end = (_minutes(part) for part in window.split("-"))
+    now = now or datetime.now(UTC)
+    current = now.hour * 60 + now.minute
+    return start <= current <= end if start <= end else (current >= start or current <= end)
+
+
+def _minutes(clock: str) -> int:
+    hours, minutes = clock.split(":")
+    return int(hours) * 60 + int(minutes)
 
 
 def retailers() -> list[dict]:

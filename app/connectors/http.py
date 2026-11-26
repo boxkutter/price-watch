@@ -8,7 +8,7 @@ import json
 import time
 from collections.abc import Callable
 from decimal import Decimal
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
@@ -24,6 +24,7 @@ from app.connectors.base import (
 )
 
 MAX_RESPONSE_BYTES = 5_000_000
+MAX_REDIRECTS = 2
 
 
 def host_allowed(host: str, allowed: list[str]) -> bool:
@@ -51,10 +52,14 @@ class RateLimiter:
 class PoliteClient:
     def __init__(self, allowed_hosts: list[str], min_interval: float, timeout: float = 15.0,
                  transport: httpx.BaseTransport | None = None,
-                 limiter: RateLimiter | None = None, user_agent: str | None = None):
+                 limiter: RateLimiter | None = None, user_agent: str | None = None,
+                 follow_redirects: bool = False):
         if not allowed_hosts:
             raise ValueError("A live connector needs at least one allowed host")
         self.allowed_hosts = list(allowed_hosts)  # a private copy: callers cannot widen it later
+        # Only a redirect to another allowed host is ever followed (and only when the connector
+        # opted in); anywhere else it is a refusal, as it may be a block or login page.
+        self.follow_redirects = follow_redirects
         self.limiter = limiter or RateLimiter(min_interval)
         self._client = httpx.Client(timeout=timeout, follow_redirects=False, transport=transport,
                                     headers={"User-Agent": user_agent or settings.connector_user_agent,
@@ -75,8 +80,35 @@ class PoliteClient:
     def post_json(self, url: str, body, params: dict | None = None, headers: dict | None = None):
         return self.request_json("POST", url, params=params, headers=headers, body=body)
 
+    def get_text(self, url: str, params: dict | None = None, headers: dict | None = None) -> str:
+        """GET a page that is not JSON (HTML, XML). Same host allowlist, spacing, size and
+        refusal handling as the JSON methods."""
+        headers = {"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                   **(headers or {})}
+        return self.request_bytes("GET", url, params=params, headers=headers).decode("utf-8", "replace")
+
     def request_json(self, method: str, url: str, params: dict | None = None,
                      headers: dict | None = None, body=None):
+        raw = self.request_bytes(method, url, params=params, headers=headers, body=body)
+        try:
+            return json.loads(raw, parse_float=Decimal)
+        except ValueError as exc:
+            raise ExtractionError("Response is not JSON") from exc
+
+    def request_bytes(self, method: str, url: str, params: dict | None = None,
+                      headers: dict | None = None, body=None) -> bytes:
+        """The response body. Each hop of an allowed redirect is a request of its own: it is
+        counted, spaced and checked against the host allowlist like any other."""
+        for _hop in range(MAX_REDIRECTS + 1):
+            content, location = self._once(method, url, params, headers, body)
+            if location is None:
+                return content
+            url, params = location, None
+        raise AccessBlocked("Too many redirects")
+
+    def _once(self, method: str, url: str, params: dict | None, headers: dict | None,
+              body) -> tuple[bytes, str | None]:
+        """One request. Returns (body, None), or (b"", next_url) for a redirect we may follow."""
         parts = urlsplit(url)
         if parts.scheme != "https" or not parts.hostname or not host_allowed(
                 parts.hostname, self.allowed_hosts):
@@ -97,24 +129,26 @@ class PoliteClient:
                     retry_after = response.headers.get("Retry-After", "")
                     raise RateLimited(int(retry_after) if retry_after.isdigit() else None)
                 if 300 <= status < 400:
+                    target = urljoin(url, response.headers.get("Location", ""))
+                    target_host = urlsplit(target).hostname
+                    if (self.follow_redirects and method == "GET" and urlsplit(target).scheme == "https"
+                            and target_host and host_allowed(target_host, self.allowed_hosts)):
+                        return b"", target
                     raise AccessBlocked(f"Unexpected redirect (HTTP {status})")
                 if status >= 500 or status in (408, 425):
                     raise TransientError(f"HTTP {status}")
                 if status != 200:
                     raise HttpStatusError(status)
-                body = bytearray()
+                received = bytearray()
                 for chunk in response.iter_bytes():
-                    body += chunk
-                    if len(body) > MAX_RESPONSE_BYTES:
+                    received += chunk
+                    if len(received) > MAX_RESPONSE_BYTES:
                         raise ExtractionError("Response too large")
         except httpx.TimeoutException as exc:
             raise TransientError("Timeout") from exc
         except httpx.HTTPError as exc:
             raise TransientError(type(exc).__name__) from exc
-        try:
-            return json.loads(body, parse_float=Decimal)
-        except ValueError as exc:
-            raise ExtractionError("Response is not JSON") from exc
+        return bytes(received), None
 
     def close(self) -> None:
         self._client.close()

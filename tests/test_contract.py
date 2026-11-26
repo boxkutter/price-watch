@@ -5,31 +5,32 @@ from decimal import Decimal
 import pytest
 
 from app.connectors.base import AccessBlocked, ScanRequest
-from app.connectors.builtin.citygross.connector import CityGrossConnector
-from app.connectors.builtin.coop.connector import CoopConnector
 from app.connectors.contract import check_connector, client_for
 from app.connectors.manifest import load_manifest
 from app.connectors.registry import BUILTIN_DIR
+from tests.connector_modules import module_of
 from tests.test_citygross import FakeSite
 from tests.test_coop import KEY, FakeCoop
 
+CityGrossConnector = module_of("se.citygross").CityGrossConnector
+CoopConnector = module_of("se.coop").CoopConnector
 ALL_CHECKS = ["identity", "targeted_only", "happy_path", "allowed_hosts_only", "refusals",
               "bad_payloads", "transient_errors"]
 
 
 def test_city_gross_passes_the_contract():
-    manifest = load_manifest(BUILTIN_DIR / "citygross" / "manifest.yaml")
+    manifest = load_manifest(BUILTIN_DIR / "se.citygross" / "manifest.yaml")
 
     def make(transport, secrets):
         return CityGrossConnector(manifest.model_dump(), client_for(manifest, transport))
 
     passed = check_connector(make, FakeSite(), manifest=manifest, store="3204",
                              request=ScanRequest(query="havregryn"))
-    assert passed == [*ALL_CHECKS, "store_discovery"]
+    assert passed == [*ALL_CHECKS, "product_urls", "store_discovery"]
 
 
 def test_coop_passes_the_contract_including_secret_handling():
-    manifest = load_manifest(BUILTIN_DIR / "coop" / "manifest.yaml")
+    manifest = load_manifest(BUILTIN_DIR / "se.coop" / "manifest.yaml")
 
     def make(transport, secrets):
         connector = CoopConnector(manifest.model_dump(), client_for(manifest, transport))
@@ -44,7 +45,7 @@ def test_coop_passes_the_contract_including_secret_handling():
 
 # ---- the kit must catch bad connectors ------------------------------------------------------
 
-MANIFEST = load_manifest(BUILTIN_DIR / "citygross" / "manifest.yaml")
+MANIFEST = load_manifest(BUILTIN_DIR / "se.citygross" / "manifest.yaml")
 SITES = "https://www.citygross.se/api/v1/sites"
 
 

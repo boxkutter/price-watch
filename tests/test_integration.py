@@ -62,7 +62,8 @@ def test_invitation_delegation_scan_and_partial_snapshot(monkeypatch):
                 "scopes": ["monitors:read", "events:read"]})
             assert granted.status_code == 201
             assert (await client.get("/v1/events", headers=delegated_h)).status_code == 200
-            store_id = (await client.get("/v1/stores", headers=user_h)).json()["items"][0]["id"]
+            store_id = next(item["id"] for item in (await client.get("/v1/stores", headers=user_h)).json()["items"]
+                            if item["retailer_id"] == "test.fixture")
             connector_status = (await client.get("/v1/connectors/test.fixture/health",
                                                  headers=user_h)).json()
             assert connector_status["enabled"] is True

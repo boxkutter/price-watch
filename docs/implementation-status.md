@@ -1,14 +1,16 @@
 # Implementation status
 
-The repository has an executable slice of Retail Monitor. It has a synthetic store (`test.fixture`) for tests and two live connectors, **City Gross** (`se.citygross`) and **Coop** (`se.coop`), which make targeted, rate-limited requests. ICA is blocked (see below). The API and admin page are suitable for local evaluation, not a production launch.
+The repository has an executable slice of Retail Monitor. It has a synthetic store (`test.fixture`) for tests and four live connectors, **City Gross** (`se.citygross`), **Coop** (`se.coop`), **Willys** (`se.willys`) and **Lidl** (`se.lidl`, link-only), which make targeted, rate-limited requests. ICA is blocked (see below). The API and admin page are suitable for local evaluation, not a production launch.
 
 The current worker polls PostgreSQL directly for durable jobs and delivery records. Redis and Celery from the original specification are not used yet; this keeps the first slice smaller while preserving queued work across restarts. The API readiness check requires the current Alembic schema revision.
 
 ## Run locally
 
+Deploying on an **Unraid** server instead? Use the single compose file and env file in [deploy/unraid/](../deploy/unraid/README.md).
+
 1. Copy `.env.example` to `.env`.
 2. Set `POSTGRES_PASSWORD` and use the same password in `DATABASE_URL`. Set a random `APP_SECRET` of at least 32 characters, an `ADMIN_EMAIL`, and an `ADMIN_PASSWORD` of at least 16 characters.
-3. Run `docker compose build` and `docker compose up -d`.
+3. Run `docker compose build` and `docker compose up -d`. If the `api` container keeps restarting (and `worker` never starts, because it waits for the API), run `docker compose logs api`: it lists exactly which `.env` settings are still placeholders or too weak. Postgres fixes its password the first time it starts, so if you change `POSTGRES_PASSWORD` afterwards, reset the (empty) database volume once with `docker compose down -v`.
 4. Open `http://localhost:8085/admin` and sign in. API documentation is at `/docs`.
 
 The admin page creates invitations, client credentials, and monitors, and shows connector state and recent jobs with manual retry. The invitation and client secret appear once; share or save them securely. A user accepts an invitation through `POST /v1/auth/accept-invitation`, then logs in through `POST /v1/auth/login`.
@@ -21,14 +23,30 @@ Webhook deliveries are JSON bodies of the form `{"id": "<event id>", "type": "of
 
 Webhooks are configured per user at `POST /v1/webhooks`. The returned signing secret appears once. The sender signs `timestamp + "." + raw_json_body` with HMAC-SHA256 and sends `X-Retail-Timestamp`, `X-Retail-Delivery`, and `X-Retail-Signature: v1=<hex>`. Consumers should reject stale timestamps and deduplicate delivery IDs. HTTPS public destinations are accepted by default. For trusted home network destinations, configure `WEBHOOK_PRIVATE_HOSTS` and, only if needed, `ALLOW_HTTP_WEBHOOKS=true`.
 
+## Using the API from your own app
+
+[docs/api.md](api.md) is the full guide for developers and AI agents: access (users, tokens, API clients and grants), conventions (the error envelope, idempotency, the asynchronous job pattern), limits, every workflow with examples, events and signed webhooks, and an endpoint reference. A running service serves it at `/api-guide`, the machine-readable spec at `/openapi.json` (also committed as `docs/openapi.json`), an interactive reference at `/docs`, and a short index for agents at `/llms.txt`. [examples/shopper_client.py](../examples/shopper_client.py) is a small, tested Python client and worked demo. Tests fail if the guide drifts from the routes, scopes, limits, events or error codes.
+
+## Example client and demo shop
+
+Sign in on `/admin`, then open **the example client** (`/demo`). It opens a session as a regular, non-admin *example user* with a scoped API client (`POST /v1/admin/example-user`) and works only through the public API with a user token and a client token, so you see the service the way an app does: a watchlist with live prices and change badges, adding by link or by name, comparing a barcode across your stores, an activity feed, and an "API calls" tab listing every request. "Reset example data" clears what the example user did; the shared catalogue stays.
+
+To see monitoring work without any real retailer there is a bundled synthetic connector, `test.demoshop`, with two stores (Demo Shop North and South). Its prices move on a short cycle, the oats have a multi-buy offer that switches on and off, and the stores sell the same barcodes, so price moves, alerts and cross-store comparison all happen offline. Demo link `https://demo.example.org/p/oats-1kg`; demo barcodes `9999990000019` and `9999990000026`.
+
+## Barcodes and comparing prices
+
+- **Linking a barcode** (`POST /v1/monitors/{id}/barcode`): a product that a store publishes no barcode for can be given the one a person scanned, so it can be found by barcode and compared across stores. The link is shared by everyone, so its source is recorded (`retailer`, `user` or `admin`), a retailer-published barcode cannot be overridden, a wrong scan can be removed (`DELETE`), and a barcode that already belongs to another product is a `409` naming it: only `merge: true` merges the two (listings move; price history is kept). Store-internal codes (EAN-13 prefix 2 or 02, used for loose items) are refused.
+- **Comparing in a shop** (`POST /v1/compare/barcode`): scan in shop A and find the same item in the stores you chose (`/v1/me/stores`, at most 15; at most 8 checked per scan). The response carries what the catalogue already knows, with its age, so a client can draw at once; a worker job then checks each store live (one request per store, spaced, cached, and counted against the per-user lookup budget shared with searches). Each row says `found`, `not_found`, `unknown`, `unknown_mapping` or a connector state; the result names the cheapest store and the saving versus where you stand. A store whose connector cannot search by barcode is asked about the SKUs already linked to that barcode.
+
 ## Using City Gross
 
 City Gross prices and assortment are per store, and the API's `store` parameter is the store's `storeNumber`. All retailer requests are made by the worker, never by the API.
 
 1. As an admin, queue a directory refresh: `POST /v1/admin/retailers/se.citygross/stores/discover` (one request). It upserts the stores (38 at the time of writing); list them with `GET /v1/stores`. Only registered stores can be used, because an unknown store number silently returns no products.
 2. Search with `POST /v1/search/jobs` (`{"query": "havregryn", "store_ids": [...]}` or `{"gtin": "7310130321085", ...}`). City Gross publishes the GTIN, so barcode search works and creates a verified GTIN-to-product mapping. The same item at another City Gross store resolves to the same product.
-3. Create an `exact_product` monitor from a listing returned by the search, or a `generic_product` monitor with a text query. Store-wide (`store`) monitors are refused for live retailers. The minimum interval is 60 minutes.
-4. Monitors report price changes, thresholds, stock changes, and promotions attached to the products they match (`offer.detected` / `offer.changed`, with validity dates). Multi-buys such as "2 för 32 kr" are separate offers; a public single-item promotion becomes the effective price. Member-only promotions are recorded as `member` offers and never change the public price.
+3. **Add a product by its page link:** `POST /v1/monitors/from-url` with `{"url": "https://www.citygross.se/.../äpple-ingrid-marie-p100142800_KG", "store_id": "..."}` (optional `name`, `maximum_price`, `interval_minutes`). It returns a job; the worker looks that one product up and creates the product and its monitor together (the result holds `monitor_id` and the product). If you already monitor it you get the existing monitor back immediately (200). The link is parsed for the product id and never fetched. Prices differ by store, so send `store_id` unless the retailer has exactly one registered. Or create an `exact_product` monitor from a listing returned by a search, or a `generic_product` monitor with a text query. Store-wide (`store`) monitors are refused for live retailers. The minimum interval is 60 minutes.
+4. **Remove a product:** `DELETE /v1/monitors/{id}` stops the monitor and takes it off your list but **keeps its events** (read it by id or with `GET /v1/monitors?include_removed=true`). `DELETE /v1/monitors/{id}?permanent=true` deletes the monitor and its events for good. The product's price history stays either way, and removing frees a slot under the monitor limit.
+5. Monitors report price changes, thresholds, stock changes, and promotions attached to the products they match (`offer.detected` / `offer.changed`, with validity dates). Multi-buys such as "2 för 32 kr" are separate offers; a public single-item promotion becomes the effective price. Member-only promotions are recorded as `member` offers and never change the public price.
 
 ## Using Coop
 
@@ -39,9 +57,32 @@ Coop's data API requires a subscription key. Coop publishes no developer program
 3. Search, barcode lookup and `exact_product` / `generic_product` monitors work as for City Gross. The EAN is both the SKU and the GTIN, and one request can look up many products, so an exact monitor costs one request per check. Prices are online prices for that store; the minimum monitor interval is 60 minutes.
 4. **No offers.** Coop's anonymous catalogue marks products with deal *types* (`MULTI_BUY_FIXED_PRICE`, ...) but no amounts, and the site shows no deal on them. Deals are applied by the cart service. So Coop monitors report price and availability only, and nothing is invented.
 
+## Using Willys
+
+Willys' own pages load public JSON (`/search?q=` and `/axfood/rest/p/<code>`), so there is no key or login. All of Willys is **one national online store** ("Willys (online)", created automatically from the manifest; there is nothing to discover).
+
+- **Add by name or by link.** Search `POST /v1/search/jobs`, or paste a product page link (`https://www.willys.se/produkt/...-101233933_ST`) into `POST /v1/monitors/from-url`. Items sold by weight (codes ending `_KG`) are priced per kilogram.
+- **Barcodes.** Willys' search cannot look up a barcode, but a product's detail carries its EAN, so a product added by link or search has its barcode recorded. Comparing a barcode across stores asks Willys about the SKU already linked to it by id (a barcode never seen at Willys is `unknown_mapping` until someone adds the product there).
+- **Offers.** "Klubbpris" (member price, e.g. "2 för 99 kr") is stored as an offer with `eligibility: member` and is never taken as the shelf price. A public single-item campaign price lowers the current price and records the regular one.
+- **robots.txt.** Willys asks automated visitors for a 10 s delay (the request spacing is 10 s) and a 04:00-08:45 UTC visit window. Scheduled checks honour the window (a due monitor waits for it); a person's own search, add-by-link, comparison or "check now" is not scheduled work and is never delayed. The disallowed `/sok` page is never requested. At most 300 requests a day.
+- **Not modelled.** Willys can price some items per store; this shows what an anonymous visitor sees.
+
+## Using Lidl
+
+Lidl is deliberately narrow, and the limits are Lidl's: lidl.se publishes no search or product API for this to use, and **its grocery prices are not on lidl.se at all** (they are in the Lidl Plus app and the weekly leaflet). What exists is an online shop, mostly non-food, whose product pages embed schema.org data.
+
+- **Add by link only.** `POST /v1/monitors/from-url` with a page link such as `https://www.lidl.se/p/favorina-mandlar/p11000943` (one national store, "Lidl (online shop)"). Searching by name or barcode is declared unsupported, so the service never asks and says why; a search monitor is refused with a message to add products by link.
+- **No online price is not a price.** Some pages state none (in store only, some out-of-stock items). Adding one reports "lists '…' without an online price (in store only or not for sale)" and creates nothing. A priced out-of-stock page is recorded with its price and `out_of_stock`.
+- **Redirects.** The bare id redirects to the canonical address, so the manifest opts in to following a redirect to its own host (never elsewhere, at most 2 hops, each counted as a request: a lookup costs 2).
+- **Barcodes.** A page's `gtin13` is recorded when the page has a price; unit prices are unknown (no size is published in a form we trust).
+
+## Deploying on Unraid (Docker)
+
+[deploy/unraid/](../deploy/unraid/) is one `docker-compose.yml` and one `.env.example` plus a guide: PostgreSQL, API, worker and a one-shot init that prepares `/mnt/user/appdata/retail-monitor` for Unraid's `nobody:users`. Four values are required (database password, `APP_SECRET`, admin email and password); the database URL is derived so it cannot disagree. It listens on the LAN (`BIND_ADDRESS`, `HTTP_PORT`), rotates logs, carries Unraid WebUI labels, and is built from the repository on the server (no registry image exists; `RETAIL_IMAGE` can point at one). Tested by building the image and starting the stack from this file, signing in, and making live Willys and Lidl lookups through it. `tests/test_deploy_files.py` keeps the files in step with the application's settings.
+
 ## Connectors
 
-Connectors are self-contained packages (a folder with `manifest.yaml` and a Python module) that are installed, enabled, configured and removed from the admin page without touching the core. City Gross, Coop and the fixture are built in; others can be uploaded as zip packages. See [docs/connectors.md](connectors.md) for the standard approach, the manifest, the authoring kit, the contract tests and the trust model, and `docs/connector-template/` for a working example to copy.
+Connectors are self-contained packages (a folder with `manifest.yaml` and a Python module) that are installed, enabled, configured and removed from the admin page without touching the core. City Gross, Coop, Willys, Lidl, the fixture and the demo shop are bundled in the [`connectors/`](../connectors/README.md) folder at the repository root (add a folder to add one, delete it to remove one); others can be uploaded as zip packages and are stored in `INSTALLED_CONNECTORS_DIR`. See [docs/connectors.md](connectors.md) for the standard approach, the manifest, the authoring kit, the contract tests and the trust model, and `connectors/_template/` for a working example to copy.
 
 ## Request politeness
 
@@ -81,6 +122,7 @@ The user-agent defaults to a generic browser string (`CONNECTOR_USER_AGENT`). It
 
 ## Remaining before the specified MVP
 
+- Willys per-store prices, and following Lidl's weekly leaflet offers (a bounded `store` monitor), if either becomes available as data.
 - ICA, if its block is ever lifted, within the README's [access policy](../readme.md#access-policy): targeted product search and monitoring only. ICA is blocked; see "Retailer access findings".
 - Coop deals, if Coop ever exposes amounts anonymously, and a documented Coop API key if Coop offers one.
 - Verified store context beyond the directory (City Gross search responses do not echo the store), physical-store prices (only online prices are supported), and richer completeness checks.
@@ -94,13 +136,14 @@ The user-agent defaults to a generic browser string (`CONNECTOR_USER_AGENT`). It
 
 These are deliberate simplifications or gaps in the current slice, not spec changes:
 
-- **API shape.** Monitors and search jobs take a single `store_id` / `store_ids` and a single `channel`, not the README's `scope` object with `sales_channels` lists. Lists use fixed limits (50-200 rows) without cursors, except `GET /v1/events`. `DELETE /v1/monitors/{id}` and `DELETE /v1/webhooks/{id}` disable the resource rather than removing it.
+- **API shape.** Monitors and search jobs take a single `store_id` / `store_ids` and a single `channel`, not the README's `scope` object with `sales_channels` lists. Lists use fixed limits (50-200 rows) without cursors, except `GET /v1/events`. `DELETE /v1/webhooks/{id}` disables the webhook rather than removing it. `DELETE /v1/monitors/{id}` removes a monitor but keeps its events; `?permanent=true` deletes it.
 - **Offer lifecycle.** Offers carry validity dates when the retailer gives them (City Gross does), but `offers.status` is always `active`; nothing marks offers upcoming, expired or withdrawn yet, and `offer.expiring` / `offer.expired` events do not exist.
 - **Event de-duplication.** Offer events are de-duplicated across a user's overlapping monitors. Price and availability events are not, because their transition key includes the observation time; two monitors on one listing deliver two webhooks.
 - **Webhook SSRF.** The destination is validated at registration and again before each send, but the HTTP client resolves DNS itself, so a rebinding host could pass the check. Pin the validated address or use an egress proxy before exposing this beyond a trusted home network.
 - **Abuse limits.** Login lockout is per email address, so an attacker can lock out a known account for 15 minutes. The API rate limiter and the retailer request spacing/cache are in-process, so they assume one API process and one worker (as in `docker-compose.yml`); the daily budget, pause and cooldown are in the database and hold regardless. Behind a reverse proxy all unauthenticated callers share the proxy's address unless uvicorn is configured to trust forwarded headers.
 - **Retailer-asserted GTINs.** A GTIN the retailer publishes with a valid check digit is stored as a verified mapping without further review. A wrong retailer GTIN would link products incorrectly; correct it with the admin verified-GTIN route.
 - **Stock status.** City Gross `stockStatus` code 1 is mapped to `in_stock`; other codes are unknown and recorded as no availability, so no stock transition is emitted for them.
+- **Comparison limits.** A comparison reports a store's regular single-item price (a public single-item promotion is included); multi-buy deals, member prices and in-store prices are not factored in. A job returns its rows when it finishes, not store by store. Barcode links are shared and not versioned: an undo removes the barcode but does not split a merge.
 - **Connector code is not sandboxed.** An installed connector runs in the API and worker processes with their privileges. The allowlist and politeness limits apply to the standard HTTP client only, and an upload is checked statically (not executed) before install; the administrator is trusted to install only packages they trust. See [docs/connectors.md](connectors.md#trust-and-security).
 - **Reloading.** Each process notices installed, updated or removed connectors within about two seconds. Python cannot unload a module, so a replaced or removed connector's old code stays in memory until the process restarts (it is no longer used). The enabled state and settings are read from the database on use, so they take effect immediately.
 - **Single worker.** Request spacing, the result cache and the API rate limiter are per process; run one worker and one API process as the compose file does.
@@ -123,7 +166,19 @@ Policy: see the README's [access policy](../readme.md#access-policy). A terms re
 - **API.** citygross.se's own first-party JSON API, answered to a plain HTTP client with no challenge: `GET /api/v1/sites?siteTypeId=3` (store directory: `id`, `name`, `storeNumber`, address) and `GET /api/v1/Loop54/search?SearchQuery=<text|id|gtin>&skip=&take=&store=<storeNumber>` (search, with `searchResults.products` and `totalCount`).
 - **Data.** Each product has `id` (e.g. `100132321_ST`), `gtin`, `name`, `subtitle`, `brand`, `descriptiveSize`, and per-store `productStoreDetails.prices` with current and ordinary price, comparative (unit) price, promotions (`effectType`, `minQuantity`, `value`, `membersOnly`, `from`/`to`) and `lowestPriceLast30Days`. `stockStatus` is `1` for in stock.
 - **Quirks.** `store` takes `storeNumber`, not `id`, and an unknown store yields zero results rather than an error. `netContent.unitOfMeasure` is 0 for weights and volumes alike, so package size comes from `descriptiveSize`. `currentPrice` excludes promotions. `totalCount` can exceed the number of products actually returned (25 vs 22), so a short page, not the count, marks the end.
+- **Sold by weight.** Ids ending `_KG` (loose fruit and vegetables) are priced per kilogram (`currentPrice.unit` is `KGM`), and `descriptiveSize` (for example `CA140G`) is roughly one piece. They are recorded with a 1 kg basis so the price and unit price read as kr/kg.
 - **Not used.** Category and "discount only" listing endpoints exist but would enumerate the catalogue, which the access policy rules out.
+
+### Willys (investigated 2026-11-26; connector enabled)
+
+- **API.** The pages call their own JSON, answered to a plain client with no challenge or key: `GET /search?q=&size=&page=` (30 per page; `pagination.numberOfPages`) and `GET /axfood/rest/p/<code>` (one product, with `ean`). `GET /axfood/rest/store` lists 261 stores but anonymous prices are not selected per store here.
+- **robots.txt.** `Crawl-delay: 10`, `Visit-time: 0400-0845` (UTC), and disallows `/sok`, `/o/`, basket and account paths. All honoured (see "Using Willys").
+- **Data.** `code` (e.g. `101233933_ST`), `name`, `manufacturer`, `displayVolume`, `priceValue` (shelf price), `comparePrice`, `outOfStock`, `online`, and `potentialPromotions` (`campaignType: LOYALTY` is the member price; `qualifyingCount`, `rewardLabel`, `validUntil` in epoch milliseconds). The EAN is only on the detail endpoint. A barcode as the search text returns nothing.
+
+### Lidl (investigated 2026-11-26; connector enabled, link-only)
+
+- **What exists.** An online shop whose product pages (`/p/<name>/p<id>`, listed in the product sitemap) embed JSON-LD `Product` data: `sku`, `gtin13` (list), `offers.price`, `offers.availability` (`InStock`, `OutOfStock`, `InStoreOnly`). The offers pages are marketing; the folder/leaflet is not published as data; `/q/api/search` rejected our parameters and robots.txt disallows `/q/search?id=*`, so no search is built.
+- **Gaps.** `InStoreOnly` pages and some out-of-stock pages have no price. Grocery prices are not on lidl.se.
 
 ### Coop (investigated 2026-11-26; connector enabled, needs `COOP_API_KEY`)
 

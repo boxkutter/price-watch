@@ -121,8 +121,21 @@ class Product(Base):
     brand: Mapped[str | None] = mapped_column(String(200))
     gtin14: Mapped[str | None] = mapped_column(String(14), unique=True)
     verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Where the barcode came from: "retailer" (published by the store; cannot be overridden),
+    # "user" (scanned and linked by someone) or "admin". Shared by everyone using the catalogue.
+    gtin_source: Mapped[str | None] = mapped_column(String(16))
+    gtin_set_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    gtin_set_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     package_value: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
     package_unit: Mapped[str | None] = mapped_column(String(12))
+
+
+class UserStore(Base):
+    """The stores a person compares prices across (their own stores)."""
+    __tablename__ = "user_stores"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    store_id: Mapped[str] = mapped_column(ForeignKey("stores.id"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class Listing(Base):
@@ -245,6 +258,9 @@ class Monitor(Base):
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     next_due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     baseline_complete: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Set when the owner removes the monitor: it stops, disappears from their list, and its events
+    # are kept. Permanent deletion removes the row instead.
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class EvaluationState(Base):

@@ -1,0 +1,18 @@
+id: test.fixture
+name: Fixture retailer
+country: SE
+protocol_version: 1
+connector_version: 0.1.0
+enabled: true
+access_review: approved
+implementation: connector:FixtureConnector
+capabilities:
+  product_search: supported
+  online_prices: supported
+  store_offers: supported
+  physical_store_offers: unsupported
+  barcode_search: unsupported
+allowed_hosts: []
+stores:
+  - {external_id: demo, name: Synthetic demo store}
+minimum_request_interval_seconds: 1

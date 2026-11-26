@@ -1,0 +1,142 @@
+{
+ "breadcrumbs": [
+  {
+   "url": "/alla-varor/c/",
+   "name": "Alla varor",
+   "linkClass": null,
+   "categoryCode": "N00"
+  },
+  {
+   "url": "mejeri-ost-och-agg",
+   "name": "Mejeri, ost & ägg",
+   "linkClass": null,
+   "categoryCode": "N04"
+  },
+  {
+   "url": "mejeri-ost-och-agg/mjolk",
+   "name": "Mjölk",
+   "linkClass": null,
+   "categoryCode": "N0402"
+  },
+  {
+   "url": "mejeri-ost-och-agg/mjolk/mellanmjolk",
+   "name": "Mellanmjölk",
+   "linkClass": null,
+   "categoryCode": "N040202"
+  },
+  {
+   "url": "/produkt/Mellanmjolk-Langre-Hallbarhet-1-5procent-101233933_ST",
+   "name": "Mellanmjölk Längre Hållbarhet 1,5%",
+   "linkClass": "active",
+   "categoryCode": null
+  }
+ ],
+ "labels": [
+  "swedish_flag",
+  "from_sweden"
+ ],
+ "potentialPromotions": [],
+ "inactivePotentialPromotions": [],
+ "breadCrumbs": [
+  {
+   "url": "/alla-varor/c/",
+   "name": "Alla varor",
+   "linkClass": null,
+   "categoryCode": "N00"
+  },
+  {
+   "url": "mejeri-ost-och-agg",
+   "name": "Mejeri, ost & ägg",
+   "linkClass": null,
+   "categoryCode": "N04"
+  },
+  {
+   "url": "mejeri-ost-och-agg/mjolk",
+   "name": "Mjölk",
+   "linkClass": null,
+   "categoryCode": "N0402"
+  },
+  {
+   "url": "mejeri-ost-och-agg/mjolk/mellanmjolk",
+   "name": "Mellanmjölk",
+   "linkClass": null,
+   "categoryCode": "N040202"
+  },
+  {
+   "url": "/produkt/Mellanmjolk-Langre-Hallbarhet-1-5procent-101233933_ST",
+   "name": "Mellanmjölk Längre Hållbarhet 1,5%",
+   "linkClass": "active",
+   "categoryCode": null
+  }
+ ],
+ "minStorageTemperature": "2°C",
+ "foodContactAddress": "konsument@axfood.se Tel 0771-87 67 70",
+ "foodContactName": "Axfood AB",
+ "maxStorageTemperature": "8°C",
+ "tradeItemCountryOfOrigin": "Sweden",
+ "salableOnline": true,
+ "compulsoryAdditiveLabelInformation": "",
+ "batteryInformation": [],
+ "nutritionalClaim": "",
+ "preparationType": "",
+ "regulatoryAct": "",
+ "servingSize": null,
+ "countryOfOriginStatement": "Ursprung mjölk: Sverige",
+ "animalData": null,
+ "areBatteriesIncluded": false,
+ "areBatteriesRequired": false,
+ "provinceStatement": "Ursprung mjölk: Sverige.",
+ "googleAnalyticsCategory": "mejeri-ost-och-agg|mjolk|mellanmjolk",
+ "fruitAndVegetableVariety": "",
+ "otherCountries": [],
+ "ean": "7340083443893",
+ "variantType": "",
+ "isDrugProduct": false,
+ "extraInfoCode": "",
+ "activeSubstance": "",
+ "originCountry": "",
+ "medicineType": "",
+ "saleStop": null,
+ "medicineLink": "",
+ "categoryGroupText": "",
+ "newsSplashProduct": false,
+ "notAllowedAnonymous": false,
+ "notAllowedB2b": false,
+ "pickupProductLine2": "GARANT, 1,5l",
+ "priceUnit": "kr/st",
+ "productLine2": "GARANT, 1,5l",
+ "gdprTrackingIncompliant": false,
+ "savingsAmount": null,
+ "priceNoUnit": "16,90",
+ "hazards": [],
+ "nonEkoProduct": false,
+ "precautionaryStatements": [],
+ "nicotineMedicalProduct": false,
+ "showGoodPriceIcon": false,
+ "tobaccoFreeNicotineProduct": false,
+ "tobaccoProduct": false,
+ "priceValue": 16.9,
+ "price": "16,90 kr",
+ "comparePrice": "11,27 kr",
+ "averageWeight": null,
+ "depositPrice": "",
+ "ranking": null,
+ "comparePriceUnit": "l",
+ "solrSearchScore": null,
+ "online": true,
+ "outOfStock": false,
+ "displayVolume": "1,5l",
+ "addToCartDisabled": false,
+ "seoTitle": "",
+ "code": "101233933_ST",
+ "maxOrderQuantity": null,
+ "manufacturer": "Garant",
+ "incrementValue": 1.0,
+ "productBasketType": {
+  "code": "ST",
+  "type": "ProductBasketTypeEnum"
+ },
+ "bargainProduct": false,
+ "addToCartMessage": "",
+ "name": "Mellanmjölk Längre Hållbarhet 1,5%"
+}

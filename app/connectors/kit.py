@@ -8,6 +8,7 @@ Subclass `HttpJsonConnector`, point the manifest's `implementation` at it, and i
 Everything else is provided: argument checks, the per-scan request budget, mapping every failure
 to the standard result statuses, request counting, and secret handling. See docs/connectors.md.
 """
+import json
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -49,6 +50,31 @@ def valid_gtin(value) -> str | None:
     return str(value)
 
 
+_JSON_LD = re.compile(r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+                      re.DOTALL | re.IGNORECASE)
+
+
+def json_ld(html: str) -> list[dict]:
+    """Every schema.org JSON-LD object embedded in a page (blocks that are not valid JSON are
+    skipped; `@graph` and lists are flattened). For connectors whose store only publishes pages."""
+    found: list[dict] = []
+
+    def add(item) -> None:
+        if isinstance(item, list):
+            for entry in item:
+                add(entry)
+        elif isinstance(item, dict):
+            found.append(item)
+            add(item.get("@graph"))
+
+    for block in _JSON_LD.findall(html):
+        try:
+            add(json.loads(block))
+        except ValueError:
+            continue
+    return found
+
+
 @dataclass
 class Collected:
     """What `collect()` returns."""
@@ -58,6 +84,7 @@ class Collected:
     truncated: bool = False        # more results exist than were fetched
     fetched: int = 0               # raw items fetched (for the truncation note)
     skipped: int = 0               # items dropped because their price was unknown
+    notes: list[str] = field(default_factory=list)  # why something was left out, shown to the person
 
 
 class HttpJsonConnector:
@@ -73,7 +100,8 @@ class HttpJsonConnector:
         self.max_requests = self.manifest.get("max_requests_per_scan", 6)
         self.client = client or PoliteClient(
             self.manifest.get("allowed_hosts") or [],
-            self.manifest.get("minimum_request_interval_seconds", 3))
+            self.manifest.get("minimum_request_interval_seconds", 3),
+            follow_redirects=bool(self.manifest.get("follow_redirects")))
 
     # ---- configuration -------------------------------------------------------------------
     def configure(self, values: dict[str, str]) -> None:
@@ -143,6 +171,7 @@ class HttpJsonConnector:
             notes.append(f"only the first {collected.fetched} results were fetched")
         if collected.skipped:
             notes.append(f"{collected.skipped} result(s) had no price and were skipped")
+        notes += collected.notes
         detail = "; ".join(notes) or None
         if collected.missing:
             # A missing product is unknown, not proof of discontinuation.

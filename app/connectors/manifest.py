@@ -37,8 +37,51 @@ class DiscoveryInput(BaseModel):
     @classmethod
     def compiles(cls, value: str | None) -> str | None:
         if value:
-            re.compile(value)
+            try:
+                re.compile(value)
+            except re.error as exc:
+                raise ValueError(f"not a valid regular expression: {exc}") from exc
         return value
+
+
+class StoreSpec(BaseModel):
+    """A store the connector always has, so nobody has to discover it (for example a retailer
+    with one national online assortment). The service creates it on start-up and on install."""
+    model_config = ConfigDict(extra="forbid")
+    external_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,40}$")  # what scan() receives as the store
+    name: str = Field(min_length=1, max_length=120)
+
+
+_WINDOW = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$")
+
+
+class ProductUrl(BaseModel):
+    """How to read one kind of this store's product page link (the link is parsed, not fetched)."""
+    model_config = ConfigDict(extra="forbid")
+    # A regular expression over the normalised URL (see app/connectors/urls.py): https, lower-case
+    # host, percent-decoded path, no query, fragment or port. It must capture the product id in a
+    # named group `sku`, and should be anchored (^ and $).
+    pattern: str = Field(min_length=5, max_length=500)
+    example: str | None = None  # a real product page link; the loader checks the pattern reads it
+
+    @field_validator("pattern")
+    @classmethod
+    def has_sku_group(cls, value: str) -> str:
+        try:
+            compiled = re.compile(value)
+        except re.error as exc:
+            raise ValueError(f"not a valid regular expression: {exc}") from exc
+        if "sku" not in compiled.groupindex:
+            raise ValueError("the pattern must capture the product id in a named group (?P<sku>...)")
+        return value
+
+    @model_validator(mode="after")
+    def example_matches(self):
+        if self.example:
+            from app.connectors.urls import match_product_url  # local: avoids an import cycle
+            if not match_product_url([{"pattern": self.pattern}], self.example):
+                raise ValueError(f"the pattern does not read its own example {self.example!r}")
+        return self
 
 
 class Manifest(BaseModel):
@@ -62,12 +105,33 @@ class Manifest(BaseModel):
     allowed_hosts: list[str] = Field(default_factory=list)
     settings: list[SettingSpec] = Field(default_factory=list)
     store_discovery_inputs: list[DiscoveryInput] = Field(default_factory=list)
+    # Stores that exist without discovery (see StoreSpec).
+    stores: list[StoreSpec] = Field(default_factory=list)
+    # Lets a person add a product by pasting its page link. Optional; without it, products are
+    # added by search or barcode only.
+    product_urls: list[ProductUrl] = Field(default_factory=list)
     # Politeness limits. Live connectors must stay well inside what a person could do by hand.
     minimum_request_interval_seconds: int = Field(default=60, ge=1)
     minimum_monitor_interval_minutes: int = Field(default=15, ge=1)
     max_requests_per_scan: int = Field(default=6, ge=1)
     max_requests_per_day: int = Field(default=500, ge=1)
     cache_seconds: int = Field(default=0, ge=0)
+    # "HH:MM-HH:MM" in UTC (may cross midnight). When the retailer states when automated visits are
+    # welcome (for example in robots.txt), the service starts *scheduled* monitor checks only
+    # inside this window. Anything a person asks for (search, add by link, compare, "check now")
+    # is not scheduled work and is never delayed by it.
+    scheduled_window_utc: str | None = None
+    # Follow a redirect (at most 2, GET only) when it leads to another host in allowed_hosts, for a
+    # store whose canonical page address differs from the one a link gives. A redirect anywhere
+    # else is still a refusal. Each hop counts as a request.
+    follow_redirects: bool = False
+
+    @field_validator("scheduled_window_utc")
+    @classmethod
+    def window_format(cls, value: str | None) -> str | None:
+        if value is not None and not _WINDOW.match(value):
+            raise ValueError("scheduled_window_utc must look like '04:00-08:45' (UTC)")
+        return value
 
     @field_validator("allowed_hosts")
     @classmethod
@@ -89,6 +153,9 @@ class Manifest(BaseModel):
         names = [spec.name for spec in self.settings]
         if len(names) != len(set(names)):
             raise ValueError("settings names must be unique")
+        store_ids = [spec.external_id for spec in self.stores]
+        if len(store_ids) != len(set(store_ids)):
+            raise ValueError("stores external_id values must be unique")
         if self.implementation and not self.id.startswith("test.") and not self.allowed_hosts:
             raise ValueError("a connector with an implementation must declare allowed_hosts")
         return self

@@ -15,7 +15,7 @@ class Settings(BaseSettings):
                                  "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
     # Connector packages installed through the admin interface live here. It must be on storage
     # shared by the API and the worker (a volume in docker-compose.yml).
-    connectors_dir: str = "./data/connectors"
+    installed_connectors_dir: str = "./data/connectors"
     max_package_bytes: int = 5_000_000
     # Inbound: limits on our own API so one caller cannot fan out into retailer traffic.
     api_rate_limit_per_minute: int = 300
@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     max_pending_searches_per_user: int = 3
     max_searches_per_hour: int = 20
     min_manual_check_interval_seconds: int = 60
+    max_my_stores: int = 15       # stores one person compares across
+    max_compare_stores: int = 8   # stores checked live by one barcode comparison
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
