@@ -1,4 +1,4 @@
-# Retail Monitor on Unraid
+# Price Watch on Unraid
 
 One compose file ([`docker-compose.yml`](docker-compose.yml)) and one env file
 ([`.env.example`](.env.example) → `.env`). It runs four containers: PostgreSQL, the API (with the

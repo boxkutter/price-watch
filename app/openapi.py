@@ -11,7 +11,7 @@ import json
 from fastapi.openapi.utils import get_openapi
 
 DESCRIPTION = """\
-Retail Monitor tracks prices and promotions for the specific products you choose, across stores.
+Price Watch tracks prices and promotions for the specific products you choose, across stores.
 
 **Start with the guide:** `/api-guide` (also `docs/api.md`), which covers authentication, the
 asynchronous job pattern, limits, workflows, events and webhooks. A summary for AI agents is at

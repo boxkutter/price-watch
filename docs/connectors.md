@@ -75,7 +75,7 @@ Unknown keys are rejected, so a typo is an error rather than a silently ignored 
 | `minimum_request_interval_seconds` | Gap between requests to the site |
 | `minimum_monitor_interval_minutes` | How often one monitor may check |
 | `max_requests_per_scan` / `max_requests_per_day` | Hard caps (per scan; per rolling 24 hours, kept in the database) |
-| `cache_seconds` | Identical lookups within this window share one fetch |
+| `cache_seconds` | Identical lookups within this window share one fetch (the bundled connectors use 3600: prices rarely move within an hour; a person's "refresh" or "check now" skips it) |
 | `follow_redirects` | `false` by default: any redirect is a refusal. Set `true` when the site's canonical page address differs from the one you can build from an id (Lidl). Only a redirect (GET, up to 2 hops) to another host in `allowed_hosts` over HTTPS is followed; each hop counts as a request, is spaced and checked like any other, and a redirect anywhere else is still `access_blocked` |
 | `scheduled_window_utc` | Optional `HH:MM-HH:MM` in UTC (may cross midnight). When the retailer states when automated visits are welcome (Willys' robots.txt does), *scheduled* monitor checks start only inside it; a monitor that comes due outside simply waits. Searches, add-by-link, comparisons and "check now" are requests a person made, are not scheduled work, and are never delayed by it |
 
@@ -93,8 +93,10 @@ class MyConnector(HttpJsonConnector):
 ```
 
 `request` says what to fetch: `request.query` (a search text), `request.skus` (the store's own
-product ids) and `request.gtins` (barcodes). Return `Collected(prices=..., offers=..., missing=...,
-truncated=..., fetched=..., skipped=...)`. The kit provides everything else: it refuses an untargeted
+product ids) and `request.gtins` (barcodes). A text query can also ask for a page: `request.skip` (where
+to start) and `request.take` (how many; `None` means your own cap). Return `Collected(prices=..., offers=..., missing=...,
+truncated=..., fetched=..., skipped=..., next_skip=...)`, where `next_skip` is where the next page starts
+(set it only when there is more; a connector that cannot page ignores `skip`/`take` and leaves it empty). The kit provides everything else: it refuses an untargeted
 or unsupported-channel scan before any request, enforces the per-scan budget, counts requests, maps
 every failure to a standard status, and never lets a secret into a result.
 

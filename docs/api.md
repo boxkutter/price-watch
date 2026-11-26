@@ -1,4 +1,4 @@
-# Retail Monitor API guide
+# Price Watch API guide
 
 For developers and AI agents building an app on top of the service (a phone app, a shopping
 script, a dashboard). It covers everything a client needs: getting access, the conventions, the

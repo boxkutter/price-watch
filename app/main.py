@@ -90,7 +90,7 @@ from app.security import (
 )
 from app.webhooks import validate_destination
 
-app = FastAPI(title="Retail Monitor", version="0.1.0")
+app = FastAPI(title="Price Watch", version="0.1.0")
 install_openapi(app)
 # Per-credential (or per-address, when unauthenticated) request cap. It is a backstop: the
 # expensive operations that can reach retailers also have their own quotas below.
@@ -152,7 +152,7 @@ def admin_page():
     return FileResponse(STATIC / "admin.html")
 
 
-LLMS_TXT = """# Retail Monitor
+LLMS_TXT = """# Price Watch
 
 > Tracks prices and promotions for the specific products you choose, across stores. A JSON REST API.
 

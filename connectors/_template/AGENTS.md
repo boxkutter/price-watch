@@ -1,6 +1,6 @@
 # Instructions for AI agents building a connector
 
-You are creating a **connector**: a self-contained package that teaches Retail Monitor about one
+You are creating a **connector**: a self-contained package that teaches Price Watch about one
 store or service. Humans can read this too; it is written as a checklist. Work in a copy of this
 folder. Read in this order: this file, `README.md`, `manifest.yaml`, `connector.py`,
 `test_connector.py`. The full guide is `docs/connector-guide.md` and the reference is

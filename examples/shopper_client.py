@@ -1,4 +1,4 @@
-"""A small client for the Retail Monitor API: copy it, or read it as the API guide in code.
+"""A small client for the Price Watch API: copy it, or read it as the API guide in code.
 
 It needs only `httpx`. It shows the patterns every client needs:
   - authenticating with a user token and a client token on every call
@@ -246,7 +246,7 @@ def demo(api: RetailMonitor, say: Callable[[str], None] = print) -> dict:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Run the Retail Monitor demo client.")
+    parser = argparse.ArgumentParser(description="Run the Price Watch demo client.")
     parser.add_argument("--base-url", default=os.environ.get("RETAIL_MONITOR_URL", "http://localhost:8085"))
     parser.add_argument("--user-token", default=os.environ.get("RETAIL_MONITOR_USER_TOKEN"))
     parser.add_argument("--client-token", default=os.environ.get("RETAIL_MONITOR_CLIENT_TOKEN"))

@@ -1,6 +1,6 @@
 # Implementation status
 
-The repository has an executable slice of Retail Monitor. It has a synthetic store (`test.fixture`) for tests and four live connectors, **City Gross** (`se.citygross`), **Coop** (`se.coop`), **Willys** (`se.willys`) and **Lidl** (`se.lidl`, link-only), which make targeted, rate-limited requests. ICA is blocked (see below). The API and admin page are suitable for local evaluation, not a production launch.
+The repository has an executable slice of Price Watch. It has a synthetic store (`test.fixture`) for tests and five live connectors, **City Gross** (`se.citygross`), **Coop** (`se.coop`), **Willys** (`se.willys`), **Dollarstore** (`se.dollarstore`) and **Lidl** (`se.lidl`, link-only), which make targeted, rate-limited requests. ICA is blocked (see below). The API and admin page are suitable for local evaluation, not a production launch.
 
 The current worker polls PostgreSQL directly for durable jobs and delivery records. Redis and Celery from the original specification are not used yet; this keeps the first slice smaller while preserving queued work across restarts. The API readiness check requires the current Alembic schema revision.
 
@@ -32,6 +32,15 @@ Webhooks are configured per user at `POST /v1/webhooks`. The returned signing se
 Sign in on `/admin`, then open **the example client** (`/demo`). It opens a session as a regular, non-admin *example user* with a scoped API client (`POST /v1/admin/example-user`) and works only through the public API with a user token and a client token, so you see the service the way an app does: a watchlist with live prices and change badges, adding by link or by name, comparing a barcode across your stores, an activity feed, and an "API calls" tab listing every request. "Reset example data" clears what the example user did; the shared catalogue stays.
 
 To see monitoring work without any real retailer there is a bundled synthetic connector, `test.demoshop`, with two stores (Demo Shop North and South). Its prices move on a short cycle, the oats have a multi-buy offer that switches on and off, and the stores sell the same barcodes, so price moves, alerts and cross-store comparison all happen offline. Demo link `https://demo.example.org/p/oats-1kg`; demo barcodes `9999990000019` and `9999990000026`.
+
+## Searching
+
+`POST /v1/search/jobs` asks the chosen stores (up to 5 per job; a client sends more stores as more jobs).
+
+- **Fast by default.** Stores of different retailers are asked at the same time. Each store answers with its best matches first (30 by default), and a store that has more says where the next page starts (`next_skip`); the example client shows a "Show more results" button that sends `skip`. Swedish words (from the shared word list) are asked too only when a store's first answer has few matches. A search that runs past 45 seconds returns what it has, `partial`, naming the stores not reached.
+- **Remembered for an hour.** A store's answer is reused for an hour; `fresh: true` (the "Refresh prices" button) asks again, and a watch's "Check now" always asks the store.
+- **Progress.** While a search runs, `GET /v1/jobs/{id}` carries `progress` (`text`, `done`, `total`, for example "Searching City Gross Höör"). It is written to its own table (`job_progress`) on a separate connection, only on PostgreSQL, best effort, and forgotten after two hours.
+- **Names and pictures.** Results carry the other names a product goes by (`also_called`), probable duplicates without a barcode (`likely_same`), offers, availability and stock where the store gives it, and a picture (from Open Food Facts, by barcode, fetched in the background; a person can add their own).
 
 ## Barcodes and comparing prices
 
@@ -91,9 +100,10 @@ The aim is that the service never behaves like a crawler or an abusive client.
 | Layer | Limit |
 |---|---|
 | Spacing | At least 3 s between requests to City Gross, one at a time (`minimum_request_interval_seconds` in the manifest) |
-| Per scan | At most 6 requests (`max_requests_per_scan`); a search fetches at most 80 results; a result limit is reported as `truncated` |
+| Per scan | At most 6 requests (`max_requests_per_scan`); a name search asks each store for its best 30 matches first (`SEARCH_PAGE_SIZE`) and a person can ask for the next page ("Show more"); a connector never fetches more than 80 for one scan; a result limit is reported as `truncated` with `next_skip` |
 | Per day | At most 400 requests per retailer per rolling 24 hours (`max_requests_per_day`), kept in the database so it holds across processes and restarts |
-| Duplicates | Identical store/search/SKU requests within an hour share one fetch (`cache_seconds`, 3600) |
+| Duplicates | Identical store/search/SKU requests within an hour share one fetch (`cache_seconds`, 3600; kept in the worker's memory). A person's "Refresh prices" (`fresh: true`) or "Check now" asks the store itself; scheduled checks use the kept answer |
+| Parallel | A search asks stores of different retailers at the same time (each at its own spacing); stores of one retailer go one after another. The words are asked in Swedish too only when a store's first answer has few matches (`SEARCH_TRANSLATE_BELOW`), and a search stops asking after `SEARCH_TIME_BUDGET_SECONDS` (45) and names the stores it did not reach (`timed_out`) |
 | Scheduling | Monitor checks are at least 60 minutes apart for City Gross, and next-due times get up to 10% random jitter so checks do not synchronise |
 | Refusals | A 401/403/redirect pauses the connector for review (`access_blocked`); it is never retried or worked around. A 429 starts a cooldown that honours `Retry-After` (minimum 60 s, default 15 min). Five consecutive extraction failures pause it too. Resume with `POST /v1/admin/connectors/{id}/resume` |
 | Network errors | Retried by the job queue with exponential backoff, at most 5 attempts |

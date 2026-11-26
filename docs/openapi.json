@@ -625,8 +625,8 @@
     }
   },
   "info": {
-    "description": "Retail Monitor tracks prices and promotions for the specific products you choose, across stores.\n\n**Start with the guide:** `/api-guide` (also `docs/api.md`), which covers authentication, the\nasynchronous job pattern, limits, workflows, events and webhooks. A summary for AI agents is at\n`/llms.txt`.\n\n**Authentication.** Every `/v1` call except login and accepting an invitation needs\n`Authorization: Bearer <user token>`. A client app also sends `X-Client-Token: <client token>`;\nits permissions are then the intersection of the user's, the client's and the grant's scopes.\n\n**Conventions.** Money is a decimal string (`\"24.90\"`), times are ISO 8601 UTC, unknown values are\n`null` (never zero). Anything that contacts a store is asynchronous: the call returns `202` with a\n`job_id` and `status_url`; poll the job. Errors always use the `Error` envelope.\n",
-    "title": "Retail Monitor",
+    "description": "Price Watch tracks prices and promotions for the specific products you choose, across stores.\n\n**Start with the guide:** `/api-guide` (also `docs/api.md`), which covers authentication, the\nasynchronous job pattern, limits, workflows, events and webhooks. A summary for AI agents is at\n`/llms.txt`.\n\n**Authentication.** Every `/v1` call except login and accepting an invitation needs\n`Authorization: Bearer <user token>`. A client app also sends `X-Client-Token: <client token>`;\nits permissions are then the intersection of the user's, the client's and the grant's scopes.\n\n**Conventions.** Money is a decimal string (`\"24.90\"`), times are ISO 8601 UTC, unknown values are\n`null` (never zero). Anything that contacts a store is asynchronous: the call returns `202` with a\n`job_id` and `status_url`; poll the job. Errors always use the `Error` envelope.\n",
+    "title": "Price Watch",
     "version": "0.1.0"
   },
   "openapi": "3.1.0",

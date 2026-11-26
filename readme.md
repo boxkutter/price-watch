@@ -1,14 +1,14 @@
-# Retail Monitor
+# Price Watch
 
 > Self-hosted retail discovery, price history and promotion monitoring service.
 
-**Specification:** v1.0 | **Status:** implementation in progress; City Gross, Coop, Willys and Lidl (link-only) live connectors working, ICA blocked | **Initial market:** Sweden (SE)
+**Specification:** v1.0 | **Status:** implementation in progress; City Gross, Coop, Willys, Dollarstore and Lidl (link-only) live connectors working, ICA blocked | **Initial market:** Sweden (SE)
 
-The code currently implements invitation-based users, scoped client credentials with per-user grants, a fixture-backed store, basic catalogue/prices/offers, three public monitor types, database-backed jobs, signed webhook delivery, a small admin page, and a Docker image. It does **not** yet meet the full MVP checklist below, and City Gross and Coop have live retrieval (ICA is blocked). See the [access policy](#access-policy) and [Implementation status](docs/implementation-status.md) for setup and remaining work, and the [API guide](docs/api.md) to build an app on the service (served at `/api-guide`; example client at `/demo`).
+The code currently implements invitation-based users, scoped client credentials with per-user grants, a fixture-backed store, basic catalogue/prices/offers, three public monitor types, database-backed jobs, signed webhook delivery, an admin page for setup and management, an example client (`/demo`, usable on a phone, with a camera barcode scanner) and a Docker image. It does **not** yet meet the full MVP checklist below, and five retailers have live retrieval (ICA is blocked). See the [access policy](#access-policy) and [Implementation status](docs/implementation-status.md) for setup and remaining work, and the [API guide](docs/api.md) to build an app on the service (served at `/api-guide`; example client at `/demo`).
 
 ## 1. Purpose
 
-Retail Monitor is an always-on, API-first FastAPI service for individuals and households. It acts as a read-only shopping agent, discovering products by name or barcode, collecting prices and promotions, and notifying subscribers when relevant changes are observed. It initially targets ICA, City Gross and Coop, with a reusable connector protocol for additional retailers and countries. External applications such as Crisis Planner consume its API; they are not dependencies.
+Price Watch is an always-on, API-first FastAPI service for individuals and households. It acts as a read-only shopping agent, discovering products by name or barcode, collecting prices and promotions, and notifying subscribers when relevant changes are observed. It initially targets ICA, City Gross and Coop, with a reusable connector protocol for additional retailers and countries. External applications such as Crisis Planner consume its API; they are not dependencies.
 
 ### Scope and agreed requirements
 
@@ -29,7 +29,7 @@ Retail Monitor is an always-on, API-first FastAPI service for individuals and ho
 Purchasing, cart modification, coupon activation, account changes, payment handling, checkout automation, access-control bypass, guaranteed coverage of unpublished offers, guaranteed first-in-market alerts, and commercial-scale harvesting are out of scope. 
 ### Access policy
 
-*Owner decision, 2026-11-26.* Retail Monitor is a private, single-household tool. It retrieves what a normal visitor can see on a retailer's public website (and, later, what the owner's own retailer account can see), automated on the owner's behalf. Two limits define that scope:
+*Owner decision, 2026-11-26.* Price Watch is a private, single-household tool. It retrieves what a normal visitor can see on a retailer's public website (and, later, what the owner's own retailer account can see), automated on the owner's behalf. Two limits define that scope:
 
 - **Targeted, not bulk.** It searches for and monitors specific products the owner chose. It does not crawl or harvest a retailer's catalogue, categories or full offer lists.
 - **No circumvention.** It requests pages at human-scale volume and does not defeat CAPTCHAs, bot detection, rate limits or login controls, and it does not disguise what it is. If a site refuses the client, the connector stops, reports `access_blocked` and stays paused until the owner reviews it.

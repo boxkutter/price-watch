@@ -1,4 +1,4 @@
-# Retail Monitor for Unraid: one compose file, one env file (.env next to this file).
+# Price Watch for Unraid: one compose file, one env file (.env next to this file).
 #
 #   1. cp .env.example .env   and fill in the four required values (see the comments in it)
 #   2. docker compose up -d
