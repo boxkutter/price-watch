@@ -67,5 +67,5 @@ Only `manifest.yaml` and the module it names are required.
 ## The rules every connector follows
 
 Fetch only what was asked (never crawl). Behave like a polite person (the service enforces spacing
-and caps). Never get around a refusal or disguise the client. Secrets are declared settings, never
+and caps). Never get around a refusal, and never disguise the client unless the retailer itself approved that method (ICA has; see the README access policy). Secrets are declared settings, never
 in code. Unknown is never zero. The contract tests check these.

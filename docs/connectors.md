@@ -26,7 +26,7 @@ command contains, so `AGENTS.md` and `README.md` travel with it.
 
 Connectors follow the [access policy](../readme.md#access-policy): they fetch only what the owner
 asked for (a text query, specific products, specific barcodes), never crawl or bulk-harvest, stay
-well inside what a person could do by hand, and never disguise themselves or work around a refusal.
+well inside what a person could do by hand, and never disguise themselves (unless the retailer itself approved a method, as ICA has) or work around a refusal.
 If a site refuses the client, the connector reports `access_blocked` and the service pauses it.
 
 ## A connector is a folder

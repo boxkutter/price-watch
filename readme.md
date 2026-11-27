@@ -32,11 +32,13 @@ Purchasing, cart modification, coupon activation, account changes, payment handl
 *Owner decision, 2026-11-26.* Price Watch is a private, single-household tool. It retrieves what a normal visitor can see on a retailer's public website (and, later, what the owner's own retailer account can see), automated on the owner's behalf. Two limits define that scope:
 
 - **Targeted, not bulk.** It searches for and monitors specific products the owner chose. It does not crawl or harvest a retailer's catalogue, categories or full offer lists.
-- **No circumvention.** It requests pages at human-scale volume and does not defeat CAPTCHAs, bot detection, rate limits or login controls, and it does not disguise what it is. If a site refuses the client, the connector stops, reports `access_blocked` and stays paused until the owner reviews it.
+- **No circumvention.** It requests pages at human-scale volume and does not defeat CAPTCHAs, bot detection, rate limits or login controls, and it does not disguise what it is, except where the retailer itself has approved a specific method (see below). If a site refuses the client, the connector stops, reports `access_blocked` and stays paused until the owner reviews it.
 
 A per-retailer terms review is therefore not a gate for enabling a connector; the owner is responsible for their own use.
 
 **ICA authorization.** ICA has approved use of its website and online food catalogs for price retrieval by Price Watch (approval reported by the owner, 2026-11-27). The targeted, human-scale limits above still apply to the ICA connector.
+
+**ICA approved access method (2026-11-27).** ICA's IT team told the owner there is currently no API and that the approved method is to request the site's pages with browser-style request headers (a Chrome User-Agent plus the usual `Accept`, `Accept-Language`, `Sec-Fetch-*` and `Sec-CH-UA*` headers) and read the prices from the page's HTML. For ICA only, the "does not disguise what it is" limit therefore does not apply, and the ICA connector may send those headers. Every other limit still applies, including honouring a refusal: if ICA's site refuses the client, the connector stops and reports `access_blocked`. ICA may change the method; this section is updated when they do.
 
 ## 2. Architecture
 
