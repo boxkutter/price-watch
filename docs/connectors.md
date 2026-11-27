@@ -65,7 +65,7 @@ Unknown keys are rejected, so a typo is an error rather than a silently ignored 
 | `connector_version` | Your version; shown in the admin page and the install preview |
 | `enabled` | Default state. **Installing never enables**; an administrator does, and their choice overrides this |
 | `access_review`, `access_note` | Informational: why automating this site is acceptable, and caveats |
-| `implementation` | `module:Class` in this folder (`connector:MyConnector`). Omit for a documented placeholder (ICA) |
+| `implementation` | `module:Class` in this folder (`connector:MyConnector`). Omit for a documented placeholder |
 | `capabilities` | `store_discovery`, `product_search`, `barcode_search`, `online_prices`, `physical_store_prices`, `store_offers`, each `supported`, `unsupported` or `unverified`. The service only offers monitors a connector supports |
 | `allowed_hosts` | The only hosts it may contact (HTTPS only): bare host names or `*.domain`. Required for any connector with an implementation |
 | `settings` | Values the administrator provides: `name` (UPPER_CASE), `label`, `description`, `secret`, `required` |
@@ -205,7 +205,7 @@ The admin page lists every connector with a status:
 | Needs configuration | Enabled but a required setting is missing |
 | Paused | The site refused it or it failed repeatedly; resume after review |
 | Error | The package failed to load; the reason is shown and nothing else is affected |
-| Not installable | A placeholder with no implementation yet (ICA) |
+| Not installable | A placeholder with no implementation |
 
 Actions: **Enable / Disable** (stored in the database, effective immediately in the API and the
 worker, no restart), **Pause / Resume**, **settings**, **Find stores**, **Remove**, and

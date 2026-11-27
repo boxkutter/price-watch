@@ -2,9 +2,9 @@
 
 > Self-hosted retail discovery, price history and promotion monitoring service.
 
-**Specification:** v1.0 | **Status:** implementation in progress; City Gross, Coop, Willys, Dollarstore and Lidl (link-only) live connectors working, ICA authorized (connector not yet built) | **Initial market:** Sweden (SE)
+**Specification:** v1.0 | **Status:** implementation in progress; City Gross, Coop, Willys, Dollarstore and Lidl (link-only) live connectors working, ICA authorized (connector built, shipped disabled, not yet tried live) | **Initial market:** Sweden (SE)
 
-The code currently implements invitation-based users, scoped client credentials with per-user grants, a fixture-backed store, basic catalogue/prices/offers, three public monitor types, database-backed jobs, signed webhook delivery, an admin page for setup and management, an example client (`/demo`, usable on a phone, with a camera barcode scanner) and a Docker image. It does **not** yet meet the full MVP checklist below, and five retailers have live retrieval (ICA is authorized but its connector is not built yet). See the [access policy](#access-policy) and [Implementation status](docs/implementation-status.md) for setup and remaining work, and the [API guide](docs/api.md) to build an app on the service (served at `/api-guide`; example client at `/demo`).
+The code currently implements invitation-based users, scoped client credentials with per-user grants, a fixture-backed store, basic catalogue/prices/offers, three public monitor types, database-backed jobs, signed webhook delivery, an admin page for setup and management, an example client (`/demo`, usable on a phone, with a camera barcode scanner) and a Docker image. It does **not** yet meet the full MVP checklist below, and five retailers have live retrieval (ICA is authorized and its connector is built, but untried against the live shop). See the [access policy](#access-policy) and [Implementation status](docs/implementation-status.md) for setup and remaining work, and the [API guide](docs/api.md) to build an app on the service (served at `/api-guide`; example client at `/demo`).
 
 ## 1. Purpose
 

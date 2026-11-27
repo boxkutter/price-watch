@@ -1,19 +1,44 @@
 id: se.ica
 name: ICA
 country: SE
+description: Targeted product search, product-link lookup and multibuy offers from ICA's online shop.
+author: price-watch
 protocol_version: 1
-connector_version: 0.0.0
+connector_version: 0.1.0
+# Off until it has been tried against the live shop and its robots.txt has been read; then Enable it.
 enabled: false
-access_review: unverified
+access_review: approved
 access_note: >-
-  ICA has approved use of its website and online food catalogs for price retrieval by
-  Price Watch (owner-reported, 2026-11-27). Connector not built or enabled yet. See
-  docs/implementation-status.md.
+  ICA has approved use of its website and online food catalogs for price retrieval by Price
+  Watch (owner-reported, 2026-11-27). Reads the pages ICA's online shop serves
+  (handlaprivatkund.ica.se, an Ocado-based storefront): the search page and product pages, whose
+  data is embedded as window.__INITIAL_STATE__ and schema.org JSON-LD. No key or login; targeted
+  lookups only, with the client identifying itself honestly. Written from the 2026-11-26
+  investigation and tested on fixtures only; it has not yet been run against the live shop, and
+  its robots.txt has not been read (do that before enabling, and set the spacing and any visit
+  window to match). A product's address is assumed to accept the bare id
+  (/stores/<storeId>/products/<id>), redirecting to the canonical page; if not, add-by-link and
+  lookups by id will report the product as missing. Prices are the online prices of the chosen
+  store. No barcode is published. `available` means orderable, so stock is taken only from
+  JSON-LD. Member (stammis) prices need a login and are not read. A 401/403 pauses the connector.
+implementation: connector:IcaConnector
+follow_redirects: true
 capabilities:
-  store_discovery: unverified
-  product_search: unverified
-  online_prices: unverified
-  physical_store_prices: unverified
-  store_offers: unverified
-allowed_hosts: []
-minimum_request_interval_seconds: 60
+  store_discovery: unsupported
+  product_search: supported
+  barcode_search: unsupported
+  online_prices: supported
+  physical_store_prices: unsupported
+  store_offers: unsupported
+allowed_hosts: [handlaprivatkund.ica.se]
+# Store ids are ICA's online-shop store ids (the number in the shop's address).
+stores:
+  - {external_id: "1003395", name: ICA Supermarket Höör}
+product_urls:
+  - pattern: '^https://handlaprivatkund\.ica\.se/stores/\d+/products/(?:[^/?#]+/)?(?P<sku>[A-Za-z0-9_-]+)$'
+    example: 'https://handlaprivatkund.ica.se/stores/1003395/products/mellanmjolk-1-5/123456'
+minimum_request_interval_seconds: 10
+minimum_monitor_interval_minutes: 60
+max_requests_per_scan: 6
+max_requests_per_day: 200
+cache_seconds: 3600

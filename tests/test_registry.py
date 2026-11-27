@@ -53,7 +53,7 @@ def test_builtin_connectors_are_ordinary_packages():
     registry.refresh(force=True)
     assert {"se.citygross", "se.coop", "test.fixture", "se.ica"} <= set(registry.ENTRIES)
     assert all(entry.source == "builtin" for entry in registry.ENTRIES.values())
-    assert registry.ENTRIES["se.ica"].instance is None  # a documented placeholder, not installable
+    assert registry.ENTRIES["se.ica"].instance is not None  # a real connector (disabled until tried live)
     assert registry.LOAD_ERRORS == []
 
 

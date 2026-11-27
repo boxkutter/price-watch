@@ -1,6 +1,6 @@
 # Implementation status
 
-The repository has an executable slice of Price Watch. It has a synthetic store (`test.fixture`) for tests and five live connectors, **City Gross** (`se.citygross`), **Coop** (`se.coop`), **Willys** (`se.willys`), **Dollarstore** (`se.dollarstore`) and **Lidl** (`se.lidl`, link-only), which make targeted, rate-limited requests. ICA is authorized by ICA but its connector is not built yet (see below). The API and admin page are suitable for local evaluation, not a production launch.
+The repository has an executable slice of Price Watch. It has a synthetic store (`test.fixture`) for tests and five live connectors, **City Gross** (`se.citygross`), **Coop** (`se.coop`), **Willys** (`se.willys`), **Dollarstore** (`se.dollarstore`) and **Lidl** (`se.lidl`, link-only), which make targeted, rate-limited requests. ICA has authorized use, and its connector (`se.ica`) is built but ships disabled and has not been run against the live shop (see below). The API and admin page are suitable for local evaluation, not a production launch.
 
 The current worker polls PostgreSQL directly for durable jobs and delivery records. Redis and Celery from the original specification are not used yet; this keeps the first slice smaller while preserving queued work across restarts. The API readiness check requires the current Alembic schema revision.
 
@@ -133,7 +133,7 @@ The user-agent defaults to a generic browser string (`CONNECTOR_USER_AGENT`). It
 ## Remaining before the specified MVP
 
 - Willys per-store prices, and following Lidl's weekly leaflet offers (a bounded `store` monitor), if either becomes available as data.
-- An ICA connector, now that ICA has authorized use (see "Retailer access findings"), within the README's [access policy](../readme.md#access-policy): targeted product search and monitoring only.
+- Trying the ICA connector against the live shop: read its robots.txt, confirm that a bare product id address resolves and that the embedded-state field names match the fixtures, set the spacing, then enable it.
 - Coop deals, if Coop ever exposes amounts anonymously, and a documented Coop API key if Coop offers one.
 - Verified store context beyond the directory (City Gross search responses do not echo the store), physical-store prices (only online prices are supported), and richer completeness checks.
 - Broaden catalogue matching and offer mechanics (only `ItemsTotal` promotions are interpreted; other types are stored raw).
@@ -168,7 +168,7 @@ Policy: see the README's [access policy](../readme.md#access-policy). A terms re
 
 - **Where the data is.** ICA's online shop is an Ocado-based storefront at `https://handlaprivatkund.ica.se/stores/<storeId>/`. Search is `.../search?q=<text>`; a product is `.../products/<slug>/<productId>`. Store `1003395` is "ICA Supermarket Höör".
 - **What a page contains.** Pages are server-rendered with the data embedded as `window.__INITIAL_STATE__`: product records with `retailerProductId` (the ICA SKU), name, brand, availability, category path, `size` (e.g. `0.75kg`), current price and unit price, and promotions (e.g. "2 för 45 kr" with a stable `retailerPromotionId`). The store identity is `session.metadata.retailerRegionId` and `regionName`. Product pages also carry schema.org JSON-LD (`sku`, price, availability). No barcode/GTIN appears on either, so ICA barcode search is unsupported; GTIN stays a manual mapping to an ICA SKU.
-- **Authorization.** ICA has approved use of its website and online food catalogs for price retrieval by Price Watch (approval reported by the owner, 2026-11-27). The connector is not built or enabled yet.
+- **Authorization.** ICA has approved use of its website and online food catalogs for price retrieval by Price Watch (approval reported by the owner, 2026-11-27). The connector (`connectors/se.ica`) is built from fixtures shaped like the findings above, supports search, lookup by id or pasted link, and multibuy offers ("2 för 45 kr") for one store (default `1003395`), and ships disabled. It has not been run live (this build environment cannot reach ICA), so the field names inside the embedded state and the bare-id product address are assumptions to confirm.
 - **Not offered.** Member prices (`stammispris`) need a login and are out of scope for now.
 
 ### City Gross (investigated 2026-11-26; connector enabled)

@@ -192,7 +192,7 @@ the install is rolled back and the reason is shown.
 | Lidl | No search or product API, and grocery prices are not on lidl.se (only in the app and the leaflet) | Link-only, `product_search: unsupported`, covers just the online shop's products |
 | Lidl | A page needs its name in the address; the bare id 301-redirects to it | `follow_redirects: true` (same host only); both hops are counted |
 | Lidl | Some pages state no price at all (`InStoreOnly`, some out-of-stock) | Reported as "no online price", never as a price |
-| ICA | Ocado-based storefront; product data is embedded in the page (`window.__INITIAL_STATE__`) and has no barcode | Use is authorized by ICA. Connector not built yet; GTIN stays a manual mapping to the ICA SKU |
+| ICA | Ocado-based storefront; product data is embedded in the page (`window.__INITIAL_STATE__`) and has no barcode | Use is authorized by ICA. Built from fixtures and not yet run live; GTIN stays a manual mapping to the ICA SKU |
 
 ## 11. Troubleshooting
 

@@ -77,7 +77,7 @@ def test_the_admin_view_shows_every_connector_with_an_honest_status(lab):
     assert items["se.coop"]["status"] == "needs_configuration"  # its key is not set
     assert items["se.coop"]["settings"][0]["name"] == "COOP_API_KEY"
     assert items["se.coop"]["settings"][0]["configured"] is False
-    assert items["se.ica"]["status"] == "not_installable" and items["se.ica"]["enabled"] is False
+    assert items["se.ica"]["status"] == "disabled" and items["se.ica"]["enabled"] is False
     assert lab.client.get("/v1/admin/connectors").json()["load_errors"] == []
 
 
@@ -126,7 +126,7 @@ def test_disabling_a_connector_stops_all_requests_and_new_monitors_and_enabling_
 
 
 def test_only_a_loaded_connector_can_be_enabled(lab):
-    assert lab.client.post("/v1/admin/connectors/se.ica/enable").status_code == 409
+    assert lab.client.post("/v1/admin/connectors/se.ica/enable").status_code == 204  # a real connector now
     assert lab.client.post("/v1/admin/connectors/no.such/enable").status_code == 404
     assert lab.client.post("/v1/admin/connectors/no.such/disable").status_code == 404
 
