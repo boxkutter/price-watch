@@ -48,7 +48,7 @@ Up**. The containers then show in the Docker tab with a WebUI shortcut to the ad
 ## First steps
 
 1. **Connectors** (admin page): City Gross, Willys, Lidl and the demo shop work out of the box. Coop
-   needs its API key entered on its card (see its note). ICA is a documented placeholder.
+   needs its API key entered on its card (see its note). ICA is authorized but its connector is not built yet.
 2. **Try it without touching any real store:** open **example client** (`/demo`) from the admin page.
    It uses the synthetic demo shop, whose prices move every minute.
 3. **Stores:** Willys and Lidl are one national online store each and exist already. For City Gross

@@ -205,7 +205,7 @@ The admin page lists every connector with a status:
 | Needs configuration | Enabled but a required setting is missing |
 | Paused | The site refused it or it failed repeatedly; resume after review |
 | Error | The package failed to load; the reason is shown and nothing else is affected |
-| Not installable | A placeholder with no implementation (ICA) |
+| Not installable | A placeholder with no implementation yet (ICA) |
 
 Actions: **Enable / Disable** (stored in the database, effective immediately in the API and the
 worker, no restart), **Pause / Resume**, **settings**, **Find stores**, **Remove**, and

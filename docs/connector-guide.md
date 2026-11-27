@@ -20,8 +20,7 @@ tests.
    standard client (`self.client`); never your own.
 3. **Never get around a refusal.** A 401/403, a challenge page or a redirect to a login means the
    site said no. Report `access_blocked`, record it in `access_note`, and stop. Do not change
-   headers, rotate identities, impersonate a browser fingerprint, or solve challenges. (ICA is
-   documented this way; see section 10.)
+   headers, rotate identities, impersonate a browser fingerprint, or solve challenges.
 4. **Secrets are settings.** Anything that works like a credential is declared under `settings:` and
    read with `self.require("NAME")`. It never appears in code, fixtures, URLs, logs or results.
 5. **Unknown is not zero.** A missing price is skipped; unknown stock is `None`; a product that was
@@ -193,7 +192,7 @@ the install is rolled back and the reason is shown.
 | Lidl | No search or product API, and grocery prices are not on lidl.se (only in the app and the leaflet) | Link-only, `product_search: unsupported`, covers just the online shop's products |
 | Lidl | A page needs its name in the address; the bare id 301-redirects to it | `follow_redirects: true` (same host only); both hops are counted |
 | Lidl | Some pages state no price at all (`InStoreOnly`, some out-of-stock) | Reported as "no online price", never as a price |
-| ICA | Product data endpoint refuses automated clients (HTTP 403) while a person's browser works | **Not built.** Documented as a placeholder; getting past it would mean disguising the client |
+| ICA | Ocado-based storefront; product data is embedded in the page (`window.__INITIAL_STATE__`) and has no barcode | Use is authorized by ICA. Connector not built yet; GTIN stays a manual mapping to the ICA SKU |
 
 ## 11. Troubleshooting
 

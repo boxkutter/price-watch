@@ -2,9 +2,9 @@
 
 > Self-hosted retail discovery, price history and promotion monitoring service.
 
-**Specification:** v1.0 | **Status:** implementation in progress; City Gross, Coop, Willys, Dollarstore and Lidl (link-only) live connectors working, ICA blocked | **Initial market:** Sweden (SE)
+**Specification:** v1.0 | **Status:** implementation in progress; City Gross, Coop, Willys, Dollarstore and Lidl (link-only) live connectors working, ICA authorized (connector not yet built) | **Initial market:** Sweden (SE)
 
-The code currently implements invitation-based users, scoped client credentials with per-user grants, a fixture-backed store, basic catalogue/prices/offers, three public monitor types, database-backed jobs, signed webhook delivery, an admin page for setup and management, an example client (`/demo`, usable on a phone, with a camera barcode scanner) and a Docker image. It does **not** yet meet the full MVP checklist below, and five retailers have live retrieval (ICA is blocked). See the [access policy](#access-policy) and [Implementation status](docs/implementation-status.md) for setup and remaining work, and the [API guide](docs/api.md) to build an app on the service (served at `/api-guide`; example client at `/demo`).
+The code currently implements invitation-based users, scoped client credentials with per-user grants, a fixture-backed store, basic catalogue/prices/offers, three public monitor types, database-backed jobs, signed webhook delivery, an admin page for setup and management, an example client (`/demo`, usable on a phone, with a camera barcode scanner) and a Docker image. It does **not** yet meet the full MVP checklist below, and five retailers have live retrieval (ICA is authorized but its connector is not built yet). See the [access policy](#access-policy) and [Implementation status](docs/implementation-status.md) for setup and remaining work, and the [API guide](docs/api.md) to build an app on the service (served at `/api-guide`; example client at `/demo`).
 
 ## 1. Purpose
 
@@ -35,6 +35,8 @@ Purchasing, cart modification, coupon activation, account changes, payment handl
 - **No circumvention.** It requests pages at human-scale volume and does not defeat CAPTCHAs, bot detection, rate limits or login controls, and it does not disguise what it is. If a site refuses the client, the connector stops, reports `access_blocked` and stays paused until the owner reviews it.
 
 A per-retailer terms review is therefore not a gate for enabling a connector; the owner is responsible for their own use.
+
+**ICA authorization.** ICA has approved use of its website and online food catalogs for price retrieval by Price Watch (approval reported by the owner, 2026-11-27). The targeted, human-scale limits above still apply to the ICA connector.
 
 ## 2. Architecture
 
@@ -644,7 +646,7 @@ Post-MVP acceptance: interactive retailer login and account-specific session iso
 
 1. Repository, CI, settings, FastAPI, database migrations, OIDC and Compose.
 2. RCP DTOs, registry, shared runtime, rate limiting and fixture connector.
-3. ICA proof of concept: permitted store discovery, search, price and store offer retrieval; establish real coverage and permissions before enabling.
+3. ICA proof of concept (authorized by ICA): store discovery, search, price and store offer retrieval; establish real coverage before enabling.
 4. Catalogue matching, observations, offer lifecycle and public monitoring; scheduler/outbox/notification pipeline and administration UI.
 5. City Gross and Coop connectors; test reusable contracts and refine without retailer-specific core logic.
 6. Authenticated retailer sessions and personal offers (implement fourth monitor type fully).

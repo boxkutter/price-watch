@@ -1,6 +1,6 @@
 # Implementation status
 
-The repository has an executable slice of Price Watch. It has a synthetic store (`test.fixture`) for tests and five live connectors, **City Gross** (`se.citygross`), **Coop** (`se.coop`), **Willys** (`se.willys`), **Dollarstore** (`se.dollarstore`) and **Lidl** (`se.lidl`, link-only), which make targeted, rate-limited requests. ICA is blocked (see below). The API and admin page are suitable for local evaluation, not a production launch.
+The repository has an executable slice of Price Watch. It has a synthetic store (`test.fixture`) for tests and five live connectors, **City Gross** (`se.citygross`), **Coop** (`se.coop`), **Willys** (`se.willys`), **Dollarstore** (`se.dollarstore`) and **Lidl** (`se.lidl`, link-only), which make targeted, rate-limited requests. ICA is authorized by ICA but its connector is not built yet (see below). The API and admin page are suitable for local evaluation, not a production launch.
 
 The current worker polls PostgreSQL directly for durable jobs and delivery records. Redis and Celery from the original specification are not used yet; this keeps the first slice smaller while preserving queued work across restarts. The API readiness check requires the current Alembic schema revision.
 
@@ -133,7 +133,7 @@ The user-agent defaults to a generic browser string (`CONNECTOR_USER_AGENT`). It
 ## Remaining before the specified MVP
 
 - Willys per-store prices, and following Lidl's weekly leaflet offers (a bounded `store` monitor), if either becomes available as data.
-- ICA, if its block is ever lifted, within the README's [access policy](../readme.md#access-policy): targeted product search and monitoring only. ICA is blocked; see "Retailer access findings".
+- An ICA connector, now that ICA has authorized use (see "Retailer access findings"), within the README's [access policy](../readme.md#access-policy): targeted product search and monitoring only.
 - Coop deals, if Coop ever exposes amounts anonymously, and a documented Coop API key if Coop offers one.
 - Verified store context beyond the directory (City Gross search responses do not echo the store), physical-store prices (only online prices are supported), and richer completeness checks.
 - Broaden catalogue matching and offer mechanics (only `ItemsTotal` promotions are interpreted; other types are stored raw).
@@ -162,13 +162,13 @@ These are deliberate simplifications or gaps in the current slice, not spec chan
 
 ## Retailer access findings
 
-Policy: see the README's [access policy](../readme.md#access-policy). A terms review is not a gate; the connector must stay targeted and must not circumvent blocks.
+Policy: see the README's [access policy](../readme.md#access-policy). A terms review is not a gate; the connector must stay targeted and human-scale.
 
 ### ICA (investigated 2026-11-26)
 
 - **Where the data is.** ICA's online shop is an Ocado-based storefront at `https://handlaprivatkund.ica.se/stores/<storeId>/`. Search is `.../search?q=<text>`; a product is `.../products/<slug>/<productId>`. Store `1003395` is "ICA Supermarket Höör".
 - **What a page contains.** Pages are server-rendered with the data embedded as `window.__INITIAL_STATE__`: product records with `retailerProductId` (the ICA SKU), name, brand, availability, category path, `size` (e.g. `0.75kg`), current price and unit price, and promotions (e.g. "2 för 45 kr" with a stable `retailerPromotionId`). The store identity is `session.metadata.retailerRegionId` and `regionName`. Product pages also carry schema.org JSON-LD (`sku`, price, availability). No barcode/GTIN appears on either, so ICA barcode search is unsupported; GTIN stays a manual mapping to an ICA SKU.
-- **Access.** A normal Chrome session loads all of this anonymously. Automated access is only partly possible. A plain HTTP client, or a browser opening the shop's URLs directly, gets a `403` from the CloudFront/AWS WAF edge. A default headless Chromium that enters through `ica.se/handla`, declines cookies and chooses a store via the picker (postcode, "Hämta i butik") reaches the shop, verifies the store (`session.metadata.regionName`) and gets search suggestions. However, the product-data request itself (`/stores/<id>/api/webproductpagews/v6/product-pages/search`) returns `403` and the page shows its own error, even when search is driven through the shop's own search box. The same request succeeds in a normal Chrome session. This is a bot-control rule on the product data for automated sessions, and getting past it would mean disguising the automation, which the access policy rules out. **ICA live retrieval is therefore blocked and not enabled.**
+- **Authorization.** ICA has approved use of its website and online food catalogs for price retrieval by Price Watch (approval reported by the owner, 2026-11-27). The connector is not built or enabled yet.
 - **Not offered.** Member prices (`stammispris`) need a login and are out of scope for now.
 
 ### City Gross (investigated 2026-11-26; connector enabled)

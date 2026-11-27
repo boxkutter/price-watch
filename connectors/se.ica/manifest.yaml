@@ -6,8 +6,9 @@ connector_version: 0.0.0
 enabled: false
 access_review: unverified
 access_note: >-
-  Blocked 2026-11-26: automated sessions get HTTP 403 on the product-data request. Not
-  enabled; the client is not to be disguised. See docs/implementation-status.md.
+  ICA has approved use of its website and online food catalogs for price retrieval by
+  Price Watch (owner-reported, 2026-11-27). Connector not built or enabled yet. See
+  docs/implementation-status.md.
 capabilities:
   store_discovery: unverified
   product_search: unverified
