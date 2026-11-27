@@ -132,3 +132,53 @@ def test_a_pasted_link_gives_the_sku():
     assert match_product_url(rules, base + "mellanmjolk-1-5/100200") == "100200"
     assert match_product_url(rules, base + "100200") == "100200"
     assert match_product_url(rules, "https://www.ica.se/recept/") is None
+
+
+# ---- the store-shop tile, from a saved copy of the real store start page (2026-11-27) -----------
+
+TILE = (Path(__file__).parent / "fixtures" / "ica_tile.html").read_text(encoding="utf-8")
+
+
+def test_a_real_tile_gives_price_original_price_size_and_sku():
+    price, offers, name = parse_page(TILE, "1489244", STORE)
+    assert name == "Gurka ca 320g Klass 1 ICA"
+    assert price.current_price == Decimal(12) and price.regular_price == Decimal("14.90")
+    assert (price.package_value, price.package_unit) == (Decimal("0.38"), "kg")
+    assert price.source_url.endswith("/stores/1003395/products/1489244") and offers == []
+
+
+def test_a_multibuy_tile_gives_an_offer_and_a_member_promotion_is_not_the_price():
+    multi = TILE.replace(">12 kr/st<", ">2 för 25 kr<").replace("Ord.pris 14,90", "Ord.pris 14,90")
+    _, offers, _ = parse_page(multi, "1489244", STORE)
+    assert [(o.price, o.eligibility) for o in offers] == [(Decimal(25), "public")]
+    member = TILE.replace(">12 kr/st<", ">Stammispris 12 kr/st<")
+    price, _, _ = parse_page(member, "1489244", STORE)
+    assert price.current_price == Decimal("14.90") and price.regular_price is None
+
+
+def test_a_tile_without_a_price_is_skipped():
+    unpriced = TILE.replace('data-test="fop-price"', 'data-test="fop-x"')
+    assert parse_page(unpriced, "1489244", STORE)[0] is None
+
+
+def test_the_approved_request_headers_are_sent_on_every_request():
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers)
+        return httpx.Response(200, text=TILE)
+    client = client_for(manifest, httpx.MockTransport(handler))
+    IcaConnector(manifest.model_dump(), client).scan(STORE, "online", ScanRequest(query="gurka"))
+    headers = seen[0]
+    assert "Chrome/158" in headers["user-agent"] and headers["sec-fetch-mode"] == "navigate"
+    assert headers["accept"].startswith("text/html") and "image/avif" in headers["accept"]
+    assert "cookie" not in headers and "authorization" not in headers
+
+
+@pytest.mark.parametrize("name", ["Cookie", "Authorization", "Host", "Proxy-Authorization"])
+def test_a_manifest_cannot_set_credential_or_connection_headers(name):
+    from app.connectors.manifest import parse_manifest
+    text = (Path(BUILTIN_DIR) / "se.ica" / "manifest.yaml").read_text().replace(
+        "request_headers:\n", f"request_headers:\n  {name}: x\n")
+    with pytest.raises(Exception, match="request_headers"):
+        parse_manifest(text)

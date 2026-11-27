@@ -1,19 +1,22 @@
 """ICA (se.ica): prices and promotions for products in ICA's online shop, for one chosen store.
 
-ICA's online shop is an Ocado-based storefront at handlaprivatkund.ica.se/stores/<storeId>/.
-Its pages are server-rendered with the data embedded as `window.__INITIAL_STATE__` (product
-records with `retailerProductId`, name, brand, size, price and promotions); product pages also
-carry schema.org JSON-LD. ICA has authorized this use (see the manifest's `access_note`).
+ICA's online shop is an Ocado-based storefront at handlaprivatkund.ica.se/stores/<storeId>/. A
+page shows products as tiles (`data-test="fop-wrapper..."`: title, price, original price, offer
+text, size, a link ending in the ICA SKU). The 2026-11-26 investigation also found the data embedded
+as `window.__INITIAL_STATE__` and schema.org JSON-LD; all three are read. ICA's IT team approved
+requesting the pages with the browser-style headers in the manifest (see its `access_note`).
 
-Written from the 2026-11-26 investigation in docs/implementation-status.md and tested against
-fixtures shaped like it. It has NOT been run against the live site: the exact paths inside the
-embedded state are read tolerantly (a record is any object with a `retailerProductId`), and a
-page whose layout does not match is an extraction failure, never a price.
+The tile layout comes from a saved copy of the store start page (2026-11-27). The search and
+product pages and the embedded state are NOT verified against the live site; the state is read
+tolerantly (a record is any object with a `retailerProductId`), and a page whose layout does not
+match is an extraction failure, never a price. Without a chosen store ICA shows only campaign prices
+(www.ica.se), so this connector always works on a store's own pages.
 - Prices are per store (the `<storeId>` in the address), online prices only.
 - The price of a record is the single-item price; promotions are reported as offers.
 - `available` means orderable, not in stock, so availability is only taken from JSON-LD.
 - No barcode is published, so barcode search is unsupported and GTIN stays a manual mapping.
 """
+import html as htmllib
 import json
 import re
 from decimal import Decimal
@@ -42,6 +45,51 @@ def embedded_state(html: str) -> object:
         return None
 
 
+TILE = re.compile(r'(?=data-test="fop-wrapper)')
+HREF = re.compile(r'href="[^"]*/products/[^"/]*/(?P<sku>[A-Za-z0-9_-]+)"')
+OFFER_ID = re.compile(r'href="[^"]*/offers/[^"/]*/(?P<id>[0-9a-f-]{8,})"')
+MONEY = re.compile(r"(\d[\d\s]*(?:[.,]\d+)?)\s*kr", re.IGNORECASE)
+
+
+def _text(chunk: str, key: str) -> str | None:
+    found = re.search(rf'data-test="{key}"[^>]*>(.*?)</(?:span|h3|div)>', chunk, re.DOTALL)
+    return htmllib.unescape(re.sub(r"<[^>]+>", "", found.group(1))).replace("\xa0", " ").strip() if found else None
+
+
+def _money(text: str | None) -> Decimal | None:
+    found = MONEY.search((text or "").replace("\xa0", " "))
+    return to_decimal(re.sub(r"\s", "", found.group(1)).replace(",", ".")) if found else None
+
+
+def parse_tiles(html: str) -> dict[str, dict]:
+    """Product tiles (`data-test="fop-wrapper..."`) of a store-shop page, as records by ICA SKU.
+
+    `fop-price` is what the shopper pays; `fop-original-price` ("Ord.pris 14,90 kr") is the regular
+    price when a promotion applies. A member (stammis) promotion never becomes the current price.
+    """
+    found: dict[str, dict] = {}
+    for chunk in TILE.split(html)[1:]:
+        link, price = HREF.search(chunk), _money(_text(chunk, "fop-price"))
+        name = _text(chunk, "fop-title")
+        if not link or not name:
+            continue
+        original = re.search(r'data-test="fop-original-price"[^>]*aria-label="([^"]*)"', chunk)
+        regular = _money(htmllib.unescape(original.group(1))) if original else None
+        offer = _text(chunk, "fop-offer-text")
+        promo = OFFER_ID.search(chunk)
+        record = {"retailerProductId": link.group("sku"), "name": name, "size": _text(chunk, "fop-size"), "promotions": []}
+        if price is not None:
+            member = bool(offer and MEMBER.search(offer))
+            record["price"] = {"current": {"amount": str(regular if member and regular else price)}}
+            if regular and not member:
+                record["regular_price"] = str(regular)
+        if offer:
+            record["promotions"].append({"retailerPromotionId": promo.group("id") if promo else offer,
+                                         "description": offer})
+        found.setdefault(link.group("sku"), record)
+    return found
+
+
 def _records(node, found: dict[str, dict]) -> None:
     if isinstance(node, dict):
         if node.get("retailerProductId") is not None and node.get("name"):
@@ -63,7 +111,7 @@ def parse_state(html: str) -> dict[str, dict]:
     """Product records in a page's embedded state, by ICA SKU. Empty when there is none."""
     found: dict[str, dict] = {}
     _records(embedded_state(html), found)
-    return found
+    return {**found, **parse_tiles(html)}
 
 
 def _availability(value) -> str | None:
@@ -86,7 +134,7 @@ def parse_record(raw: dict, store: str, availability: str | None = None) -> Pric
     size = parse_size(raw.get("size"))
     brand = raw.get("brand")
     return PriceData(
-        sku=sku, name=str(raw["name"]), current_price=amount, regular_price=None,
+        sku=sku, name=str(raw["name"]), current_price=amount, regular_price=_amount(raw.get("regular_price")),
         currency=currency or "SEK", channel="online", source_url=f"{BASE}/stores/{store}/products/{sku}",
         gtin=None, availability=availability, brand=brand if isinstance(brand, str) and brand else None,
         package_value=size[0] if size else None, package_unit=size[1] if size else None)

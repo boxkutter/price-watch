@@ -333,6 +333,13 @@
       "default": false,
       "title": "Follow Redirects",
       "type": "boolean"
+    },
+    "request_headers": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Request Headers",
+      "type": "object"
     }
   },
   "required": [

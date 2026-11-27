@@ -52,6 +52,8 @@ class StoreSpec(BaseModel):
     name: str = Field(min_length=1, max_length=120)
 
 
+_FORBIDDEN_HEADERS = {"host", "cookie", "set-cookie", "authorization", "content-length", "connection",
+                      "transfer-encoding", "te", "upgrade", "x-client-token"}
 _WINDOW = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$")
 
 
@@ -125,6 +127,25 @@ class Manifest(BaseModel):
     # store whose canonical page address differs from the one a link gives. A redirect anywhere
     # else is still a refusal. Each hop counts as a request.
     follow_redirects: bool = False
+    # A request profile the retailer itself approved (for example the browser-style headers ICA's
+    # IT team gave us). Sent on every request, over the standard client headers. Never a place for
+    # credentials: cookies, authorization and connection-level headers are rejected. Say in
+    # access_note who approved it and when.
+    request_headers: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("request_headers")
+    @classmethod
+    def headers_are_plain(cls, headers: dict[str, str]) -> dict[str, str]:
+        if len(headers) > 20:
+            raise ValueError("request_headers may set at most 20 headers")
+        for name, value in headers.items():
+            if not re.fullmatch(r"[A-Za-z][A-Za-z0-9-]{0,40}", name):
+                raise ValueError(f"request_headers: not a header name: {name!r}")
+            if name.lower() in _FORBIDDEN_HEADERS or name.lower().startswith(("proxy-", "x-forwarded")):
+                raise ValueError(f"request_headers may not set {name}")
+            if len(value) > 400 or any(ord(c) < 32 for c in value):
+                raise ValueError(f"request_headers: bad value for {name}")
+        return headers
 
     @field_validator("scheduled_window_utc")
     @classmethod

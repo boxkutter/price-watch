@@ -102,7 +102,8 @@ class HttpJsonConnector:
         self.client = client or PoliteClient(
             self.manifest.get("allowed_hosts") or [],
             self.manifest.get("minimum_request_interval_seconds", 3),
-            follow_redirects=bool(self.manifest.get("follow_redirects")))
+            follow_redirects=bool(self.manifest.get("follow_redirects")),
+            headers=self.manifest.get("request_headers") or None)
 
     # ---- configuration -------------------------------------------------------------------
     def configure(self, values: dict[str, str]) -> None:

@@ -53,7 +53,7 @@ class PoliteClient:
     def __init__(self, allowed_hosts: list[str], min_interval: float, timeout: float = 15.0,
                  transport: httpx.BaseTransport | None = None,
                  limiter: RateLimiter | None = None, user_agent: str | None = None,
-                 follow_redirects: bool = False):
+                 follow_redirects: bool = False, headers: dict[str, str] | None = None):
         if not allowed_hosts:
             raise ValueError("A live connector needs at least one allowed host")
         self.allowed_hosts = list(allowed_hosts)  # a private copy: callers cannot widen it later
@@ -63,7 +63,9 @@ class PoliteClient:
         self.limiter = limiter or RateLimiter(min_interval)
         self._client = httpx.Client(timeout=timeout, follow_redirects=False, transport=transport,
                                     headers={"User-Agent": user_agent or settings.connector_user_agent,
-                                             "Accept": "application/json"})
+                                             "Accept": "application/json", **(headers or {})})
+        # Headers the manifest sets (a retailer-approved request profile) win over per-call defaults.
+        self._fixed = {name.lower() for name in (headers or {})}
         self.requests_made = 0  # lifetime counter; connectors report per-scan deltas
         self._budget: int | None = None
 
@@ -83,7 +85,8 @@ class PoliteClient:
     def get_text(self, url: str, params: dict | None = None, headers: dict | None = None) -> str:
         """GET a page that is not JSON (HTML, XML). Same host allowlist, spacing, size and
         refusal handling as the JSON methods."""
-        headers = {"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        headers = {**({} if "accept" in self._fixed else
+                      {"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}),
                    **(headers or {})}
         return self.request_bytes("GET", url, params=params, headers=headers).decode("utf-8", "replace")
 

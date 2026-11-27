@@ -67,3 +67,5 @@ follow_redirects: false
 # If the retailer says when automated visits are welcome, scheduled checks start only then (UTC).
 # Things a person asks for are never delayed by it.
 # scheduled_window_utc: "04:00-08:45"
+# Only when the retailer itself approved a request profile (say who and when in access_note):
+# request_headers: {}

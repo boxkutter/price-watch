@@ -37,6 +37,7 @@ class _Site:
 def client_for(manifest: Manifest, transport: httpx.BaseTransport) -> PoliteClient:
     """A client that honours the manifest's host allowlist but never sleeps; for factories."""
     return PoliteClient(manifest.allowed_hosts or ["shop.example.org"], 0, transport=transport,
+                        headers=manifest.request_headers or None,
                         follow_redirects=manifest.follow_redirects)
 
 
