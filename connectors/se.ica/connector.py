@@ -61,38 +61,75 @@ def _money(text: str | None) -> Decimal | None:
     return to_decimal(re.sub(r"\s", "", found.group(1)).replace(",", ".")) if found else None
 
 
-def parse_tiles(html: str) -> dict[str, dict]:
-    """Product tiles (`data-test="fop-wrapper..."`) of a store-shop page, as records by ICA SKU.
+def _record(sku: str, name: str, size: str | None, price_text: str | None, offer: str | None,
+            ordinary: Decimal | None, promo_id: str | None, loyalty: bool = False) -> dict:
+    """One product record from the texts a store-shop page shows (a tile or a product page).
 
-    `fop-price` is what the shopper pays for a single item *unless* a multibuy applies, when it
-    reads "3 för 50 kr" (the bundle). The ordinary price is the `aria-label="Ordinarie Pris ..."`
-    of the "Ord.pris" line. A multibuy or member (stammis) promotion never becomes the current
-    price: the current price is then the ordinary one, and the promotion becomes an offer.
+    The shown price is what the shopper pays for a single item *unless* a multibuy applies, when
+    it reads "3 för 50 kr" (the bundle). A multibuy or member (stammis) promotion never becomes the
+    current price: the current price is then the ordinary one, and the promotion becomes an offer.
     """
+    promo_text = offer or (price_text if price_text and MULTIBUY.search(price_text) else None)
+    bundle = bool(MULTIBUY.search(f"{price_text or ''} {offer or ''}"))
+    member = bool(promo_text and MEMBER.search(promo_text)) or loyalty
+    record: dict = {"retailerProductId": sku, "name": name, "size": size, "promotions": []}
+    current = ordinary if bundle or member else _money(price_text)
+    if current is not None:
+        record["price"] = {"current": {"amount": str(current)}}
+        if ordinary and current != ordinary:
+            record["regular_price"] = str(ordinary)
+    if promo_text:
+        record["promotions"].append({"retailerPromotionId": promo_id or promo_text,
+                                     "description": promo_text, "member": member})
+    return record
+
+
+def _ordinary(chunk: str) -> Decimal | None:
+    found = re.search(r'aria-label="Ordinarie Pris ([^"]*)"', chunk)
+    return _money(htmllib.unescape(found.group(1))) if found else None
+
+
+def parse_tiles(html: str) -> dict[str, dict]:
+    """Product tiles (`data-test="fop-wrapper..."`) of a store-shop page, as records by ICA SKU."""
     found: dict[str, dict] = {}
     for chunk in TILE.split(html)[1:]:
         link, name = HREF.search(chunk), _text(chunk, "fop-title")
         if not link or not name:
             continue
-        price_text, offer = _text(chunk, "fop-price"), _text(chunk, "fop-offer-text")
-        ordinary = re.search(r'aria-label="Ordinarie Pris ([^"]*)"', chunk)
-        ordinary = _money(htmllib.unescape(ordinary.group(1))) if ordinary else None
-        promo_text = offer or (price_text if price_text and MULTIBUY.search(price_text) else None)
-        bundle = bool(MULTIBUY.search(f"{price_text or ''} {offer or ''}"))
-        member = bool(promo_text and MEMBER.search(promo_text)) or 'data-ica-class="offer-loyalty"' in chunk
-        record = {"retailerProductId": link.group("sku"), "name": name, "size": _text(chunk, "fop-size"),
-                  "promotions": []}
-        current = ordinary if bundle or member else _money(price_text)
-        if current is not None:
-            record["price"] = {"current": {"amount": str(current)}}
-            if ordinary and current != ordinary:
-                record["regular_price"] = str(ordinary)
-        if promo_text:
-            promo = OFFER_ID.search(chunk)
-            record["promotions"].append({"retailerPromotionId": promo.group("id") if promo else promo_text,
-                                         "description": promo_text, "member": member})
-        found.setdefault(link.group("sku"), record)
+        promo = OFFER_ID.search(chunk)
+        found.setdefault(link.group("sku"), _record(
+            link.group("sku"), name, _text(chunk, "fop-size"), _text(chunk, "fop-price"),
+            _text(chunk, "fop-offer-text"), _ordinary(chunk), promo.group("id") if promo else None,
+            'data-ica-class="offer-loyalty"' in chunk))
     return found
+
+
+def parse_product_view(html: str, sku: str) -> dict[str, dict]:
+    """The main product of a product page (`data-test="bop-view"`), as a record keyed by `sku`.
+
+    The page address carries the SKU, the page itself does not. The related-product carousels
+    further down are tiles of *other* products and are left out. Empty when there is no such view.
+    """
+    start = html.find('data-test="bop-view"')
+    if start < 0:
+        return {}
+    ends = [i for i in (html.find(f'data-test="{k}"', start) for k in
+                        ("related-products-carousel", "similar-products-carousel", "fop-carousel")) if i > 0]
+    view = html[start:min(ends) if ends else len(html)]
+    name = re.search(r"<h1[^>]*>(.*?)</h1>", view, re.DOTALL)
+    name = htmllib.unescape(re.sub(r"<[^>]+>", "", name.group(1))).strip() if name else None
+    if not name:
+        return {}
+    spans = re.search(r'data-test="size-container"[^>]*>(.*?)</div>', view, re.DOTALL)
+    labels = [htmllib.unescape(t).replace("\xa0", " ").strip()
+              for t in re.findall(r"<span[^>]*>(.*?)</span>", spans.group(1), re.DOTALL)] if spans else []
+    size = next((label for label in labels if "kr" not in label and parse_size(label)), None)
+    promo = OFFER_ID.search(view)
+    offer = re.search(r'data-test="fop-offer-text"[^>]*>(.*?)</', view, re.DOTALL)
+    return {sku: _record(sku, name, size, _text(view, "price-container"),
+                         htmllib.unescape(re.sub(r"<[^>]+>", "", offer.group(1))).strip() if offer else None,
+                         _ordinary(view), promo.group("id") if promo else None,
+                         'data-ica-class="offer-loyalty"' in view)}
 
 
 def _records(node, found: dict[str, dict]) -> None:
@@ -167,7 +204,7 @@ def parse_offers(raw: dict, store: str) -> list[OfferData]:
 def parse_page(html: str, sku: str, store: str) -> tuple[PriceData | None, list[OfferData], str]:
     """(price, offers, name) for one product page. Raises ExtractionError when it has no such product."""
     ld = _jsonld_product(html, sku)
-    raw = parse_state(html).get(sku)
+    raw = parse_product_view(html, sku).get(sku) or parse_state(html).get(sku)
     if raw is None and ld is None:
         raise ExtractionError("The page has no product data")
     if raw is None:  # JSON-LD only: sku, price and availability are all it has

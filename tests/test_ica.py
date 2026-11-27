@@ -213,3 +213,31 @@ def test_a_real_multibuy_member_tile_keeps_the_ordinary_price_and_makes_an_offer
     (offer,) = snap.offers
     assert offer.identity_key == "1487070:f80ac37e-0faf-4c48-9875-193d913e84d2"
     assert offer.price == Decimal(50) and offer.eligibility == "member" and "3 för 50 kr" in offer.terms
+
+
+# ---- a real product page (saved 2026-11-27): the main product is not a tile -------------------
+
+PRODUCT = (Path(__file__).parent / "fixtures" / "ica_product.html").read_text(encoding="utf-8")
+MILK_PAGE = "/stores/1003395/products/mellanmj%C3%B6lkdryck-laktosfri-1-5-1l-ica/1407322"
+
+
+def test_a_real_product_page_gives_the_main_product_not_a_related_one():
+    price, offers, name = parse_page(PRODUCT, "1407322", STORE)
+    assert name == "Mellanmjölkdryck Laktosfri 1,5% 1l ICA" and offers == []
+    assert price.sku == "1407322" and price.current_price == Decimal("14.42") and price.regular_price is None
+    assert (price.package_value, price.package_unit) == (Decimal(1), "L")
+    related = next(iter(parse_state(PRODUCT)))  # the carousel tile is another product
+    assert related != "1407322"
+
+
+def test_a_lookup_by_sku_reads_the_product_page_and_agrees_with_search():
+    paths = []
+
+    def handler(request):
+        paths.append(request.url.path)
+        return httpx.Response(200, text=PRODUCT)
+    snap = connector(handler).scan(STORE, "online", ScanRequest(skus=("1407322",)))
+    assert paths == ["/stores/1003395/products/1407322"]
+    assert [(p.sku, p.current_price) for p in snap.prices] == [("1407322", Decimal("14.42"))]
+    search = connector(lambda r: httpx.Response(200, text=SEARCH)).scan(STORE, "online", ScanRequest(query="mjölk"))
+    assert {p.sku: p.current_price for p in search.prices}["1407322"] == Decimal("14.42")

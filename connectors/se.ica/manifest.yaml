@@ -16,12 +16,13 @@ access_note: >-
   of ICA's online shop (handlaprivatkund.ica.se, an Ocado-based storefront): the search page and
   product pages, whose products are tiles (data-test="fop-...") and, in the original investigation,
   window.__INITIAL_STATE__ and schema.org JSON-LD. No key or login; targeted lookups only. The tile
-  layout was taken from saved pages of the store start page and of a search
-  (/stores/<storeId>/search?q=...); product pages and the raw (non-browser-rendered) HTML are
-  tested on fixtures only; it has not yet been run against the live shop, and
+  layout was taken from saved pages of the store start page, a search
+  (/stores/<storeId>/search?q=...) and a product page; the raw (non-browser-rendered) HTML ICA
+  returns has not been seen; it has not yet been run against the live shop, and
   its robots.txt has not been read (do that before enabling, and set the spacing and any visit
-  window to match). A product's address is assumed to accept the bare id
-  (/stores/<storeId>/products/<id>), redirecting to the canonical page; if not, add-by-link and
+  window to match). A product page is /stores/<storeId>/products/<name>/<id>; the
+  connector assumes the bare id (/stores/<storeId>/products/<id>) also works or redirects (not yet
+  seen); if not, add-by-link and
   lookups by id will report the product as missing. Prices are the online prices of the chosen
   store. No barcode is published. `available` means orderable, so stock is taken only from
   JSON-LD. Member (stammis) prices need a login and are not read. A 401/403 pauses the connector.
