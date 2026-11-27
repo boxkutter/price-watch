@@ -198,9 +198,18 @@ def test_a_real_search_page_gives_its_products_with_exact_prices_and_sizes():
     snap = connector(handler).scan(STORE, "online", ScanRequest(query="mjölk"))
     assert seen[0].path == "/stores/1003395/search" and seen[0].params["q"] == "mjölk"
     prices = {p.sku: p for p in snap.prices}
-    assert set(prices) == {"2095219", "1407322", "1354730", "2053708"}
+    assert set(prices) == {"2095219", "1407322", "1354730", "1520842", "1487070", "1527637"}
     milk = prices["2095219"]  # "20,93 kr" with a non-breaking space; the size label is "1.5L"
     assert milk.current_price == Decimal("20.93") and milk.regular_price is None
     assert (milk.package_value, milk.package_unit) == (Decimal("1.5"), "L")
     assert (prices["1354730"].package_value, prices["1354730"].package_unit) == (Decimal("0.7"), "kg")
-    assert snap.offers == [] and snap.effective_status == "success"
+    assert len(snap.offers) == 1 and snap.effective_status == "success"
+
+
+def test_a_real_multibuy_member_tile_keeps_the_ordinary_price_and_makes_an_offer():
+    snap = connector(lambda r: httpx.Response(200, text=SEARCH)).scan(STORE, "online", ScanRequest(query="mjölk"))
+    valio = next(p for p in snap.prices if p.sku == "1487070")
+    assert valio.current_price == Decimal("21.60") and valio.regular_price is None  # not the 50 kr bundle
+    (offer,) = snap.offers
+    assert offer.identity_key == "1487070:f80ac37e-0faf-4c48-9875-193d913e84d2"
+    assert offer.price == Decimal(50) and offer.eligibility == "member" and "3 för 50 kr" in offer.terms

@@ -64,28 +64,33 @@ def _money(text: str | None) -> Decimal | None:
 def parse_tiles(html: str) -> dict[str, dict]:
     """Product tiles (`data-test="fop-wrapper..."`) of a store-shop page, as records by ICA SKU.
 
-    `fop-price` is what the shopper pays; `fop-original-price` ("Ord.pris 14,90 kr") is the regular
-    price when a promotion applies. A member (stammis) promotion never becomes the current price.
+    `fop-price` is what the shopper pays for a single item *unless* a multibuy applies, when it
+    reads "3 för 50 kr" (the bundle). The ordinary price is the `aria-label="Ordinarie Pris ..."`
+    of the "Ord.pris" line. A multibuy or member (stammis) promotion never becomes the current
+    price: the current price is then the ordinary one, and the promotion becomes an offer.
     """
     found: dict[str, dict] = {}
     for chunk in TILE.split(html)[1:]:
-        link, price = HREF.search(chunk), _money(_text(chunk, "fop-price"))
-        name = _text(chunk, "fop-title")
+        link, name = HREF.search(chunk), _text(chunk, "fop-title")
         if not link or not name:
             continue
-        original = re.search(r'data-test="fop-original-price"[^>]*aria-label="([^"]*)"', chunk)
-        regular = _money(htmllib.unescape(original.group(1))) if original else None
-        offer = _text(chunk, "fop-offer-text")
-        promo = OFFER_ID.search(chunk)
-        record = {"retailerProductId": link.group("sku"), "name": name, "size": _text(chunk, "fop-size"), "promotions": []}
-        if price is not None:
-            member = bool(offer and MEMBER.search(offer))
-            record["price"] = {"current": {"amount": str(regular if member and regular else price)}}
-            if regular and not member:
-                record["regular_price"] = str(regular)
-        if offer:
-            record["promotions"].append({"retailerPromotionId": promo.group("id") if promo else offer,
-                                         "description": offer})
+        price_text, offer = _text(chunk, "fop-price"), _text(chunk, "fop-offer-text")
+        ordinary = re.search(r'aria-label="Ordinarie Pris ([^"]*)"', chunk)
+        ordinary = _money(htmllib.unescape(ordinary.group(1))) if ordinary else None
+        promo_text = offer or (price_text if price_text and MULTIBUY.search(price_text) else None)
+        bundle = bool(MULTIBUY.search(f"{price_text or ''} {offer or ''}"))
+        member = bool(promo_text and MEMBER.search(promo_text)) or 'data-ica-class="offer-loyalty"' in chunk
+        record = {"retailerProductId": link.group("sku"), "name": name, "size": _text(chunk, "fop-size"),
+                  "promotions": []}
+        current = ordinary if bundle or member else _money(price_text)
+        if current is not None:
+            record["price"] = {"current": {"amount": str(current)}}
+            if ordinary and current != ordinary:
+                record["regular_price"] = str(ordinary)
+        if promo_text:
+            promo = OFFER_ID.search(chunk)
+            record["promotions"].append({"retailerPromotionId": promo.group("id") if promo else promo_text,
+                                         "description": promo_text, "member": member})
         found.setdefault(link.group("sku"), record)
     return found
 
@@ -155,7 +160,7 @@ def parse_offers(raw: dict, store: str) -> list[OfferData]:
             identity_key=f"{sku}:{promo['retailerPromotionId']}", title=str(raw["name"]), terms=text,
             price=to_decimal(match.group(2).replace(",", ".")), currency="SEK", channel="online",
             source_url=f"{BASE}/stores/{store}/products/{sku}",
-            eligibility="member" if MEMBER.search(text) else "public", skus=(sku,)))
+            eligibility="member" if promo.get("member") or MEMBER.search(text) else "public", skus=(sku,)))
     return offers
 
 
