@@ -21,8 +21,8 @@ access_note: >-
   returns has not been seen; it has not yet been run against the live shop, and
   its robots.txt has not been read (do that before enabling, and set the spacing and any visit
   window to match). A product page is /stores/<storeId>/products/<name>/<id>; the
-  connector assumes the bare id (/stores/<storeId>/products/<id>) also works or redirects (not yet
-  seen); if not, add-by-link and
+  bare id (/stores/<storeId>/products/<id>) redirects to it (confirmed in a browser, 2026-11-27)
+  and the connector follows that same-host redirect (follow_redirects); if it ever stops, add-by-link and
   lookups by id will report the product as missing. Prices are the online prices of the chosen
   store. No barcode is published. `available` means orderable, so stock is taken only from
   JSON-LD. Member (stammis) prices need a login and are not read. A 401/403 pauses the connector.

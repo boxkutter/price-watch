@@ -241,3 +241,19 @@ def test_a_lookup_by_sku_reads_the_product_page_and_agrees_with_search():
     assert [(p.sku, p.current_price) for p in snap.prices] == [("1407322", Decimal("14.42"))]
     search = connector(lambda r: httpx.Response(200, text=SEARCH)).scan(STORE, "online", ScanRequest(query="mjölk"))
     assert {p.sku: p.current_price for p in search.prices}["1407322"] == Decimal("14.42")
+
+
+def test_the_bare_id_address_redirects_to_the_named_product_page_and_is_followed():
+    """Confirmed in a browser (2026-11-27): /products/<id> sends a person to /products/<name>/<id>."""
+    paths = []
+
+    def handler(request):
+        paths.append(request.url.raw_path.decode())
+        if request.url.path == "/stores/1003395/products/1407322":
+            return httpx.Response(301, headers={"Location": "https://handlaprivatkund.ica.se" + MILK_PAGE})
+        return httpx.Response(200, text=PRODUCT) if request.url.raw_path.decode() == MILK_PAGE else httpx.Response(404)
+    client = PoliteClient(["handlaprivatkund.ica.se"], 0, transport=httpx.MockTransport(handler), follow_redirects=True)
+    snap = IcaConnector({"max_requests_per_scan": 6}, client).scan(STORE, "online", ScanRequest(skus=("1407322",)))
+    assert paths == ["/stores/1003395/products/1407322", MILK_PAGE]  # both hops are requests
+    assert [p.current_price for p in snap.prices] == [Decimal("14.42")]
+    assert manifest.follow_redirects is True and manifest.allowed_hosts == ["handlaprivatkund.ica.se"]
