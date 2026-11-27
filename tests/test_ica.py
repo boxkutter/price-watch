@@ -182,3 +182,25 @@ def test_a_manifest_cannot_set_credential_or_connection_headers(name):
         "request_headers:\n", f"request_headers:\n  {name}: x\n")
     with pytest.raises(Exception, match="request_headers"):
         parse_manifest(text)
+
+
+# ---- a real search page: /stores/1003395/search?q=mjölk (saved 2026-11-27) ---------------------
+
+SEARCH = (Path(__file__).parent / "fixtures" / "ica_search.html").read_text(encoding="utf-8")
+
+
+def test_a_real_search_page_gives_its_products_with_exact_prices_and_sizes():
+    seen = []
+
+    def handler(request):
+        seen.append(request.url)
+        return httpx.Response(200, text=SEARCH)
+    snap = connector(handler).scan(STORE, "online", ScanRequest(query="mjölk"))
+    assert seen[0].path == "/stores/1003395/search" and seen[0].params["q"] == "mjölk"
+    prices = {p.sku: p for p in snap.prices}
+    assert set(prices) == {"2095219", "1407322", "1354730", "2053708"}
+    milk = prices["2095219"]  # "20,93 kr" with a non-breaking space; the size label is "1.5L"
+    assert milk.current_price == Decimal("20.93") and milk.regular_price is None
+    assert (milk.package_value, milk.package_unit) == (Decimal("1.5"), "L")
+    assert (prices["1354730"].package_value, prices["1354730"].package_unit) == (Decimal("0.7"), "kg")
+    assert snap.offers == [] and snap.effective_status == "success"

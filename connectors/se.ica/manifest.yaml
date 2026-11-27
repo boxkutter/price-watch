@@ -16,8 +16,9 @@ access_note: >-
   of ICA's online shop (handlaprivatkund.ica.se, an Ocado-based storefront): the search page and
   product pages, whose products are tiles (data-test="fop-...") and, in the original investigation,
   window.__INITIAL_STATE__ and schema.org JSON-LD. No key or login; targeted lookups only. The tile
-  layout was taken from a saved page of the store start page; search and product pages
-  are tested on fixtures only; it has not yet been run against the live shop, and
+  layout was taken from saved pages of the store start page and of a search
+  (/stores/<storeId>/search?q=...); product pages and the raw (non-browser-rendered) HTML are
+  tested on fixtures only; it has not yet been run against the live shop, and
   its robots.txt has not been read (do that before enabling, and set the spacing and any visit
   window to match). A product's address is assumed to accept the bare id
   (/stores/<storeId>/products/<id>), redirecting to the canonical page; if not, add-by-link and
