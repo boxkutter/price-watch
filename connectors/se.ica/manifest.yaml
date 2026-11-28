@@ -5,7 +5,7 @@ description: Targeted product search, product-link lookup and multibuy offers fr
 author: price-watch
 protocol_version: 1
 connector_version: 0.1.0
-# Off until it has been tried against the live shop; then Enable it.
+# Off until the owner has tried it live from the server and seen no firewall challenge; then Enable it.
 enabled: false
 access_review: approved
 access_note: >-
@@ -14,11 +14,14 @@ access_note: >-
   method is to request the pages with the browser-style headers in request_headers (their example,
   received 2026-11-27; update them when ICA does) and read prices from the HTML. Reads the pages
   of ICA's online shop (handlaprivatkund.ica.se, an Ocado-based storefront): the search page and
-  product pages, whose products are tiles (data-test="fop-...") and, in the original investigation,
-  window.__INITIAL_STATE__ and schema.org JSON-LD. No key or login; targeted lookups only. The tile
-  layout was taken from saved pages of the store start page, a search
-  (/stores/<storeId>/search?q=...) and a product page; the raw (non-browser-rendered) HTML ICA
-  returns has not been seen; it has not yet been run against the live shop.
+  product pages. A search page served to this client (tried live 2026-11-28, store discovery and
+  search) embeds every result as window.__INITIAL_STATE__ (brand, size, exact price, offers and
+  the page's store); tiles (data-test="fop-...") are server-rendered for only some of them, so the
+  state is read first. A product page and a reduced (non-multibuy) price have not been seen live
+  yet. ICA's web firewall answered a few minutes later, after about eight requests in ten
+  minutes (several in bursts, from separate processes), with a JavaScript challenge (HTTP 202)
+  and was still doing so ten minutes on; the connector treats that as a refusal and pauses, and
+  never tries to pass it. No key or login; targeted lookups only.
   robots.txt (checked by the owner, 2026-11-27): handlaprivatkund.ica.se serves an empty one (no
   disallowed path, no crawl delay, no visit window); www.ica.se's only disallows the
   /templates/ajaxresponse.aspx path, which is not used. The 10 s spacing and the hourly minimum

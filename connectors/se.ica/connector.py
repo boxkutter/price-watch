@@ -6,11 +6,17 @@ text, size, a link ending in the ICA SKU). The 2026-11-26 investigation also fou
 as `window.__INITIAL_STATE__` and schema.org JSON-LD; all three are read. ICA's IT team approved
 requesting the pages with the browser-style headers in the manifest (see its `access_note`).
 
-The tile layout comes from a saved copy of the store start page (2026-11-27). The search and
-product pages and the embedded state are NOT verified against the live site; the state is read
-tolerantly (a record is any object with a `retailerProductId`), and a page whose layout does not
-match is an extraction failure, never a price. Without a chosen store ICA shows only campaign prices
-(www.ica.se), so this connector always works on a store's own pages.
+A search page served to this client (checked live, 2026-11-28) embeds the whole result as
+`window.__INITIAL_STATE__`: every product with brand, size, the exact single-item price and its
+offers, and the page's store in `session.metadata.retailerRegionId`. Only some of the results are
+also server-rendered as tiles (14 of 46 in one search), so the state is the primary source and tiles
+(and the product page's own view) fill in what it lacks. The product page and a reduced (non-multibuy)
+price have not been seen live; the saved browser pages cover them. A record is any object with a
+`retailerProductId`; a page whose layout does not match is an extraction failure, never a price, and
+a page for another store than the one asked is refused. ICA's web firewall can answer with a
+JavaScript challenge (HTTP 202); that is a refusal (the connector pauses), never something to get
+past. Without a chosen store ICA shows only campaign prices (www.ica.se), so this connector always
+works on a store's own pages.
 - Prices are per store (the `<storeId>` in the address), online prices only.
 - The price of a record is the single-item price; promotions are reported as offers.
 - `available` means orderable, not in stock, so availability is only taken from JSON-LD.
@@ -25,6 +31,7 @@ from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from app.connectors.base import (
+    AccessBlocked,
     ExtractionError,
     HttpStatusError,
     OfferData,
@@ -58,6 +65,34 @@ def embedded_state(html: str) -> object:
         return json.JSONDecoder().raw_decode(html, match.end())[0]
     except ValueError:
         return None
+
+
+CHALLENGE = re.compile(r"AwsWafIntegration|awsWafCookieDomainList|gokuProps")
+
+
+def check_not_challenged(html: str) -> None:
+    """ICA's web firewall answers with a small JavaScript page (HTTP 202) instead of the shop when it
+    wants a browser to prove itself. That is a refusal: raise AccessBlocked so the connector pauses."""
+    if CHALLENGE.search(html) and embedded_state(html) is None:
+        raise AccessBlocked("ICA asked for a browser verification (web firewall challenge)")
+
+
+def state_store(html: str) -> str | None:
+    """The store a page was rendered for (`session.metadata.retailerRegionId`), when it says."""
+    state = embedded_state(html)
+    meta = (state.get("session") or {}).get("metadata") if isinstance(state, dict) else None
+    store = meta.get("retailerRegionId") if isinstance(meta, dict) else None
+    return str(store) if store else None
+
+
+def search_total(html: str) -> int | None:
+    """How many products the search matched (`search.catalogue.data.totalProducts`), when stated."""
+    state = embedded_state(html)
+    try:
+        total = state["data"]["search"]["catalogue"]["data"]["totalProducts"]
+    except (KeyError, TypeError):
+        return None
+    return total if isinstance(total, int) else None
 
 
 TILE = re.compile(r'(?=data-test="fop-wrapper)')
@@ -95,15 +130,21 @@ def _record(sku: str, name: str, size: str | None, price_text: str | None, offer
             period: str | None = None) -> dict:
     """One product record from the texts a store-shop page shows (a tile or a product page).
 
-    The shown price is what the shopper pays for a single item *unless* a multibuy applies, when
-    it reads "3 för 50 kr" (the bundle). A multibuy or member (stammis) promotion never becomes the
-    current price: the current price is then the ordinary one, and the promotion becomes an offer.
+    The shown price is what the shopper pays for a single item *unless* the tile shows the offer in
+    its place: a multibuy bundle ("3 för 50 kr") or a member price ("Stammispris 12 kr"). Those never
+    become the current price; it is then the ordinary one, and the promotion becomes an offer. A
+    member promotion beside a price needs care: with an ordinary price that differs, the shown price
+    may be the member's, so the ordinary one is taken; with none (the page as served to this client,
+    "21,60 kr" and "3 för 50 kr -- Stammispris" apart) the shown price is the plain one.
     """
     promo_text = offer or (price_text if price_text and MULTIBUY.search(price_text) else None)
     bundle_shown = bool(price_text and MULTIBUY.search(price_text))  # "3 för 50 kr" instead of a price
+    member_price_shown = bool(price_text and MEMBER.search(price_text))
     member = bool(promo_text and MEMBER.search(promo_text)) or loyalty
     record: dict = {"retailerProductId": sku, "name": name, "size": size, "promotions": []}
-    current = ordinary if bundle_shown or member else _money(price_text)
+    shown = _money(price_text)
+    member_may_be_shown = member and ordinary is not None and shown != ordinary
+    current = ordinary if bundle_shown or member_price_shown or member_may_be_shown else shown
     if current is not None:
         record["price"] = {"current": {"amount": str(current)}}
         if ordinary and current != ordinary:
@@ -182,11 +223,37 @@ def _amount(value) -> Decimal | None:
     return to_decimal(value)
 
 
+def _from_state(node: dict) -> dict:
+    """A product record of the embedded state, in the shape the rest of this module reads.
+
+    The size is `{"value": "1.5L"}` and the offers are a list of `{"id", "description", ...}`; `id` is
+    the same uuid the tile's offer link ends in, so an offer keeps its identity whichever page shows it.
+    """
+    size = node.get("size")
+    promotions = [{"retailerPromotionId": offer.get("id") or offer["retailerPromotionId"],
+                   "description": str(offer.get("description") or ""),
+                   "member": bool(MEMBER.search(str(offer.get("description") or ""))), "period": None}
+                  for offer in node.get("offers") or []
+                  if isinstance(offer, dict) and (offer.get("id") or offer.get("retailerPromotionId"))]
+    return {**node, "size": size.get("value") if isinstance(size, dict) else size, "promotions": promotions}
+
+
 def parse_state(html: str) -> dict[str, dict]:
-    """Product records in a page's embedded state, by ICA SKU. Empty when there is none."""
-    found: dict[str, dict] = {}
-    _records(embedded_state(html), found)
-    return {**found, **parse_tiles(html)}
+    """Product records on a page by ICA SKU: the embedded state's, then tiles for what it lacks.
+
+    A tile can add the ordinary price of a reduced product, but only when it agrees with the state
+    on the price being paid.
+    """
+    raw: dict[str, dict] = {}
+    _records(embedded_state(html), raw)
+    tiles = parse_tiles(html)
+    found = {sku: _from_state(node) for sku, node in raw.items()}
+    for sku, record in found.items():
+        tile = tiles.get(sku)
+        if tile and tile.get("regular_price") and "regular_price" not in record and \
+                _amount(tile.get("price")) == _amount(record.get("price")):
+            record["regular_price"] = tile["regular_price"]
+    return {**tiles, **found}
 
 
 def _availability(value) -> str | None:
@@ -238,7 +305,10 @@ def parse_offers(raw: dict, store: str) -> list[OfferData]:
 def parse_page(html: str, sku: str, store: str) -> tuple[PriceData | None, list[OfferData], str]:
     """(price, offers, name) for one product page. Raises ExtractionError when it has no such product."""
     ld = _jsonld_product(html, sku)
-    raw = parse_product_view(html, sku).get(sku) or parse_state(html).get(sku)
+    view, state = parse_product_view(html, sku).get(sku), parse_state(html).get(sku)
+    # The page's own view carries the offer's dates; the state has the brand. Where both say something
+    # the view wins (it is what the page shows for this product).
+    raw = {**state, **{k: v for k, v in view.items() if v not in (None, [], "")}} if view and state else view or state
     if raw is None and ld is None:
         raise ExtractionError("The page has no product data")
     if raw is None:  # JSON-LD only: sku, price and availability are all it has
@@ -284,13 +354,28 @@ class IcaConnector(HttpJsonConnector):
         place = str(inputs.get("place") or "").strip()
         if not place:
             raise ExtractionError("Give a postcode or a town to look for ICA stores")
-        stores = parse_stores(self.client.get_text(f"{FINDER}?q={quote(place[:40])}"))
+        stores = parse_stores(self._page(f"{FINDER}?q={quote(place[:40])}"))
         if not stores:
             raise ExtractionError("No ICA stores with online shopping were found there")
         return stores
 
     def source_for(self, store: str) -> str:
         return f"{BASE}/stores/{store}/"
+
+    def _page(self, url: str, store: str | None = None) -> str:
+        """A page's HTML. A firewall challenge is a refusal, and a page rendered for another store
+        than `store` is never read (its prices are not that store's)."""
+        try:
+            html = self.client.get_text(url)
+        except HttpStatusError as exc:
+            if exc.status == 202:  # the challenge page is served with 202
+                raise AccessBlocked("ICA asked for a browser verification (web firewall challenge)") from exc
+            raise
+        check_not_challenged(html)
+        shown = state_store(html)
+        if store and shown and shown != store:
+            raise ExtractionError(f"ICA answered for store {shown}, not {store}")
+        return html
 
     def collect(self, store: str, request: ScanRequest) -> Collected:
         collected = Collected()
@@ -299,9 +384,11 @@ class IcaConnector(HttpJsonConnector):
             collected.notes.append("ICA does not publish barcodes; map the barcode to an ICA product by hand")
         found: dict[str, dict] = {}
         if request.query:
-            html = self.client.get_text(f"{BASE}/stores/{store}/search?q={quote(request.query[:100])}")
+            html = self._page(f"{BASE}/stores/{store}/search?q={quote(request.query[:100])}", store)
             found.update(parse_state(html))
             collected.fetched += len(found)
+            total = search_total(html)
+            collected.truncated = total is not None and total > len(found)
             if not found and embedded_state(html) is None:
                 raise ExtractionError("The search page has no embedded product data")
         for sku in request.skus:
@@ -309,7 +396,7 @@ class IcaConnector(HttpJsonConnector):
                 missing.append(sku)
                 continue
             try:
-                html = self.client.get_text(f"{BASE}/stores/{store}/products/{sku}")
+                html = self._page(f"{BASE}/stores/{store}/products/{sku}", store)
             except HttpStatusError as exc:
                 if exc.status not in (404, 410):
                     raise

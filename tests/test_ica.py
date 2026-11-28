@@ -1,4 +1,5 @@
-"""ICA connector. Fixtures are synthetic, shaped like the 2026-11-26 investigation; not live data."""
+"""ICA connector. The inline records follow the state ICA served on 2026-11-28; the tests with a
+fixture file use saved pages (browser-saved 2026-11-27, or fetched with the approved headers 2026-11-28)."""
 import json
 from decimal import Decimal
 from pathlib import Path
@@ -18,14 +19,14 @@ _module = module_of("se.ica")
 IcaConnector, parse_page, parse_state = _module.IcaConnector, _module.parse_page, _module.parse_state
 manifest = load_manifest(Path(BUILTIN_DIR) / "se.ica" / "manifest.yaml")
 STORE = "1003395"
-MILK = {"retailerProductId": "100200", "name": "Mellanmjölk 1,5%", "brand": "ICA", "size": "1.5l",
+MILK = {"retailerProductId": "100200", "name": "Mellanmjölk 1,5%", "brand": "ICA", "size": {"value": "1.5l"},
         "price": {"current": {"amount": "17.90", "currency": "SEK"}}, "available": True,
-        "promotions": [{"retailerPromotionId": "p77", "description": "2 för 30 kr"},
-                       {"retailerPromotionId": "p78", "description": "Stammispris 2 för 28 kr"},
-                       {"retailerPromotionId": "p79", "description": "Nyhet"}]}
-OATS = {"retailerProductId": "100300", "name": "Havregryn 750 g", "size": "0.75kg",
+        "offers": [{"id": "p77", "description": "2 för 30 kr"},
+                   {"id": "p78", "description": "Stammispris 2 för 28 kr"},
+                   {"id": "p79", "description": "Nyhet"}]}
+OATS = {"retailerProductId": "100300", "name": "Havregryn 750 g", "size": {"value": "0.75kg"},
         "price": {"current": {"amount": "24.5", "currency": "SEK"}}}
-NOPRICE = {"retailerProductId": "100400", "name": "Slut vara", "size": "500g"}
+NOPRICE = {"retailerProductId": "100400", "name": "Slut vara", "size": {"value": "500g"}}
 PRODUCTS = {r["retailerProductId"]: r for r in (MILK, OATS, NOPRICE)}
 
 
@@ -75,6 +76,7 @@ def test_a_search_gives_exact_prices_sizes_and_skips_unpriced_products():
     assert prices["100200"].current_price == Decimal("17.90") and prices["100200"].currency == "SEK"
     assert (prices["100300"].package_value, prices["100300"].package_unit) == (Decimal("0.75"), "kg")
     assert prices["100200"].availability is None and prices["100200"].gtin is None  # orderable != in stock
+    assert prices["100200"].brand == "ICA" and prices["100300"].brand is None
 
 
 def test_multibuy_promotions_become_offers_and_wording_without_an_amount_does_not():
@@ -349,3 +351,75 @@ def test_the_manifest_declares_discovery_and_both_hosts():
 
 def test_no_store_is_preselected_every_store_is_found_by_searching():
     assert manifest.stores == [] and manifest.store_discovery_inputs[0].required is True
+
+
+# ---- a search page as served to this client (fetched 2026-11-28): the state is the whole result ----
+
+STATE_SEARCH = (Path(__file__).parent / "fixtures" / "ica_search_state.html").read_text(encoding="utf-8")
+CHALLENGE = (Path(__file__).parent / "fixtures" / "ica_challenge.html").read_text(encoding="utf-8")
+
+
+def test_a_served_search_page_gives_brand_size_exact_price_and_the_member_offers():
+    snap = connector(lambda r: httpx.Response(200, text=STATE_SEARCH)).scan(STORE, "online", ScanRequest(query="mjölk"))
+    prices = {p.sku: p for p in snap.prices}
+    assert set(prices) == {"2095219", "1407322", "1354730", "1487070", "1487076"}
+    valio = prices["1487070"]  # a member 3-for-50 beside a plain price: the price is the plain one
+    assert (valio.current_price, valio.regular_price, valio.brand) == (Decimal("21.60"), None, "Valio")
+    assert (valio.package_value, valio.package_unit) == (Decimal("1.5"), "L")
+    assert prices["1354730"].brand == "Oboy" and (prices["1354730"].package_value, prices["1354730"].package_unit) == (Decimal("0.7"), "kg")
+    offers = {o.identity_key: o for o in snap.offers}
+    promo = "f80ac37e-0faf-4c48-9875-193d913e84d2"  # the uuid the offer's own address ends in
+    assert set(offers) == {f"1487070:{promo}", f"1487076:{promo}"}
+    assert all(o.price == Decimal(50) and o.eligibility == "member" and o.terms == "3 för 50 kr -- Stammispris"
+               for o in offers.values())
+
+
+def test_the_state_beats_the_tile_and_a_partly_rendered_page_is_not_cut_short():
+    only_state = STATE_SEARCH.split("<script>")[0]  # tiles only
+    assert set(parse_state(only_state)) == {"2095219", "1407322", "1354730", "1487070", "1487076"}
+    state_only = "<script>" + STATE_SEARCH.split("<script>")[1]
+    assert set(parse_state(state_only)) == set(parse_state(only_state))
+    assert parse_state(state_only)["1487070"]["brand"] == "Valio"  # only the state has it
+
+
+def test_a_tile_with_a_member_offer_beside_a_plain_price_keeps_the_price():
+    tile = parse_state(STATE_SEARCH.split("<script>")[0])["1487070"]
+    assert tile["price"] == {"current": {"amount": "21.60"}} and tile["promotions"][0]["member"] is True
+
+
+def test_a_search_with_more_results_than_the_page_shows_is_marked_truncated():
+    snap = connector(lambda r: httpx.Response(200, text=STATE_SEARCH)).scan(STORE, "online", ScanRequest(query="mjölk"))
+    assert snap.truncated is True and "only the first 5 results" in snap.detail  # 182 matched
+    whole = connector(site).scan(STORE, "online", ScanRequest(query="mjölk"))
+    assert whole.truncated is False
+
+
+@pytest.mark.parametrize("status", [202, 200])
+def test_a_firewall_challenge_is_a_refusal_that_pauses_the_connector(status):
+    """ICA's web firewall serves a JavaScript challenge page, with HTTP 202. It is never worked around."""
+    calls = []
+
+    def challenge(request):
+        calls.append(request)
+        return httpx.Response(status, text=CHALLENGE)
+    snap = connector(challenge).scan(STORE, "online", ScanRequest(query="mjölk"))
+    assert snap.effective_status == "access_blocked" and len(calls) == 1 and "verification" in snap.detail
+    snap = connector(challenge).scan(STORE, "online", ScanRequest(skus=("1407322",)))
+    assert snap.effective_status == "access_blocked"
+
+
+def test_a_page_for_another_store_is_never_read():
+    other = STATE_SEARCH.replace('"retailerRegionId": "1003395"', '"retailerRegionId": "1004163"')
+    snap = connector(lambda r: httpx.Response(200, text=other)).scan(STORE, "online", ScanRequest(query="mjölk"))
+    assert snap.effective_status == "extraction_failed" and snap.prices == [] and "1004163" in snap.detail
+
+
+def test_a_product_page_with_a_state_takes_the_brand_from_it_and_the_offer_dates_from_the_view():
+    state = parse_state(STATE_SEARCH)["1487070"]
+    state = {**state, "offers": [{"id": "4d0fde93-cd56-4b15-b194-fe27abb3a296", "description": "2 för 50 kr"}]}
+    page_with_state = OFFER_PAGE + "<script>window.__INITIAL_STATE__ = " + json.dumps(
+        {"data": {"entities": {"x": {**state, "retailerProductId": "1025999", "brand": "Pärsons"}}}}) + ";</script>"
+    price, offers, _ = parse_page(page_with_state, "1025999", STORE)
+    assert price.brand == "Pärsons" and price.current_price == Decimal("28.40")  # the view's price
+    (offer,) = offers  # the view's offer, with its dates; not a second one from the state
+    assert offer.valid_to.isoformat() == "2026-11-29T23:59:59+01:00"
