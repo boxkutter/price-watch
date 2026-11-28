@@ -345,3 +345,7 @@ def test_the_manifest_declares_discovery_and_both_hosts():
     assert manifest.capabilities["store_discovery"] == "supported"
     assert set(manifest.allowed_hosts) == {"handlaprivatkund.ica.se", "www.ica.se"}
     assert manifest.store_discovery_inputs[0].name == "place"
+
+
+def test_no_store_is_preselected_every_store_is_found_by_searching():
+    assert manifest.stores == [] and manifest.store_discovery_inputs[0].required is True
