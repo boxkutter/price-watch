@@ -40,6 +40,9 @@ def page(*records, ld=None):
 
 def site(request: httpx.Request) -> httpx.Response:
     path = request.url.path
+    if path == "/butiker/":
+        assert request.url.host == "www.ica.se"
+        return httpx.Response(200, text=FINDER_PAGE)
     assert request.url.host == "handlaprivatkund.ica.se"
     if path == f"/stores/{STORE}/search":
         hits = [MILK, OATS, NOPRICE] if request.url.params.get("q") == "mjölk" else []
@@ -55,7 +58,8 @@ def make(transport, secrets):
 
 
 def test_the_connector_passes_the_contract():
-    passed = check_connector(make, site, manifest=manifest, store=STORE, request=ScanRequest(query="mjölk"))
+    passed = check_connector(make, site, manifest=manifest, store=STORE, request=ScanRequest(query="mjölk"),
+                             discover_inputs={"place": "24372"})
     assert "happy_path" in passed
 
 
@@ -256,7 +260,7 @@ def test_the_bare_id_address_redirects_to_the_named_product_page_and_is_followed
     snap = IcaConnector({"max_requests_per_scan": 6}, client).scan(STORE, "online", ScanRequest(skus=("1407322",)))
     assert paths == ["/stores/1003395/products/1407322", MILK_PAGE]  # both hops are requests
     assert [p.current_price for p in snap.prices] == [Decimal("14.42")]
-    assert manifest.follow_redirects is True and manifest.allowed_hosts == ["handlaprivatkund.ica.se"]
+    assert manifest.follow_redirects is True and set(manifest.allowed_hosts) == {"handlaprivatkund.ica.se", "www.ica.se"}
 
 
 # ---- a real product page with a promotion, "2 för 50 kr" with dates (saved 2026-11-27) ----------
@@ -306,3 +310,38 @@ def test_one_offer_on_several_search_tiles_is_one_offer_per_product_with_single_
     assert all(o.price == Decimal(50) and o.eligibility == "public" and o.skus == (o.identity_key.split(":")[0],)
                for o in offers.values())
     assert all(o.valid_from is None and o.valid_to is None for o in offers.values())  # a tile states no dates
+
+
+# ---- store discovery: ICA's store finder, /butiker/?q=24372 (saved 2026-11-27) -------------------
+
+FINDER_PAGE = (Path(__file__).parent / "fixtures" / "ica_stores.html").read_text(encoding="utf-8")
+
+
+def test_store_discovery_lists_the_nearby_stores_that_have_online_shopping():
+    seen = []
+
+    def handler(request):
+        seen.append(request.url)
+        return httpx.Response(200, text=FINDER_PAGE)
+    client = PoliteClient(["handlaprivatkund.ica.se", "www.ica.se"], 0, transport=httpx.MockTransport(handler))
+    stores = IcaConnector({}, client).discover_stores(place="24372")
+    assert (seen[0].host, seen[0].path, seen[0].params["q"]) == ("www.ica.se", "/butiker/", "24372")
+    assert {s.external_id for s in stores} == {"1003395", "1003545", "1003793", "1003966", "1004163", "1004334", "1004395"}
+    hoor = next(s for s in stores if s.external_id == "1003395")
+    assert (hoor.name, hoor.address) == ("ICA Supermarket Höör", "Friluftsvägen 14, Höör")
+    assert "1004083" not in {s.external_id for s in stores}  # no shop of its own: the header's link is not its
+
+
+def test_discovery_needs_a_place_and_an_empty_result_is_an_extraction_failure():
+    client = PoliteClient(["www.ica.se"], 0, transport=httpx.MockTransport(lambda r: httpx.Response(200, text="<html/>")))
+    ica = IcaConnector({}, client)
+    with pytest.raises(ExtractionError):
+        ica.discover(place="")
+    with pytest.raises(ExtractionError):
+        ica.discover(place="nowhere")
+
+
+def test_the_manifest_declares_discovery_and_both_hosts():
+    assert manifest.capabilities["store_discovery"] == "supported"
+    assert set(manifest.allowed_hosts) == {"handlaprivatkund.ica.se", "www.ica.se"}
+    assert manifest.store_discovery_inputs[0].name == "place"

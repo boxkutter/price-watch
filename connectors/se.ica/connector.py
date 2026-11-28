@@ -24,11 +24,22 @@ from decimal import Decimal
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
-from app.connectors.base import ExtractionError, HttpStatusError, OfferData, PriceData, ScanRequest
+from app.connectors.base import (
+    ExtractionError,
+    HttpStatusError,
+    OfferData,
+    PriceData,
+    ScanRequest,
+    StoreInfo,
+)
 from app.connectors.kit import Collected, HttpJsonConnector, json_ld, to_decimal
 from app.pricing import parse_size
 
 BASE = "https://handlaprivatkund.ica.se"
+FINDER = "https://www.ica.se/butiker/"
+STORE_LINK = re.compile(r'href="https://www\.ica\.se/butiker/[a-z]+/[a-z0-9-]+/[a-z0-9-]+-(?P<id>\d{6,8})/"')
+SHOP_LINK = re.compile(r"handlaprivatkund\.ica\.se/stores/(?P<id>\d+)")
+NAME_ADDRESS = re.compile(r"<span[^>]*>(?P<name>[^<]{3,80})</span>\s*<span[^>]*>(?P<address>[^<]{3,80},\s*[^<]{2,40})</span>")
 SKU = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 STATE = re.compile(r"window\.__INITIAL_STATE__\s*=\s*")
 MULTIBUY = re.compile(r"(\d+)\s*för\s*(\d+(?:[.,]\d+)?)\s*kr", re.IGNORECASE)
@@ -241,9 +252,42 @@ def parse_page(html: str, sku: str, store: str) -> tuple[PriceData | None, list[
     return parse_record(raw, store, stock), parse_offers(raw, store), str(raw["name"])
 
 
+def parse_stores(html: str) -> list[StoreInfo]:
+    """Stores on ICA's store finder (`www.ica.se/butiker/?q=...`) that have an online shop.
+
+    Each result card names the store and its address, links to its page (`.../<name>-<id>/`) and,
+    when it has an online shop, to `handlaprivatkund.ica.se/stores/<id>`. The id is the same in both.
+    A shop link whose id is not the card's own (the page header shows the visitor's own store) is
+    ignored, and a card without one is a store without online shopping.
+    """
+    links = [m for m in STORE_LINK.finditer(html)]
+    stores: dict[str, StoreInfo] = {}
+    for n, link in enumerate(links):
+        store_id = link.group("id")
+        if store_id in stores:
+            continue
+        end = next((m.start() for m in links[n + 1:] if m.group("id") != store_id), len(html))
+        if not any(m.group("id") == store_id for m in SHOP_LINK.finditer(html, link.start(), end)):
+            continue
+        card = list(NAME_ADDRESS.finditer(html, max(0, link.start() - 2500), link.start()))
+        if card:
+            stores[store_id] = StoreInfo(store_id, htmllib.unescape(card[-1].group("name")).strip(),
+                                         htmllib.unescape(card[-1].group("address")).strip())
+    return list(stores.values())
+
+
 class IcaConnector(HttpJsonConnector):
     id = "se.ica"
     store_id_pattern = r"\d{4,10}"
+
+    def discover(self, **inputs) -> list[StoreInfo]:
+        place = str(inputs.get("place") or "").strip()
+        if not place:
+            raise ExtractionError("Give a postcode or a town to look for ICA stores")
+        stores = parse_stores(self.client.get_text(f"{FINDER}?q={quote(place[:40])}"))
+        if not stores:
+            raise ExtractionError("No ICA stores with online shopping were found there")
+        return stores
 
     def source_for(self, store: str) -> str:
         return f"{BASE}/stores/{store}/"

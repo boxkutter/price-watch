@@ -25,7 +25,8 @@ access_note: >-
   are our own, deliberately cautious limits. A product page is /stores/<storeId>/products/<name>/<id>; the
   bare id (/stores/<storeId>/products/<id>) redirects to it (confirmed in a browser, 2026-11-27)
   and the connector follows that same-host redirect (follow_redirects); if it ever stops, add-by-link and
-  lookups by id will report the product as missing. Prices are the online prices of the chosen
+  lookups by id will report the product as missing. Store discovery reads ICA's store finder on
+  www.ica.se (a single page per search, the nearest 20 stores, those with online shopping kept). Prices are the online prices of the chosen
   store. No barcode is published. `available` means orderable, so stock is taken only from
   JSON-LD. Member (stammis) prices need a login and are not read. A 401/403 pauses the connector.
 implementation: connector:IcaConnector
@@ -45,13 +46,20 @@ request_headers:
   Sec-CH-UA-Mobile: "?0"
   Sec-CH-UA-Platform: '"Linux"'
 capabilities:
-  store_discovery: unsupported
+  store_discovery: supported
   product_search: supported
   barcode_search: unsupported
   online_prices: supported
   physical_store_prices: unsupported
   store_offers: unsupported
-allowed_hosts: [handlaprivatkund.ica.se]
+allowed_hosts: [handlaprivatkund.ica.se, www.ica.se]
+# A place (postcode or town) lists the nearest ICA stores that have online shopping, from ICA's
+# store finder (www.ica.se/butiker/?q=...): the same id names the store page and its shop.
+store_discovery_inputs:
+  - name: place
+    label: Postcode or town
+    pattern: '^[A-Za-zÅÄÖåäöÉé0-9 .-]{2,40}$'
+    required: true
 # Store ids are ICA's online-shop store ids (the number in the shop's address).
 stores:
   - {external_id: "1003395", name: ICA Supermarket Höör}
