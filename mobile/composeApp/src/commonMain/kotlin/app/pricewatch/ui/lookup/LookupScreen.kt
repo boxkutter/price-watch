@@ -100,6 +100,7 @@ fun LookupScreen(model: AppModel) {
         item {
             SearchField(
                 query, onChange = lookup::setQuery, onSearch = { lookup.search() }, onClear = lookup::clearQuery,
+                onScan = { model.startScan(ScanPurpose.Lookup) },
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
@@ -180,14 +181,19 @@ fun LookupScreen(model: AppModel) {
 }
 
 @Composable
-private fun SearchField(value: String, onChange: (String) -> Unit, onSearch: () -> Unit, onClear: () -> Unit, modifier: Modifier = Modifier) {
+private fun SearchField(value: String, onChange: (String) -> Unit, onSearch: () -> Unit, onClear: () -> Unit, onScan: () -> Unit, modifier: Modifier = Modifier) {
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     TextField(
         value = value, onValueChange = onChange, singleLine = true,
         placeholder = { Text("Product, barcode or store link") },
         leadingIcon = { Icon(Icons.Default.Search, null) },
-        trailingIcon = { if (value.isNotEmpty()) IconButton(onClick = onClear) { Icon(Icons.Default.Clear, "Clear") } },
+        trailingIcon = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (value.isNotEmpty()) IconButton(onClick = onClear) { Icon(Icons.Default.Clear, "Clear") }
+                IconButton(onClick = { keyboard?.hide(); focus.clearFocus(); onScan() }) { Icon(AppIcons.QrScan, "Scan a barcode", tint = MaterialTheme.colorScheme.primary) }
+            }
+        },
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { keyboard?.hide(); focus.clearFocus(); onSearch() }),
         shape = MaterialTheme.shapes.extraLarge,

@@ -58,7 +58,7 @@ fun ScannerOverlay(model: AppModel, purpose: ScanPurpose) {
         ) { Text("Type the number instead", color = Color.White) }
         Text(
             when (purpose) {
-                ScanPurpose.Compare -> "Point the camera at a barcode"
+                ScanPurpose.Lookup, ScanPurpose.Compare -> "Point the camera at a barcode"
                 is ScanPurpose.LinkBarcode -> "Scan the barcode of\n${purpose.productName}"
             },
             color = Color.White, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center,

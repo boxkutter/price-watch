@@ -541,8 +541,10 @@ class SettingsModel(private val graph: AppGraph, private val scope: CoroutineSco
     }
 }
 
-/** What a scan is for: comparing prices, or giving a product its barcode. */
+/** What a scan is for: looking a product up, comparing prices, or giving a product its barcode. */
 sealed interface ScanPurpose {
+    /** Look the barcode up in the stores (the Lookup tab's camera). */
+    data object Lookup : ScanPurpose
     data object Compare : ScanPurpose
     data class LinkBarcode(val productId: String, val productName: String) : ScanPurpose
 }

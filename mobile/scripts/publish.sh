@@ -28,9 +28,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Optional local settings (git-ignored). Values already in the environment win.
+# Optional local settings (git-ignored). Values already in the environment win. A value may contain "="
+# (a base64 token ends with one), so each line is split at the first "=" only.
 if [[ -f .publish.env ]]; then
-    while IFS='=' read -r key value; do
+    while IFS= read -r line || [[ -n $line ]]; do
+        key=${line%%=*}; value=${line#*=}
         case "$key" in PW_SERVER|APP_UPLOAD_TOKEN) [[ -n ${!key:-} ]] || export "$key=$value" ;; esac
     done < .publish.env
 fi
@@ -94,6 +96,24 @@ cp "$apk" "$tmp/pricewatch.apk"; printf '%s\n' "$json" > "$tmp/latest.json"
 if [[ $dest == http://* || $dest == https://* ]]; then
     [[ -n ${APP_UPLOAD_TOKEN:-} ]] || { echo "Set APP_UPLOAD_TOKEN in mobile/.publish.env to the token in the server .env" >&2; exit 2; }
     server=${dest%/}
+    # Ask first with a tiny body: a wrong token or an older build is refused before the file is read, and
+    # a server that answers while 40 MB is still being sent makes curl fail with a confusing stream error.
+    # A 422 ("not an APK") means the token and version were accepted.
+    reply=$(mktemp)
+    status=$(curl --silent --max-time 60 -o "$reply" -w '%{http_code}' -X PUT "$server/download/pricewatch.apk" \
+        -H "Authorization: Bearer $APP_UPLOAD_TOKEN" -H "X-Version-Name: $name" -H "X-Version-Code: $code" \
+        --data-binary "preflight" || true)
+    message=$(python3 -c 'import sys, json
+try: print(json.load(open(sys.argv[1])).get("message", ""))
+except Exception: print("")' "$reply")
+    rm -f "$reply"
+    case $status in
+        422) ;;
+        401) echo "The server refused the upload token (check APP_UPLOAD_TOKEN in mobile/.publish.env against the server's .env)" >&2; exit 1 ;;
+        404) echo "Uploading is not switched on at $server (set APP_UPLOAD_TOKEN in its .env and update the stack), or it runs an older image" >&2; exit 1 ;;
+        000) echo "Could not reach $server" >&2; exit 1 ;;
+        *) echo "The server refused the upload ($status): ${message:-no message}" >&2; exit 1 ;;
+    esac
     echo "Uploading $(du -h "$apk" | cut -f1) to $server as $name ($code)"
     # the notes travel percent-encoded, so any text (and non-ASCII) survives a header
     encoded=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$notes")

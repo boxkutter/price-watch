@@ -63,6 +63,15 @@ class AppModel(val graph: AppGraph, val platform: PlatformServices, private val 
         val purpose = _scan.value ?: return
         _scan.value = null
         when (purpose) {
+            ScanPurpose.Lookup -> {
+                val gtin = app.pricewatch.shared.format.asBarcode(code)
+                if (gtin == null) messages.say("That is not a product barcode")
+                else {
+                    _tab.value = Tab.Lookup
+                    lookup.setQuery(gtin)
+                    lookup.search()
+                }
+            }
             ScanPurpose.Compare -> compare.scanned(code)
             is ScanPurpose.LinkBarcode -> {
                 val gtin = app.pricewatch.shared.format.asBarcode(code)
