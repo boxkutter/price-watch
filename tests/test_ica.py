@@ -282,3 +282,27 @@ def test_offer_periods_are_read_across_a_new_year_and_junk_gives_none():
     start, end = parse_period("28/12-3/1 2027, erbj jfr pris")
     assert (start.year, end.year, end.day) == (2026, 2027, 3)
     assert parse_period("ingen period") == (None, None) and parse_period("31/2-1/3 2026") == (None, None)
+
+
+# ---- a real search with a shared offer: /search?q=Tunna Skivor (saved 2026-11-27) ----------------
+
+OFFER_SEARCH = (Path(__file__).parent / "fixtures" / "ica_search_offer.html").read_text(encoding="utf-8")
+
+
+def test_one_offer_on_several_search_tiles_is_one_offer_per_product_with_single_item_prices():
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.params["q"])
+        return httpx.Response(200, text=OFFER_SEARCH)
+    snap = connector(handler).scan(STORE, "online", ScanRequest(query="Tunna Skivor"))
+    assert seen == ["Tunna Skivor"]
+    prices = {p.sku: p.current_price for p in snap.prices}
+    assert prices["1025999"] == Decimal("28.40") and prices["1026006"] == Decimal("35.86")  # never the bundle's 50
+    assert len(prices) == 5 and all(p != Decimal(50) for p in prices.values())
+    offers = {o.identity_key: o for o in snap.offers}
+    promo = "4d0fde93-cd56-4b15-b194-fe27abb3a296"
+    assert set(offers) == {f"{sku}:{promo}" for sku in ("1025999", "1026006", "1026000", "1026003")}
+    assert all(o.price == Decimal(50) and o.eligibility == "public" and o.skus == (o.identity_key.split(":")[0],)
+               for o in offers.values())
+    assert all(o.valid_from is None and o.valid_to is None for o in offers.values())  # a tile states no dates
