@@ -5,7 +5,7 @@ description: Targeted product search, product-link lookup and multibuy offers fr
 author: price-watch
 protocol_version: 1
 connector_version: 0.1.0
-# Off until it has been tried against the live shop and its robots.txt has been read; then Enable it.
+# Off until it has been tried against the live shop; then Enable it.
 enabled: false
 access_review: approved
 access_note: >-
@@ -18,9 +18,11 @@ access_note: >-
   window.__INITIAL_STATE__ and schema.org JSON-LD. No key or login; targeted lookups only. The tile
   layout was taken from saved pages of the store start page, a search
   (/stores/<storeId>/search?q=...) and a product page; the raw (non-browser-rendered) HTML ICA
-  returns has not been seen; it has not yet been run against the live shop, and
-  its robots.txt has not been read (do that before enabling, and set the spacing and any visit
-  window to match). A product page is /stores/<storeId>/products/<name>/<id>; the
+  returns has not been seen; it has not yet been run against the live shop.
+  robots.txt (checked by the owner, 2026-11-27): handlaprivatkund.ica.se serves an empty one (no
+  disallowed path, no crawl delay, no visit window); www.ica.se's only disallows the
+  /templates/ajaxresponse.aspx path, which is not used. The 10 s spacing and the hourly minimum
+  are our own, deliberately cautious limits. A product page is /stores/<storeId>/products/<name>/<id>; the
   bare id (/stores/<storeId>/products/<id>) redirects to it (confirmed in a browser, 2026-11-27)
   and the connector follows that same-host redirect (follow_redirects); if it ever stops, add-by-link and
   lookups by id will report the product as missing. Prices are the online prices of the chosen
