@@ -2,7 +2,7 @@ import hashlib
 import json
 import re
 import uuid
-from datetime import UTC, timedelta
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -38,6 +38,7 @@ from app.config import settings
 from app.connectors import packages, registry
 from app.connectors.urls import match_product_url
 from app.db import get_db
+from app.deals import best_dict, best_for, memberships, recorded_offers
 from app.example_user import open_session as open_example_session
 from app.example_user import reset_data as reset_example_data
 from app.gtin import normalize_gtin
@@ -68,12 +69,12 @@ from app.models import (
     RetailerLogo,
     Store,
     User,
+    UserMembership,
     UserStore,
     Webhook,
     aware,
     utcnow,
 )
-from app.multibuy import parse_deal
 from app.naming import describe, normalize_brand
 from app.openapi import install as install_openapi
 from app.products import delete_monitor_permanently, existing_monitor, parse_threshold
@@ -372,34 +373,15 @@ class GtinMappingRequest(BaseModel):
     gtin: str
 
 
-def _aware(moment):
-    """A datetime with its time zone (SQLite hands back naive ones, PostgreSQL aware ones)."""
-    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
-
-
-def best_multibuy(db: Session, row: Monitor, listing: Listing | None, single_price) -> dict | None:
-    """The cheapest public multi-buy on a watched product right now, as the price per item, when it
-    beats the price of one. ("2 för 35 kr" on a 20 kr item: 17.50 each.) Member offers are left out."""
+def best_deal(db: Session, row: Monitor, listing: Listing | None, single_price) -> dict | None:
+    """The cheapest way this person can buy a watched product right now, per item, when it beats the
+    price of one item: a multi-buy ("2 för 35 kr" is 17.50 each), a percentage off, and, for a member
+    of the chain, a member price or offer."""
     if not listing or single_price is None:
         return None
-    pattern = listing.sku.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + ":%"
-    offers = db.scalars(select(Offer).where(
-        Offer.store_id == row.store_id, Offer.channel == row.channel, Offer.eligibility == "public",
-        Offer.status == "active", Offer.identity_key.like(pattern, escape="\\"))).all()
-    now, best = utcnow(), None
-    for offer in offers:
-        if offer.valid_to and _aware(offer.valid_to) < now:
-            continue
-        if row.last_success_at and _aware(offer.last_seen) < _aware(row.last_success_at) - timedelta(minutes=5):
-            continue  # the store has stopped listing it
-        deal = parse_deal(offer.terms, single_price)
-        if deal and deal.unit < single_price and (best is None or deal.unit < best[0].unit):
-            best = (deal, offer)
-    if not best:
-        return None
-    deal, offer = best
-    return {"terms": offer.terms, "quantity": deal.quantity, "unit_price": str(deal.unit),
-            "valid_to": offer.valid_to}
+    store = db.get(Store, row.store_id)
+    offers = recorded_offers(db, row.store_id, row.channel, listing.sku, seen_since=row.last_success_at)
+    return best_dict(best_for(db, row.owner_id, store.retailer_id if store else "", single_price, offers))
 
 
 def monitor_dict(row: Monitor, db: Session) -> dict:
@@ -426,7 +408,7 @@ def monitor_dict(row: Monitor, db: Session) -> dict:
             "retailer_id": store.retailer_id if store else None,
             "image": best_image(db, product.id, row.owner_id) if product else None,
             "latest": latest,
-            "offer": best_multibuy(db, row, listing, seen[0].current_price if latest else None),
+            "offer": best_deal(db, row, listing, seen[0].current_price if latest else None),
             "barcode": ({"gtin14": product.gtin14, "source": product.gtin_source}
                         if product and product.gtin14 else None),
             **_monitor_fields(row)}
@@ -2026,13 +2008,16 @@ def unlink_product_barcode(product_id: str, db: Session = Depends(get_db),
 
 @app.get("/v1/me/stores")
 def my_stores(db: Session = Depends(get_db), p: Principal = Depends(principal)):
-    """The stores you compare prices across (see POST /v1/compare/barcode)."""
+    """The stores you compare prices across (see POST /v1/compare/barcode). `member` says whether you
+    are a member of the store's chain (see `/v1/me/memberships`)."""
     p.require("monitors:read")
     rows = db.execute(select(Store).join(UserStore, UserStore.store_id == Store.id)
                       .where(UserStore.user_id == p.user.id,
                              Store.retailer_id.in_(connector_state.enabled_ids(db)))
-                      .order_by(Store.name)).scalars()
-    return {"items": [{"store_id": s.id, "name": s.name, "retailer_id": s.retailer_id} for s in rows]}
+                      .order_by(Store.name)).scalars().all()
+    member_of = memberships(db, p.user.id)
+    return {"items": [{"store_id": s.id, "name": s.name, "retailer_id": s.retailer_id,
+                       "member": s.retailer_id in member_of} for s in rows]}
 
 
 @app.put("/v1/me/stores/{store_id}", status_code=204)
@@ -2047,6 +2032,34 @@ def add_my_store(store_id: str, db: Session = Depends(get_db), p: Principal = De
         raise HTTPException(429, f"You can compare across at most {settings.max_my_stores} stores")
     db.add(UserStore(user_id=p.user.id, store_id=store_id))
     db.commit()
+
+
+@app.get("/v1/me/memberships")
+def my_memberships(db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    """The chains you are a member of (ICA, City Gross, ...). Their member prices and offers count in
+    every store of the chain: monitors alert on them, and search and comparisons rank by them."""
+    p.require("monitors:read")
+    return {"items": [{"retailer_id": r} for r in sorted(memberships(db, p.user.id))]}
+
+
+@app.put("/v1/me/memberships/{retailer_id}", status_code=204)
+def become_member(retailer_id: str, db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    """Say you are a member of this chain. Idempotent."""
+    p.require("monitors:write")
+    if not registry.retailer(retailer_id):
+        raise HTTPException(404, "Retailer not found")
+    if not db.get(UserMembership, (p.user.id, retailer_id)):
+        db.add(UserMembership(user_id=p.user.id, retailer_id=retailer_id))
+        db.commit()
+
+
+@app.delete("/v1/me/memberships/{retailer_id}", status_code=204)
+def stop_being_member(retailer_id: str, db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    p.require("monitors:write")
+    row = db.get(UserMembership, (p.user.id, retailer_id))
+    if row:
+        db.delete(row)
+        db.commit()
 
 
 @app.delete("/v1/me/stores/{store_id}", status_code=204)
@@ -2092,7 +2105,7 @@ def compare_barcode(body: CompareRequest, response: Response, db: Session = Depe
     stores = [db.get(Store, sid) for sid in ids]
     if any(store is None for store in stores):
         raise HTTPException(404, "Store not found")
-    rows = known_rows(db, gtin14, stores)
+    rows = known_rows(db, gtin14, stores, p.user.id)
     summary = summarize(rows, body.here_store_id)
     product = product_for_gtin(db, gtin14)
     shown = {"gtin14": gtin14, "here_store_id": body.here_store_id,

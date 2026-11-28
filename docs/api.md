@@ -472,22 +472,39 @@ first). A monitor's events: `GET /v1/monitors/{id}/events`. Check now (one per 6
 curl -X POST $BASE/v1/monitors/<monitor_id>/check $AUTH     # 202 {"job_id": "…", "status": "queued"}
 ```
 
-### The alert price and multi-buys
+### The cheapest deal for you: member prices, percentages and multi-buys
 
-A monitor's alert price (`maximum_price`) is compared with the price of **one item**, and also with the
-price **per item of a public multi-buy**. "2 för 35 kr" is 17,50 kr each, so it reaches an alert price of
-19 kr even when one item costs 20 kr; "3 för 2" and "Köp 2 betala för 1" are read against the price of one
-item, and "19 kr/st vid köp av 2" is 19 kr each. Such a deal raises `price.threshold_reached` with
-`multibuy: true` (and the usual `offer.detected`), once per offer, and again if the offer changes.
+What counts is what *you* would pay, not the shelf price. A monitor's alert price (`maximum_price`) is
+compared with the shelf price of one item **and** with the price per item of every offer you can use:
 
-- Only wording that states the deal is understood. Percentage discounts ("20 % rabatt") and wording the
-  service cannot read stay plain offers.
-- **Member offers are never counted**: the person may not be a member.
-- Offers carry `quantity` and `unit_price` (the price per item, or `null` for anything that is not a
-  multi-buy), and a watched product's monitor has `offer`: its cheapest current public multi-buy
-  (`terms`, `quantity`, `unit_price`, `valid_to`), or `null`.
-- Like the single price, the first check only sets a baseline, and changing the alert price does not
-  raise an event by itself.
+| Offer wording | Counts as |
+|---|---|
+| "2 för 35 kr" | 17,50 kr each (you buy 2) |
+| "3 för 2", "Köp 2 betala för 1" | the price of one item times the items you pay for, divided by the items you get |
+| "19 kr/st vid köp av 2" | 19 kr each |
+| "Medlemspris: 17,95 kr" | 17,95 kr |
+| "20 % rabatt" | 80 % of the price of one item |
+
+**Membership** is per chain (ICA, City Gross), never per shop: `PUT /v1/me/memberships/{retailer_id}` says
+you are a member, `DELETE` that you are not. Member offers then count for you in every store of that chain,
+and for nobody else; a public offer counts for everyone. `GET /v1/me/stores` shows `member` on each store.
+
+Where it is used:
+
+- **Monitors.** A deal that brings the price per item down to the alert price raises `price.threshold_reached`
+  (with `multibuy`, `member`, `terms`, `quantity`, `offer_id` in the payload), once per offer, and again if the
+  offer changes. A watched product's `offer` is its best deal for you right now (`unit_price`, `quantity`,
+  `terms`, `member`, `valid_to`), or `null` when none beats the price of one item.
+- **Search.** Each result has `best` (the same fields) and each offer has `quantity` and `unit_price` (what one
+  costs under it, whoever it is for).
+- **Comparisons.** Each row keeps `current_price` (the shelf price) and adds `effective_price` (the best price per
+  item for you) with `best` saying how. Rows are ranked, `is_cheapest`, `vs_cheapest`, `vs_here` and
+  `saving_vs_here` are all measured on `effective_price`, so a store with a dearer shelf price but a member
+  price or multi-buy you can use comes out cheapest. Compare the quantity: a multi-buy needs you to buy
+  `quantity` items.
+- Only wording that states the deal is understood; anything else stays a plain offer. A plain public price for
+  one item is the price itself (the connector folds it in). Like the single price, a monitor's first check only
+  sets a baseline, and changing the alert price or joining a scheme does not raise an event by itself.
 
 ### Change the alert price
 
@@ -521,7 +538,7 @@ monitor limit.
 | Event `type` | When | `payload` |
 |---|---|---|
 | `price.decreased`, `price.increased` | The price changed between checks | `listing_id`, `old`, `new`, `store_id`, `channel` |
-| `price.threshold_reached` | The price crossed down to your `maximum_price`, or a public multi-buy brought the price per item down to it | `listing_id`, `price`, `threshold`; for a multi-buy also `multibuy: true`, `terms`, `quantity`, `offer_id`, `valid_to` (`price` is then the price per item) |
+| `price.threshold_reached` | The price crossed down to your `maximum_price`, or a deal you can use (multi-buy, percentage, member price) brought the price per item down to it | `listing_id`, `price`, `threshold`; for a deal also `multibuy`, `member`, `terms`, `quantity`, `offer_id`, `valid_to` (`price` is then the price per item) |
 | `offer.detected` | A promotion on a watched product appeared | `offer_id`, `title`, `terms`, `eligibility`, `valid_to`, `store_id` |
 | `offer.changed` | A known promotion changed | as above |
 | `product.discovered` | A new product matched a `generic_product` monitor | `listing_id`, `name` |
@@ -625,6 +642,9 @@ Scope is what the token needs. All paths are under the base URL.
 | GET | `/v1/me/stores` | `monitors:read` | Your comparison stores |
 | PUT | `/v1/me/stores/{store_id}` | `monitors:write` | Add a store to yours |
 | DELETE | `/v1/me/stores/{store_id}` | `monitors:write` | Remove a store from yours |
+| GET | `/v1/me/memberships` | `monitors:read` | The chains you are a member of |
+| PUT | `/v1/me/memberships/{retailer_id}` | `monitors:write` | Say you are a member of a chain (member prices then count for you) |
+| DELETE | `/v1/me/memberships/{retailer_id}` | `monitors:write` | Say you are not (any more) |
 | POST | `/v1/monitors` | `monitors:write` | Create a monitor |
 | POST | `/v1/monitors/from-url` | `monitors:write` | Add a product from its page link (asynchronous) |
 | GET | `/v1/monitors` | `monitors:read` | Your monitors (`include_removed`) |

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.connectors.base import ScanRequest
 from app.connectors.registry import connector_for
+from app.deals import is_member
 from app.ingest import add_price, ensure_listing
 from app.models import (
     Delivery,
@@ -24,7 +25,7 @@ from app.models import (
     new_id,
     utcnow,
 )
-from app.multibuy import parse_deal
+from app.multibuy import parse_offer_price, usable
 from app.pricing import base_quantity
 from app.retrieval import fetch
 
@@ -85,21 +86,26 @@ def _price_event(db: Session, monitor: Monitor, listing: Listing, price: Decimal
     state.last_observed_at = observed_at
 
 
-def _multibuy_event(db: Session, monitor: Monitor, offer, item, content_hash: str, matched: set[str],
-                    single_price: dict, listing_of: dict) -> None:
-    """A public multi-buy that brings the price per item down to the alert price ("2 för 35 kr" is
-    17,50 kr each) is the same news as the single price reaching it. Member offers are not counted:
-    the person may not be a member."""
+def _deal_event(db: Session, monitor: Monitor, retailer_id: str, offer, item, content_hash: str,
+                matched: set[str], single_price: dict, listing_of: dict) -> None:
+    """An offer that brings the price per item down to the alert price is the same news as the single
+    price reaching it: a multi-buy ("2 för 35 kr" is 17,50 kr each), a percentage off, and, when the
+    owner is a member of the store, a member price or offer. A plain public price for one item is the
+    price itself (the connector folds it in), so it is not announced twice."""
     threshold = monitor.conditions.get("maximum_price")
-    if threshold is None or monitor.type == "store" or item.eligibility != "public":
+    if threshold is None or monitor.type == "store":
+        return
+    if not usable(item.eligibility, is_member(db, monitor.owner_id, retailer_id)):
         return
     sku = next((s for s in item.skus if s in matched), None)
-    deal = parse_deal(item.terms, single_price.get(sku)) if sku else None
-    if not deal or not deal.reaches(Decimal(str(threshold))):
+    single = single_price.get(sku) if sku else None
+    deal = parse_offer_price(item.terms, single) if sku else None
+    if not deal or (single is not None and deal.unit >= single) or not deal.reaches(Decimal(str(threshold))):
         return
-    emit(db, monitor, "offer:" + offer.id, "price.threshold_reached", f"multibuy:{content_hash[:16]}",
+    emit(db, monitor, "offer:" + offer.id, "price.threshold_reached", f"deal:{content_hash[:16]}",
          {"listing_id": listing_of[sku].id, "price": str(deal.unit), "threshold": str(threshold),
-          "multibuy": True, "terms": item.terms, "quantity": deal.quantity, "offer_id": offer.id,
+          "multibuy": deal.quantity > 1, "member": item.eligibility == "member", "terms": item.terms,
+          "quantity": deal.quantity, "offer_id": offer.id,
           "valid_to": offer.valid_to.isoformat() if offer.valid_to else None})
 
 
@@ -278,7 +284,7 @@ def process_scan(db: Session, job: Job) -> dict:
                     emit(db, monitor, subject, "offer.changed",
                          f"{content_hash[:16]}:{now.isoformat()}", payload)
                 if previous_hash != content_hash:
-                    _multibuy_event(db, monitor, offer, item, content_hash, matched, single_price, listing_of)
+                    _deal_event(db, monitor, store.retailer_id, offer, item, content_hash, matched, single_price, listing_of)
             state.last_value = content_hash
             state.last_observed_at = now
     if invalid_count == 0:

@@ -15,6 +15,7 @@ from app.barcodes import product_for_gtin, product_summary, search_form
 from app.connectors import registry
 from app.connectors.base import ScanRequest
 from app.connectors.registry import connector_for
+from app.deals import best_dict, best_for, recorded_offers
 from app.ingest import add_price, ensure_listing
 from app.models import Job, Listing, PriceObservation, Store, aware, new_id, utcnow
 from app.retrieval import fetch
@@ -48,17 +49,22 @@ def _row(store: Store, status: str, **fields) -> dict:
 
 def _found(store: Store, name: str, sku: str, price: Decimal, regular: Decimal | None,
            currency: str, unit: tuple | None, availability: str | None, observed_at,
-           source: str, url: str | None) -> dict:
+           source: str, url: str | None, best: dict | None = None) -> dict:
+    """A store's price for the item. `current_price` is what one costs on the shelf; `best` is the
+    cheapest way this person can buy it (a multi-buy, a percentage off, a member price) and
+    `effective_price` the price per item that comes to: the one stores are ranked by."""
     return _row(store, "found", product_name=name, sku=sku, current_price=_money(price),
                 regular_price=_money(regular) if regular is not None else None, currency=currency,
+                effective_price=best["unit_price"] if best else _money(price), best=best,
                 unit_price={"amount": str(unit[0]), "unit": unit[1]} if unit else None,
                 availability=availability, observed_at=observed_at,
                 age_seconds=max(0, int((utcnow() - aware(observed_at)).total_seconds())),
                 source=source, source_url=url)
 
 
-def known_rows(db: Session, gtin14: str, stores: list[Store]) -> list[dict]:
-    """What the catalogue already knows about this barcode in each store, with its age."""
+def known_rows(db: Session, gtin14: str, stores: list[Store], user_id: str | None = None) -> list[dict]:
+    """What the catalogue already knows about this barcode in each store, with its age, and the best
+    price [user_id] can get there with the offers on record."""
     product = product_for_gtin(db, gtin14)
     rows = []
     for store in stores:
@@ -73,16 +79,19 @@ def known_rows(db: Session, gtin14: str, stores: list[Store]) -> list[dict]:
             rows.append(_row(store, "unknown", detail="Not checked in this store yet"))
             continue
         unit = (obs.unit_price, obs.unit_price_unit) if obs.unit_price is not None else None
+        best = best_dict(best_for(db, user_id, store.retailer_id, obs.current_price,
+                                  recorded_offers(db, store.id, "online", listing.sku)))
         rows.append(_found(store, listing.name, listing.sku, obs.current_price, obs.regular_price,
                            obs.currency, unit, obs.availability, obs.observed_at, "catalogue",
-                           obs.source_url))
+                           obs.source_url, best))
     return rows
 
 
 def summarize(rows: list[dict], here_store_id: str | None) -> dict:
-    """Mark each found row against the cheapest and against the store you are standing in."""
+    """Mark each found row against the cheapest and against the store you are standing in, by the
+    price per item this person can actually get (`effective_price`), not the shelf price alone."""
     found = [r for r in rows if r["status"] == "found"]
-    cheapest = min(found, key=lambda r: Decimal(r["current_price"]), default=None)
+    cheapest = min(found, key=lambda r: Decimal(r["effective_price"]), default=None)
     here = next((r for r in found if r["store_id"] == here_store_id), None)
 
     def gap(price: str, reference: str) -> dict:
@@ -91,13 +100,14 @@ def summarize(rows: list[dict], here_store_id: str | None) -> dict:
         return {"amount": str(diff.quantize(Decimal("0.01"))), "percent": str(pct) if pct is not None else None}
 
     for row in found:
-        row["vs_cheapest"] = gap(row["current_price"], cheapest["current_price"])
+        row["vs_cheapest"] = gap(row["effective_price"], cheapest["effective_price"])
         if here:
-            row["vs_here"] = gap(row["current_price"], here["current_price"])
+            row["vs_here"] = gap(row["effective_price"], here["effective_price"])
         row["is_cheapest"] = row is cheapest
     return {"cheapest": {"store_id": cheapest["store_id"], "store_name": cheapest["store_name"],
-                         "current_price": cheapest["current_price"]} if cheapest else None,
-            "saving_vs_here": (gap(cheapest["current_price"], here["current_price"])
+                         "current_price": cheapest["current_price"],
+                         "effective_price": cheapest["effective_price"]} if cheapest else None,
+            "saving_vs_here": (gap(cheapest["effective_price"], here["effective_price"])
                                if cheapest and here and cheapest is not here else None)}
 
 
@@ -143,8 +153,10 @@ def process_compare(db: Session, job: Job) -> dict:
             continue
         listing = ensure_listing(db, store, item)
         unit = add_price(db, listing, item, run_id, now)
+        offers = [o for o in snapshot.offers if item.sku in o.skus]
+        best = best_dict(best_for(db, job.owner_id, store.retailer_id, item.current_price, offers))
         rows.append(_found(store, listing.name, item.sku, item.current_price, item.regular_price,
-                           item.currency, unit, item.availability, now, "live", item.source_url))
+                           item.currency, unit, item.availability, now, "live", item.source_url, best))
     product = product_for_gtin(db, gtin14)
     summary = summarize(rows, payload.get("here_store_id"))
     # The result is stored as JSON, so timestamps become ISO strings here.

@@ -15,11 +15,11 @@ from app.connectors import registry
 from app.connectors.base import ScanRequest
 from app.connectors.registry import connector_for
 from app.db import SessionLocal
+from app.deals import best_dict, best_for, deal_fields
 from app.glossary import fold
 from app.gtin import normalize_gtin
 from app.ingest import add_price, ensure_listing
 from app.models import Job, Listing, Product, Store, new_id, utcnow
-from app.multibuy import parse_deal
 from app.naming import (
     Described,
     describe,
@@ -32,13 +32,6 @@ from app.naming import (
 )
 from app.reference import best_image, reference_info
 from app.retrieval import fetch
-
-
-def deal_fields(terms, single_price) -> dict:
-    """What a multi-buy costs per item ("2 för 35 kr" is 17.50), or nothing for any other offer."""
-    deal = parse_deal(terms, single_price)
-    return ({"quantity": deal.quantity, "unit_price": str(deal.unit)} if deal else
-            {"quantity": None, "unit_price": None})
 
 
 def money(value: Decimal) -> str:
@@ -287,6 +280,8 @@ def process_search(db: Session, job: Job) -> dict:
                           "like_key": f"{like[0]}:{like[1]}" if like else None,
                           "via": via,
                           "availability": item.availability, "stock_quantity": item.stock_quantity,
+                          "best": best_dict(best_for(db, job.owner_id, store.retailer_id, item.current_price,
+                                                     offers_of.get(item.sku, []))),
                           "offers": [{"terms": o.terms, "title": o.title,
                                       "price": str(o.price) if o.price is not None else None,
                                       "eligibility": o.eligibility,

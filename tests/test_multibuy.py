@@ -110,13 +110,35 @@ def test_it_is_announced_once_and_again_only_when_the_offer_changes(scripted):
 
 @pytest.mark.parametrize("offers,reason", [
     ([deal("2 för 39 kr")], "19,50 each is above the alert price"),
-    ([deal("Klubbpris: 2 för 30 kr", eligibility="member")], "a member price is not counted"),
-    ([deal("17.50 kr")], "one item is not a multi-buy"),
-    ([deal("20 % rabatt")], "not a stated price"),
+    ([deal("Klubbpris: 2 för 30 kr", eligibility="member")], "a member price is not counted for a non-member"),
+    ([deal("21.00 kr")], "not cheaper than one item"),
+    ([deal("3 % rabatt")], "19,40 is above the alert price"),
+    ([deal("Kampanj")], "not a stated price"),
 ])
-def test_a_multi_buy_that_does_not_reach_the_alert_price_only_announces_the_offer(scripted, offers, reason):
+def test_an_offer_that_does_not_reach_the_alert_price_only_announces_the_offer(scripted, offers, reason):
     monitor = watch(scripted, offers=offers)
     assert "price.threshold_reached" not in [t for t, _ in events(monitor)], reason
+
+
+@pytest.mark.parametrize("terms,price,member", [
+    ("20 % rabatt", "16.00", False),               # a percentage off one item
+    ("17.50 kr", "17.50", False),                  # a public price for one item that was not folded into the price
+])
+def test_a_percentage_or_a_cheaper_single_price_reaches_the_alert_price_too(scripted, terms, price, member):
+    monitor = watch(scripted, offers=[deal(terms)])
+    payload = dict(events(monitor))["price.threshold_reached"]
+    assert payload["price"] == price and payload["quantity"] == 1 and payload["multibuy"] is False
+
+
+def test_member_offers_count_for_a_member_of_the_chain_and_only_for_them(scripted):
+    from tests.test_regressions import admin_client
+    member_offer = deal("Medlemspris: 15.00 kr", eligibility="member", promo="club")
+    assert "price.threshold_reached" not in [t for t, _ in events(watch(scripted, offers=[member_offer]))]
+
+    assert admin_client().put("/v1/me/memberships/test.fixture").status_code == 204
+    monitor = watch(scripted, offers=[member_offer])
+    payload = dict(events(monitor))["price.threshold_reached"]
+    assert payload["price"] == "15.00" and payload["member"] is True and payload["multibuy"] is False
 
 
 def test_pay_for_wording_uses_the_price_of_one_item(scripted):
@@ -160,22 +182,34 @@ def watchlist_item(monitor_id):
 
 def test_a_watched_product_reports_its_best_multi_buy_per_item(scripted):
     monitor = exact_monitor_of_oats(scripted, [deal("2 för 35 kr"), deal("3 för 54 kr", promo="b")])
-    assert watchlist_item(monitor)["offer"] == {"terms": "2 för 35 kr", "quantity": 2,
-                                                "unit_price": "17.50", "valid_to": None}
+    assert watchlist_item(monitor)["offer"] == {"terms": "2 för 35 kr", "quantity": 2, "unit_price": "17.50",
+                                                "member": False, "valid_to": None}
 
 
 @pytest.mark.parametrize("offers", [
     [deal("2 för 45 kr")],                                        # 22,50 each: dearer than one item
-    [deal("Klubbpris: 2 för 30 kr", eligibility="member")],      # a member price is not offered as the price
-    [deal("17.50 kr")],                                           # one item
+    [deal("Klubbpris: 2 för 30 kr", eligibility="member")],      # a member price, for someone who is not a member
+    [deal("21.00 kr")],                                           # not cheaper than one item
     [],
 ])
-def test_a_multi_buy_that_is_not_cheaper_or_not_public_is_not_reported(scripted, offers):
+def test_an_offer_that_is_not_cheaper_or_not_usable_is_not_reported(scripted, offers):
     assert watchlist_item(exact_monitor_of_oats(scripted, offers))["offer"] is None
 
 
-def test_search_results_say_what_a_multi_buy_costs_per_item():
-    from app.search import deal_fields
+def test_a_member_sees_their_member_price_as_the_best(scripted):
+    from tests.test_regressions import admin_client
+    offers = [deal("2 för 35 kr"), deal("Medlemspris: 15.00 kr", eligibility="member", promo="club")]
+    monitor = exact_monitor_of_oats(scripted, offers)
+    assert watchlist_item(monitor)["offer"]["unit_price"] == "17.50"          # not a member yet
+    admin_client().put("/v1/me/memberships/test.fixture")
+    best = watchlist_item(monitor)["offer"]
+    assert (best["unit_price"], best["quantity"], best["member"]) == ("15.00", 1, True)
+
+
+def test_search_results_say_what_an_offer_costs_per_item():
+    from app.deals import deal_fields
     assert deal_fields("2 för 35 kr", D("20")) == {"quantity": 2, "unit_price": "17.50"}
     assert deal_fields("Köp 2 betala för 1", D("20")) == {"quantity": 2, "unit_price": "10.00"}
-    assert deal_fields("17.95 kr", D("20")) == {"quantity": None, "unit_price": None}
+    assert deal_fields("Medlemspris: 17.95 kr", D("20")) == {"quantity": 1, "unit_price": "17.95"}
+    assert deal_fields("20 % rabatt", D("20")) == {"quantity": 1, "unit_price": "16.00"}
+    assert deal_fields("Kampanj", D("20")) == {"quantity": None, "unit_price": None}

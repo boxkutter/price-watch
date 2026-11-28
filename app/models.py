@@ -139,6 +139,15 @@ class UserStore(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class UserMembership(Base):
+    """The person is a member of a retailer's loyalty scheme (ICA, City Gross), so that chain's member
+    prices and offers count for them, in every one of its stores."""
+    __tablename__ = "user_memberships"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    retailer_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Listing(Base):
     __tablename__ = "listings"
     __table_args__ = (UniqueConstraint("retailer_id", "sku", "store_id", "channel"),)
