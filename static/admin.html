@@ -39,7 +39,7 @@ code{background:#f1f4f7;padding:0 .25rem;border-radius:3px}table{border-collapse
 <section><h2>Users</h2><div id="users"></div></section>
 <section><h2>Invite a user</h2><form id="invite-form">
 <label>Email<input name="email" type="email" required></label><button>Create invitation</button></form>
-<pre id="invitation" hidden></pre><p class="muted">Share the token securely; it appears only here.</p><div id="invitations"></div></section>
+<div id="invitation" hidden></div><p class="muted">Share the token securely; it appears only here. In the app they tap <b>I have an invitation code</b>, enter the server address, the token and a password.</p><div id="invitations"></div></section>
 <section><h2>Client applications</h2><form id="client-form">
 <label>Name<input name="name" required></label><button>Create client</button></form>
 <pre id="client-secret" hidden></pre><p class="muted">Save the client token securely; it appears only here.</p><div id="clients"></div></section>
@@ -253,9 +253,35 @@ $('logout').onclick=async()=>{try{await api('/v1/auth/logout',{method:'POST'})}c
  sessionStorage.removeItem('retailToken');token=null;
  $('dashboard').hidden=true;$('login-section').hidden=false};
 $('invite-form').onsubmit=async event=>{event.preventDefault();try{
+ const email=new FormData(event.target).get('email');
  const result=await api('/v1/admin/invitations',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(event.target)))});
- $('invitation').hidden=false;$('invitation').textContent=JSON.stringify(result,null,2);event.target.reset();await refresh();
+ showInvitation(email,result);
+ event.target.reset();await refresh();
 }catch(error){$('message').textContent=error.message}};
+// Only the token is secret; the rest is a message that tells the person what to do with it.
+function invitationMessage(token,expires){
+ return `You are invited to Price Watch.\n\n1. Get the app: ${location.origin}/download\n2. In the app open Settings and tap "I have an invitation code"\n3. Server address: ${location.origin}\n   Invitation code: ${token}\n   Then choose a password (16 characters or more).`+(expires?`\n\nThe code works until ${when(expires)}.`:'');
+}
+function showInvitation(email,result){
+ const message=invitationMessage(result.invitation_token,result.expires_at);
+ const box=$('invitation');box.hidden=false;
+ box.innerHTML=`<p>Invitation for <b>${escaped(email)}</b>${result.expires_at?' &middot; valid until '+escaped(when(result.expires_at)):''}. Share this token:</p>
+  <div style="display:flex;gap:.5rem"><input id="invitation-token" readonly value="${escaped(result.invitation_token)}" style="flex:1;font-family:monospace" aria-label="Invitation token"><button type="button" id="copy-invitation">Copy token</button></div>
+  <p class="small muted">Or send a ready-made message (the token and what to do with it):</p>
+  <div class="row" style="display:flex;gap:.5rem;flex-wrap:wrap">
+   <button type="button" id="share-invitation" hidden>Share&hellip;</button>
+   <a class="button" id="whatsapp-invitation" target="_blank" rel="noopener" style="padding:.45rem .8rem;border:1px solid #888;border-radius:4px;text-decoration:none;color:inherit">WhatsApp</a>
+   <a class="button" id="email-invitation" style="padding:.45rem .8rem;border:1px solid #888;border-radius:4px;text-decoration:none;color:inherit">Email</a>
+   <button type="button" id="copy-message">Copy message</button></div>`;
+ const copy=async(text,done)=>{try{await navigator.clipboard.writeText(text)}catch(_){const t=document.createElement('textarea');t.value=text;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove()}say(done)};
+ $('invitation-token').onfocus=e=>e.target.select();
+ $('copy-invitation').onclick=()=>copy(result.invitation_token,'Token copied.');
+ $('copy-message').onclick=()=>copy(message,'Message copied.');
+ $('whatsapp-invitation').href='https://wa.me/?text='+encodeURIComponent(message);
+ $('email-invitation').href='mailto:'+encodeURIComponent(email)+'?subject='+encodeURIComponent('Your Price Watch invitation')+'&body='+encodeURIComponent(message);
+ if(navigator.share){const share=$('share-invitation');share.hidden=false;
+  share.onclick=async()=>{try{await navigator.share({title:'Price Watch invitation',text:message})}catch(error){if(error.name!=='AbortError')say('Could not share: '+error.message)}}}
+}
 $('client-form').onsubmit=async event=>{event.preventDefault();try{
  const result=await api('/v1/clients',{method:'POST',body:JSON.stringify({
  name:new FormData(event.target).get('name'),scopes:['catalogue:read','monitors:read','monitors:write','events:read','webhooks:manage']})});
