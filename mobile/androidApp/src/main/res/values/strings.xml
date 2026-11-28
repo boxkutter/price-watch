@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Price Watch</string>
+    <string name="channel_alerts">Price alerts</string>
+    <string name="channel_alerts_description">Price drops, targets reached, offers and restocks on the products you watch</string>
+    <string name="channel_app">App updates</string>
+    <string name="channel_app_description">When a new version of Price Watch is available</string>
+</resources>

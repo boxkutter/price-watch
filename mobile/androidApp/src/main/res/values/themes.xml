@@ -1,0 +1,11 @@
+<resources>
+    <!-- The launch screen: the app's green with the mark, then the app's own look. -->
+    <style name="Theme.PriceWatch.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.PriceWatch</item>
+    </style>
+    <style name="Theme.PriceWatch" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+</resources>
