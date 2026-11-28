@@ -257,3 +257,28 @@ def test_the_bare_id_address_redirects_to_the_named_product_page_and_is_followed
     assert paths == ["/stores/1003395/products/1407322", MILK_PAGE]  # both hops are requests
     assert [p.current_price for p in snap.prices] == [Decimal("14.42")]
     assert manifest.follow_redirects is True and manifest.allowed_hosts == ["handlaprivatkund.ica.se"]
+
+
+# ---- a real product page with a promotion, "2 för 50 kr" with dates (saved 2026-11-27) ----------
+
+OFFER_PAGE = (Path(__file__).parent / "fixtures" / "ica_product_offer.html").read_text(encoding="utf-8")
+
+
+def test_a_product_page_with_a_multibuy_keeps_the_single_price_and_adds_a_dated_offer():
+    price, offers, name = parse_page(OFFER_PAGE, "1025999", STORE)
+    assert name == "Gourmetskinka Rökt Tunna Skivor 200g Pärsons"
+    assert price.current_price == Decimal("28.40")  # 142 kr/kg x 0.2 kg: the single-item price, not 50
+    assert (price.package_value, price.package_unit) == (Decimal("0.2"), "kg")
+    (offer,) = offers
+    assert offer.identity_key == "1025999:4d0fde93-cd56-4b15-b194-fe27abb3a296"
+    assert offer.price == Decimal(50) and offer.eligibility == "public"
+    assert offer.terms == "2 för 50 kr -- Max 1 erbj/hushåll"
+    assert (offer.valid_from.isoformat(), offer.valid_to.isoformat()) == (
+        "2026-11-23T00:00:00+01:00", "2026-11-29T23:59:59+01:00")
+
+
+def test_offer_periods_are_read_across_a_new_year_and_junk_gives_none():
+    parse_period = _module.parse_period
+    start, end = parse_period("28/12-3/1 2027, erbj jfr pris")
+    assert (start.year, end.year, end.day) == (2026, 2027, 3)
+    assert parse_period("ingen period") == (None, None) and parse_period("31/2-1/3 2026") == (None, None)

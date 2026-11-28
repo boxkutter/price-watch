@@ -19,8 +19,10 @@ match is an extraction failure, never a price. Without a chosen store ICA shows 
 import html as htmllib
 import json
 import re
+from datetime import datetime, time
 from decimal import Decimal
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from app.connectors.base import ExtractionError, HttpStatusError, OfferData, PriceData, ScanRequest
 from app.connectors.kit import Collected, HttpJsonConnector, json_ld, to_decimal
@@ -30,6 +32,8 @@ BASE = "https://handlaprivatkund.ica.se"
 SKU = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 STATE = re.compile(r"window\.__INITIAL_STATE__\s*=\s*")
 MULTIBUY = re.compile(r"(\d+)\s*för\s*(\d+(?:[.,]\d+)?)\s*kr", re.IGNORECASE)
+DATES = re.compile(r"(\d{1,2})/(\d{1,2})\s*-\s*(\d{1,2})/(\d{1,2})\s+(\d{4})")
+STOCKHOLM = ZoneInfo("Europe/Stockholm")
 MEMBER = re.compile(r"stammis|medlem|ica\s*kort", re.IGNORECASE)
 AVAILABILITY = {"InStock": "in_stock", "OutOfStock": "out_of_stock"}  # anything else stays unknown
 
@@ -61,8 +65,23 @@ def _money(text: str | None) -> Decimal | None:
     return to_decimal(re.sub(r"\s", "", found.group(1)).replace(",", ".")) if found else None
 
 
+def parse_period(text: str | None) -> tuple[datetime | None, datetime | None]:
+    """"23/11-29/11 2026" -> (start of the first day, end of the last day), Swedish time."""
+    found = DATES.search(text or "")
+    if not found:
+        return None, None
+    d1, m1, d2, m2, year = (int(g) for g in found.groups())
+    try:
+        end = datetime(year, m2, d2, tzinfo=STOCKHOLM)
+        start = datetime(year - (1 if m1 > m2 else 0), m1, d1, tzinfo=STOCKHOLM)
+    except ValueError:
+        return None, None
+    return start, datetime.combine(end.date(), time(23, 59, 59), STOCKHOLM)
+
+
 def _record(sku: str, name: str, size: str | None, price_text: str | None, offer: str | None,
-            ordinary: Decimal | None, promo_id: str | None, loyalty: bool = False) -> dict:
+            ordinary: Decimal | None, promo_id: str | None, loyalty: bool = False,
+            period: str | None = None) -> dict:
     """One product record from the texts a store-shop page shows (a tile or a product page).
 
     The shown price is what the shopper pays for a single item *unless* a multibuy applies, when
@@ -70,17 +89,18 @@ def _record(sku: str, name: str, size: str | None, price_text: str | None, offer
     current price: the current price is then the ordinary one, and the promotion becomes an offer.
     """
     promo_text = offer or (price_text if price_text and MULTIBUY.search(price_text) else None)
-    bundle = bool(MULTIBUY.search(f"{price_text or ''} {offer or ''}"))
+    bundle_shown = bool(price_text and MULTIBUY.search(price_text))  # "3 för 50 kr" instead of a price
     member = bool(promo_text and MEMBER.search(promo_text)) or loyalty
     record: dict = {"retailerProductId": sku, "name": name, "size": size, "promotions": []}
-    current = ordinary if bundle or member else _money(price_text)
+    current = ordinary if bundle_shown or member else _money(price_text)
     if current is not None:
         record["price"] = {"current": {"amount": str(current)}}
         if ordinary and current != ordinary:
             record["regular_price"] = str(ordinary)
     if promo_text:
         record["promotions"].append({"retailerPromotionId": promo_id or promo_text,
-                                     "description": promo_text, "member": member})
+                                     "description": promo_text, "member": member,
+                                     "period": period})
     return record
 
 
@@ -124,12 +144,14 @@ def parse_product_view(html: str, sku: str) -> dict[str, dict]:
     labels = [htmllib.unescape(t).replace("\xa0", " ").strip()
               for t in re.findall(r"<span[^>]*>(.*?)</span>", spans.group(1), re.DOTALL)] if spans else []
     size = next((label for label in labels if "kr" not in label and parse_size(label)), None)
-    promo = OFFER_ID.search(view)
-    offer = re.search(r'data-test="fop-offer-text"[^>]*>(.*?)</', view, re.DOTALL)
-    return {sku: _record(sku, name, size, _text(view, "price-container"),
-                         htmllib.unescape(re.sub(r"<[^>]+>", "", offer.group(1))).strip() if offer else None,
-                         _ordinary(view), promo.group("id") if promo else None,
-                         'data-ica-class="offer-loyalty"' in view)}
+    card = re.search(r'data-test="offer-card-promotion"[^>]*>(.*?)</a>', view, re.DOTALL)
+    promo = OFFER_ID.search(view[view.find('data-test="offer-card-promotion"'):]) if card else None
+    lines = [htmllib.unescape(t).replace("\xa0", " ").strip()
+             for t in re.findall(r"<span[^>]*>(.*?)</span>", card.group(1), re.DOTALL)] if card else []
+    # The card reads: the offer ("2 för 50 kr -- Max 1 erbj/hushåll"), its name again, then the dates.
+    period = next((line for line in lines if DATES.search(line)), None)
+    return {sku: _record(sku, name, size, _text(view, "price-container"), lines[0] if lines else None,
+                         _ordinary(view), promo.group("id") if promo else None, period=period)}
 
 
 def _records(node, found: dict[str, dict]) -> None:
@@ -197,7 +219,8 @@ def parse_offers(raw: dict, store: str) -> list[OfferData]:
             identity_key=f"{sku}:{promo['retailerPromotionId']}", title=str(raw["name"]), terms=text,
             price=to_decimal(match.group(2).replace(",", ".")), currency="SEK", channel="online",
             source_url=f"{BASE}/stores/{store}/products/{sku}",
-            eligibility="member" if promo.get("member") or MEMBER.search(text) else "public", skus=(sku,)))
+            eligibility="member" if promo.get("member") or MEMBER.search(text) else "public", skus=(sku,),
+            valid_from=parse_period(promo.get("period"))[0], valid_to=parse_period(promo.get("period"))[1]))
     return offers
 
 
