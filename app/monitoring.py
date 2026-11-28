@@ -24,6 +24,7 @@ from app.models import (
     new_id,
     utcnow,
 )
+from app.multibuy import parse_deal
 from app.pricing import base_quantity
 from app.retrieval import fetch
 
@@ -84,6 +85,24 @@ def _price_event(db: Session, monitor: Monitor, listing: Listing, price: Decimal
     state.last_observed_at = observed_at
 
 
+def _multibuy_event(db: Session, monitor: Monitor, offer, item, content_hash: str, matched: set[str],
+                    single_price: dict, listing_of: dict) -> None:
+    """A public multi-buy that brings the price per item down to the alert price ("2 för 35 kr" is
+    17,50 kr each) is the same news as the single price reaching it. Member offers are not counted:
+    the person may not be a member."""
+    threshold = monitor.conditions.get("maximum_price")
+    if threshold is None or monitor.type == "store" or item.eligibility != "public":
+        return
+    sku = next((s for s in item.skus if s in matched), None)
+    deal = parse_deal(item.terms, single_price.get(sku)) if sku else None
+    if not deal or not deal.reaches(Decimal(str(threshold))):
+        return
+    emit(db, monitor, "offer:" + offer.id, "price.threshold_reached", f"multibuy:{content_hash[:16]}",
+         {"listing_id": listing_of[sku].id, "price": str(deal.unit), "threshold": str(threshold),
+          "multibuy": True, "terms": item.terms, "quantity": deal.quantity, "offer_id": offer.id,
+          "valid_to": offer.valid_to.isoformat() if offer.valid_to else None})
+
+
 def _availability_event(db: Session, monitor: Monitor, listing: Listing,
                         availability: str | None, observed_at, baseline: bool) -> None:
     if availability not in {"in_stock", "out_of_stock"}:
@@ -142,6 +161,8 @@ def process_scan(db: Session, job: Job) -> dict:
     seen_skus: set[str] = set()
     seen_offers: set[str] = set()
     matched: set[str] = set()  # SKUs this monitor cares about, for product-level offers
+    single_price: dict[str, Decimal] = {}  # the price of one item, for "3 för 2" style offers
+    listing_of: dict[str, Listing] = {}
     for item in snapshot.prices:
         if (item.currency != "SEK" or not item.current_price.is_finite() or
             item.current_price < 0 or item.channel != monitor.channel or
@@ -189,6 +210,8 @@ def process_scan(db: Session, job: Job) -> dict:
                     emit(db, monitor, discovery_key, "product.discovered", listing.id,
                          {"listing_id": listing.id, "name": listing.name})
         matched.add(item.sku)
+        single_price[item.sku] = item.current_price
+        listing_of[item.sku] = listing
         if monitor.type in ("exact_product", "generic_product"):
             _price_event(db, monitor, listing, item.current_price, now, baseline)
             _availability_event(db, monitor, listing, item.availability, now, baseline)
@@ -254,6 +277,8 @@ def process_scan(db: Session, job: Job) -> dict:
                     # distinct; the evaluation state above already prevents repeats.
                     emit(db, monitor, subject, "offer.changed",
                          f"{content_hash[:16]}:{now.isoformat()}", payload)
+                if previous_hash != content_hash:
+                    _multibuy_event(db, monitor, offer, item, content_hash, matched, single_price, listing_of)
             state.last_value = content_hash
             state.last_observed_at = now
     if invalid_count == 0:

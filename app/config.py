@@ -17,12 +17,16 @@ class Settings(BaseSettings):
     # shared by the API and the worker (a volume in docker-compose.yml).
     installed_connectors_dir: str = "./data/connectors"
     max_package_bytes: int = 5_000_000
+    # The published Android app (APK and latest.json) served at /download; see app/downloads.py.
+    app_downloads_dir: str = "./data/downloads"
     # Inbound: limits on our own API so one caller cannot fan out into retailer traffic.
     api_rate_limit_per_minute: int = 300
     max_monitors_per_user: int = 50
     max_pending_searches_per_user: int = 3
     max_searches_per_hour: int = 20
     min_manual_check_interval_seconds: int = 60
+    max_app_credentials_per_user: int = 10  # app sign-ins (one per phone); the oldest is replaced beyond this
+    max_store_lookups_per_hour: int = 6     # store lookups by postcode a person may ask for
     max_my_stores: int = 15       # stores one person compares across
     max_compare_stores: int = 8   # stores checked live by one barcode comparison
     # Reference database (Open Food Facts): matches products by barcode and supplies details and

@@ -22,6 +22,21 @@
         "title": "AcceptRequest",
         "type": "object"
       },
+      "AppCredentialRequest": {
+        "properties": {
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "AppCredentialRequest",
+        "type": "object"
+      },
       "BarcodeLinkRequest": {
         "properties": {
           "gtin": {
@@ -304,6 +319,55 @@
           "store_id"
         ],
         "title": "MonitorRequest",
+        "type": "object"
+      },
+      "MonitorUpdate": {
+        "properties": {
+          "interval_minutes": {
+            "anyOf": [
+              {
+                "maximum": 10080.0,
+                "minimum": 15.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Minutes"
+          },
+          "maximum_price": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum Price"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "MonitorUpdate",
         "type": "object"
       },
       "NameRequest": {
@@ -5741,6 +5805,236 @@
         ]
       }
     },
+    "/v1/me/app-credentials": {
+      "post": {
+        "description": "Sign an app in on this person's behalf: creates the app's own client credential and grants\nit the app scopes, in one call, so a phone needs only the person's email and password.\n\nThe token is shown once. Its permissions are what the person already has (never more): it\ncannot manage accounts, webhooks or other apps. At most `max_app_credentials_per_user` are kept;\nbeyond that the oldest is revoked. Revoke one with `DELETE /v1/me/app-credentials/{client_id}`.\nOnly a user token can make this call, never a client token.",
+        "operationId": "create_app_credential_v1_me_app_credentials_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppCredentialRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Create App Credential",
+        "tags": [
+          "API clients"
+        ]
+      }
+    },
+    "/v1/me/app-credentials/{client_id}": {
+      "delete": {
+        "description": "Sign an app out: revokes a credential made with `POST /v1/me/app-credentials`.",
+        "operationId": "revoke_app_credential_v1_me_app_credentials__client_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "client_id",
+            "required": true,
+            "schema": {
+              "title": "Client Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Revoke App Credential",
+        "tags": [
+          "API clients"
+        ]
+      }
+    },
     "/v1/me/client-grants": {
       "post": {
         "operationId": "grant_client_v1_me_client_grants_post",
@@ -6911,6 +7205,136 @@
           }
         ],
         "summary": "Get Monitor",
+        "tags": [
+          "Monitors"
+        ]
+      },
+      "patch": {
+        "description": "Change a monitor's name, alert price (`maximum_price`, `null` removes it) or check interval.\n\nOnly the fields you send change. Raising or lowering the alert price does not raise an event by\nitself: you are told when the price next crosses down to it.",
+        "operationId": "update_monitor_v1_monitors__monitor_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "monitor_id",
+            "required": true,
+            "schema": {
+              "title": "Monitor Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MonitorUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Update Monitor",
         "tags": [
           "Monitors"
         ]
@@ -9483,6 +9907,148 @@
         "summary": "Retailer Stores",
         "tags": [
           "Catalogue"
+        ]
+      }
+    },
+    "/v1/retailers/{retailer_id}/stores/discover": {
+      "post": {
+        "description": "Find the stores of a retailer near you, so you can choose them as your stores.\n\nThe body is a flat object of the inputs the connector declares under `store_discovery_inputs`\nin `GET /v1/connectors` (for example `{\"postcode\": \"11120\"}`). One small request goes to the\nretailer and the stores it names are added to the shared list. Poll the job: its `result`\nholds `store_ids`, the stores found, which `PUT /v1/me/stores/{store_id}` can then choose.\nA person may ask a few times an hour.",
+        "operationId": "find_my_stores_v1_retailers__retailer_id__stores_discover_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "retailer_id",
+            "required": true,
+            "schema": {
+              "title": "Retailer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-client-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Missing, invalid, expired or revoked token."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The token lacks the scope this needs."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found, or not yours."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request is invalid (see `details`)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too many requests or a quota was reached; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "ClientToken": [],
+            "UserToken": []
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "summary": "Find My Stores",
+        "tags": [
+          "My stores"
         ]
       }
     },

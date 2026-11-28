@@ -6,3 +6,10 @@ __pycache__/
 *.db
 *.egg-info/
 data/
+mobile/.gradle/
+mobile/build/
+mobile/*/build/
+mobile/.kotlin/
+mobile/local.properties
+mobile/keystore.properties
+mobile/*.jks

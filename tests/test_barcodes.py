@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from app.barcodes import BarcodeError, clean_barcode, is_restricted, search_form
 from app.db import SessionLocal
 from app.main import app
-from app.models import AuditLog, Listing, PriceObservation, Product
+from app.models import AuditLog, Listing, PriceObservation, Product, utcnow
 from tests.test_politeness import job_of, listing_id, monitor
 from tests.test_product_links import add
 
@@ -154,6 +154,22 @@ def test_a_barcode_that_belongs_to_another_product_asks_before_merging(cg):
         assert db.scalar(select(func.count()).select_from(PriceObservation).where(
             PriceObservation.listing_id == apple_lid)) >= 1                    # price history is intact
         assert db.scalars(select(AuditLog).where(AuditLog.action == "product.barcode_merged")).one()
+
+
+def test_a_conflict_with_a_barcode_a_person_linked_is_a_409_with_the_details_not_a_crash(cg):
+    # a barcode a person linked carries the time it was linked; that once made the 409 itself a 500
+    apple_mid, _ = apple_monitor(cg)
+    oats_mid, _ = oats_monitor(cg)
+    oats_product = cg.client.get(f"/v1/monitors/{oats_mid}").json()["product_id"]
+    with SessionLocal.begin() as db:
+        oats = db.get(Product, oats_product)
+        oats.gtin_source, oats.gtin_set_at = "user", utcnow()
+
+    taken = link(cg, apple_mid, AXA)
+    assert taken.status_code == 409
+    existing = taken.json()["details"][0]["existing_product"]
+    assert existing["id"] == oats_product
+    assert existing["barcode"]["source"] == "user" and isinstance(existing["barcode"]["set_at"], str)
 
 
 def test_merging_is_refused_when_the_product_already_has_a_different_barcode(cg):

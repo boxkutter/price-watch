@@ -16,6 +16,10 @@ services:
       - ./migrations:/service/migrations:ro,z
       - ./docs/api.md:/service/docs/api.md:ro,z
       - connectors_data:/data/connectors
+      # The Android app published by mobile/scripts/publish.sh, served at /download.
+      - ./data/downloads:/data/downloads:ro,z
+    environment:
+      APP_DOWNLOADS_DIR: /data/downloads
     depends_on:
       postgres: {condition: service_healthy}
     healthcheck:

@@ -54,7 +54,9 @@ def tag_for(path: str) -> str:
         return "Authentication"
     if path.startswith("/v1/me/stores"):
         return "My stores"
-    if path.startswith(("/v1/clients", "/v1/me/client-grants")):
+    if "/stores/discover" in path and not path.startswith("/v1/admin"):
+        return "My stores"
+    if path.startswith(("/v1/clients", "/v1/me/client-grants", "/v1/me/app-credentials")):
         return "API clients"
     if path.startswith("/v1/search"):
         return "Search"

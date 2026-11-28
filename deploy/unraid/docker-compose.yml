@@ -17,9 +17,12 @@ x-app: &app
   environment:
     DATABASE_URL: postgresql+psycopg://retail:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/retail
     TZ: ${TZ:-Europe/Stockholm}
-  # Connector packages installed from the admin page are kept here, so they survive updates.
+  # Connector packages installed from the admin page are kept here, so they survive updates, and
+  # the Android app published for /download (APP_DOWNLOADS_DIR is set in the image).
   # (`z` lets SELinux hosts read the mount; Unraid ignores it.)
-  volumes: ["${DATA_DIR:-/mnt/user/appdata/retail-monitor}/connectors:/data/connectors:z"]
+  volumes:
+    - "${DATA_DIR:-/mnt/user/appdata/retail-monitor}/connectors:/data/connectors:z"
+    - "${DATA_DIR:-/mnt/user/appdata/retail-monitor}/downloads:/data/downloads:z"
   restart: unless-stopped
   logging: {driver: json-file, options: {max-size: "10m", max-file: "3"}}
 
@@ -28,8 +31,8 @@ services:
   init:
     image: alpine:3
     command: >-
-      sh -c "mkdir -p /data/connectors /data/postgres &&
-      chown -R ${PUID:-99}:${PGID:-100} /data/connectors"
+      sh -c "mkdir -p /data/connectors /data/downloads /data/postgres &&
+      chown -R ${PUID:-99}:${PGID:-100} /data/connectors /data/downloads"
     volumes: ["${DATA_DIR:-/mnt/user/appdata/retail-monitor}:/data:z"]
     restart: "no"
 

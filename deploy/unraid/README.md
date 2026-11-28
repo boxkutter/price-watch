@@ -62,10 +62,11 @@ Up**. The containers then show in the Docker tab with a WebUI shortcut to the ad
 |---|---|
 | Database | `${DATA_DIR}/postgres` (default `/mnt/user/appdata/retail-monitor/postgres`) |
 | Connectors installed from the admin page | `${DATA_DIR}/connectors` |
+| The Android app for `/download` | `${DATA_DIR}/downloads` (`pricewatch.apk` and `latest.json`, put there by `mobile/scripts/publish.sh`) |
 | Bundled connectors | inside the image |
 | Configuration | `.env` next to the compose file |
 
-Both folders are created, and owned by Unraid's `nobody:users` (99:100), automatically. If you
+The folders are created, and owned by Unraid's `nobody:users` (99:100), automatically. If you
 have a cache pool, point `DATA_DIR` at it (`/mnt/cache/appdata/retail-monitor`): PostgreSQL is
 happier off the array's user-share layer.
 

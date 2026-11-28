@@ -2,7 +2,7 @@ import hashlib
 import json
 import re
 import uuid
-from datetime import timedelta
+from datetime import UTC, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -11,15 +11,16 @@ from alembic.script import ScriptDirectory
 from argon2.exceptions import VerifyMismatchError
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import delete, func, select, text, tuple_
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import connector_admin, connector_state, declared_stores, glossary, logos, names
+from app import connector_admin, connector_state, declared_stores, downloads, glossary, logos, names
 from app.audit import record as audit
 from app.barcodes import (
     BarcodeConflict,
@@ -72,6 +73,7 @@ from app.models import (
     aware,
     utcnow,
 )
+from app.multibuy import parse_deal
 from app.naming import describe, normalize_brand
 from app.openapi import install as install_openapi
 from app.products import delete_monitor_permanently, existing_monitor, parse_threshold
@@ -189,6 +191,32 @@ def llms_txt():
 def demo_page():
     """The example client: a regular user working through the public API (see app/example_user.py)."""
     return FileResponse(STATIC / "demo.html")
+
+
+@app.api_route("/download", methods=["GET", "HEAD"], include_in_schema=False)
+def download_page():
+    """Where people get the Android app (see app/downloads.py). Public: installing comes before signing in."""
+    return HTMLResponse(downloads.download_page(downloads.latest_release(settings.app_downloads_dir)),
+                        headers={"Cache-Control": "no-cache"})
+
+
+@app.api_route("/download/latest.json", methods=["GET", "HEAD"], include_in_schema=False)
+def download_latest():
+    """What the installed app asks to learn whether a newer version exists."""
+    release = downloads.latest_release(settings.app_downloads_dir)
+    if release is None:
+        raise HTTPException(404, "No app has been published")
+    return JSONResponse(release, headers={"Cache-Control": "no-store"})
+
+
+@app.api_route("/download/pricewatch.apk", methods=["GET", "HEAD"], include_in_schema=False)
+def download_apk():
+    release = downloads.latest_release(settings.app_downloads_dir)
+    if release is None:
+        raise HTTPException(404, "No app has been published")
+    return FileResponse(Path(settings.app_downloads_dir) / downloads.APK_NAME,
+                        media_type="application/vnd.android.package-archive",
+                        filename=downloads.apk_filename(release), headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/vendor/zxing.min.js", include_in_schema=False)
@@ -344,6 +372,36 @@ class GtinMappingRequest(BaseModel):
     gtin: str
 
 
+def _aware(moment):
+    """A datetime with its time zone (SQLite hands back naive ones, PostgreSQL aware ones)."""
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+def best_multibuy(db: Session, row: Monitor, listing: Listing | None, single_price) -> dict | None:
+    """The cheapest public multi-buy on a watched product right now, as the price per item, when it
+    beats the price of one. ("2 för 35 kr" on a 20 kr item: 17.50 each.) Member offers are left out."""
+    if not listing or single_price is None:
+        return None
+    pattern = listing.sku.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + ":%"
+    offers = db.scalars(select(Offer).where(
+        Offer.store_id == row.store_id, Offer.channel == row.channel, Offer.eligibility == "public",
+        Offer.status == "active", Offer.identity_key.like(pattern, escape="\\"))).all()
+    now, best = utcnow(), None
+    for offer in offers:
+        if offer.valid_to and _aware(offer.valid_to) < now:
+            continue
+        if row.last_success_at and _aware(offer.last_seen) < _aware(row.last_success_at) - timedelta(minutes=5):
+            continue  # the store has stopped listing it
+        deal = parse_deal(offer.terms, single_price)
+        if deal and deal.unit < single_price and (best is None or deal.unit < best[0].unit):
+            best = (deal, offer)
+    if not best:
+        return None
+    deal, offer = best
+    return {"terms": offer.terms, "quantity": deal.quantity, "unit_price": str(deal.unit),
+            "valid_to": offer.valid_to}
+
+
 def monitor_dict(row: Monitor, db: Session) -> dict:
     """A monitor as a client wants it: the product, its barcode, and the latest price and how it
     moved, so a watchlist can be drawn from this one response."""
@@ -368,6 +426,7 @@ def monitor_dict(row: Monitor, db: Session) -> dict:
             "retailer_id": store.retailer_id if store else None,
             "image": best_image(db, product.id, row.owner_id) if product else None,
             "latest": latest,
+            "offer": best_multibuy(db, row, listing, seen[0].current_price if latest else None),
             "barcode": ({"gtin14": product.gtin14, "source": product.gtin_source}
                         if product and product.gtin14 else None),
             **_monitor_fields(row)}
@@ -711,6 +770,64 @@ def public_connectors(db: Session) -> list[dict]:
             for item in connector_admin.admin_view(db)["items"]]
 
 
+# What an app signed in by a person may do: their own data, never accounts, webhooks or administration.
+APP_SCOPES = ["catalogue:read", "monitors:read", "monitors:write", "events:read"]
+
+
+class AppCredentialRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+def revoke_client_credential_row(db: Session, row: Credential) -> None:
+    row.revoked_at = row.revoked_at or utcnow()
+    for grant in db.scalars(select(ClientGrant).where(ClientGrant.client_id == row.id)):
+        grant.revoked_at = grant.revoked_at or utcnow()
+
+
+@app.post("/v1/me/app-credentials", status_code=201)
+def create_app_credential(body: AppCredentialRequest, db: Session = Depends(get_db),
+                          p: Principal = Depends(principal)):
+    """Sign an app in on this person's behalf: creates the app's own client credential and grants
+    it the app scopes, in one call, so a phone needs only the person's email and password.
+
+    The token is shown once. Its permissions are what the person already has (never more): it
+    cannot manage accounts, webhooks or other apps. At most `max_app_credentials_per_user` are kept;
+    beyond that the oldest is revoked. Revoke one with `DELETE /v1/me/app-credentials/{client_id}`.
+    Only a user token can make this call, never a client token.
+    """
+    p.require("clients:manage")
+    scopes = [scope for scope in APP_SCOPES if scope in p.scopes]
+    own = db.scalars(select(Credential).where(
+        Credential.owner_id == p.user.id, Credential.kind == "client", Credential.revoked_at.is_(None))
+        .order_by(Credential.created_at)).all()
+    own = [row for row in own if set(row.scopes) <= set(APP_SCOPES)]
+    for row in own[:max(0, len(own) - settings.max_app_credentials_per_user + 1)]:
+        revoke_client_credential_row(db, row)
+        audit(db, p.user.id, "app_credential.replaced", "client", row.id)
+    token = new_token()
+    client = Credential(owner_id=p.user.id, name=body.name.strip(), token_hash=hash_token(token),
+                        kind="client", scopes=scopes)
+    db.add(client)
+    db.flush()
+    db.add(ClientGrant(client_id=client.id, user_id=p.user.id, scopes=scopes))
+    audit(db, p.user.id, "app_credential.created", "client", client.id)
+    db.commit()
+    return {"client_id": client.id, "client_token": token, "scopes": scopes}
+
+
+@app.delete("/v1/me/app-credentials/{client_id}", status_code=204)
+def revoke_app_credential(client_id: str, db: Session = Depends(get_db),
+                          p: Principal = Depends(principal)):
+    """Sign an app out: revokes a credential made with `POST /v1/me/app-credentials`."""
+    p.require("clients:manage")
+    row = db.get(Credential, client_id)
+    if not row or row.kind != "client" or row.owner_id != p.user.id:
+        raise HTTPException(404, "App not found")
+    revoke_client_credential_row(db, row)
+    audit(db, p.user.id, "app_credential.revoked", "client", row.id)
+    db.commit()
+
+
 @app.get("/v1/retailers")
 def retailers(db: Session = Depends(get_db), p: Principal = Depends(principal)):
     p.require("catalogue:read")
@@ -912,14 +1029,9 @@ def uninstall_connector_package(retailer_id: str, disable_monitors: bool = False
     db.commit()
 
 
-@app.post("/v1/admin/retailers/{retailer_id}/stores/discover", status_code=202)
-def discover_stores(retailer_id: str, body: dict[str, str] | None = None,
-                    db: Session = Depends(get_db), p: Principal = Depends(admin)):
-    """Queue a store lookup (one small request, run by the worker).
-
-    The body is a flat object of the inputs the connector's manifest declares under
-    `store_discovery_inputs` (Coop needs `{"postcode": "11120"}`; City Gross needs none).
-    """
+def queue_discovery(db: Session, retailer_id: str, body: dict[str, str] | None, owner_id: str) -> Job:
+    """Validate the inputs a connector's manifest declares and queue one store lookup (one small
+    request, run by the worker). Shared by the administrator's and a person's lookup."""
     retailer = registry.retailer(retailer_id)
     if not retailer or not connector_state.is_enabled(db, retailer_id):
         raise HTTPException(404, "Connector not found or not enabled")
@@ -941,17 +1053,51 @@ def discover_stores(retailer_id: str, body: dict[str, str] | None = None,
     inputs = {name: value.replace(" ", "") if name == "postcode" else value
               for name, value in inputs.items()}
     payload = {"retailer_id": retailer_id, "inputs": inputs}
-    in_flight = db.scalars(select(Job).where(Job.kind == "discover_stores",
+    in_flight = db.scalars(select(Job).where(Job.kind == "discover_stores", Job.owner_id == owner_id,
         Job.state.in_(["queued", "running"]))).all()
     pending = next((job for job in in_flight if job.payload == payload), None)
     if pending:
-        return {"job_id": pending.id, "status": pending.state}
-    job = Job(owner_id=p.user.id, kind="discover_stores", payload=payload)
+        return pending
+    job = Job(owner_id=owner_id, kind="discover_stores", payload=payload)
     db.add(job)
     db.flush()
+    return job
+
+
+@app.post("/v1/admin/retailers/{retailer_id}/stores/discover", status_code=202)
+def discover_stores(retailer_id: str, body: dict[str, str] | None = None,
+                    db: Session = Depends(get_db), p: Principal = Depends(admin)):
+    """Queue a store lookup (one small request, run by the worker).
+
+    The body is a flat object of the inputs the connector's manifest declares under
+    `store_discovery_inputs` (Coop needs `{"postcode": "11120"}`; City Gross needs none).
+    """
+    job = queue_discovery(db, retailer_id, body, p.user.id)
     audit(db, p.user.id, "stores.discovery_queued", "connector", retailer_id)
     db.commit()
     return {"job_id": job.id, "status": job.state}
+
+
+@app.post("/v1/retailers/{retailer_id}/stores/discover", status_code=202)
+def find_my_stores(retailer_id: str, body: dict[str, str] | None = None,
+                   db: Session = Depends(get_db), p: Principal = Depends(principal)):
+    """Find the stores of a retailer near you, so you can choose them as your stores.
+
+    The body is a flat object of the inputs the connector declares under `store_discovery_inputs`
+    in `GET /v1/connectors` (for example `{"postcode": "11120"}`). One small request goes to the
+    retailer and the stores it names are added to the shared list. Poll the job: its `result`
+    holds `store_ids`, the stores found, which `PUT /v1/me/stores/{store_id}` can then choose.
+    A person may ask a few times an hour.
+    """
+    p.require("monitors:write")
+    recent = db.scalar(select(func.count()).select_from(Job).where(
+        Job.owner_id == p.user.id, Job.kind == "discover_stores",
+        Job.created_at >= utcnow() - timedelta(hours=1)))
+    if recent >= settings.max_store_lookups_per_hour:
+        raise HTTPException(429, "Store lookup limit reached for this hour", headers={"Retry-After": "600"})
+    job = queue_discovery(db, retailer_id, body, p.user.id)
+    db.commit()
+    return {"job_id": job.id, "status": job.state, "status_url": f"/v1/jobs/{job.id}"}
 
 
 @app.get("/v1/stores")
@@ -1693,6 +1839,55 @@ def get_monitor(monitor_id: str, db: Session = Depends(get_db), p: Principal = D
     return monitor_dict(row, db)
 
 
+class MonitorUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    # The alert price. Send null to remove it; leave the field out to keep it.
+    maximum_price: str | int | float | None = None
+    interval_minutes: int | None = Field(default=None, ge=15, le=10080)
+
+
+@app.patch("/v1/monitors/{monitor_id}")
+def update_monitor(monitor_id: str, body: MonitorUpdate, db: Session = Depends(get_db),
+                   p: Principal = Depends(principal)):
+    """Change a monitor's name, alert price (`maximum_price`, `null` removes it) or check interval.
+
+    Only the fields you send change. Raising or lowering the alert price does not raise an event by
+    itself: you are told when the price next crosses down to it.
+    """
+    p.require("monitors:write")
+    row = db.get(Monitor, monitor_id)
+    if not row or row.owner_id != p.user.id:
+        raise HTTPException(404, "Monitor not found")
+    if row.removed_at:
+        raise HTTPException(409, "This monitor was removed")
+    sent = body.model_fields_set
+    if "name" in sent and body.name is not None:
+        row.name = body.name.strip() or row.name
+    if "interval_minutes" in sent and body.interval_minutes is not None:
+        store = db.get(Store, row.store_id)
+        retailer = registry.retailer(store.retailer_id) if store else None
+        minimum = retailer["minimum_monitor_interval_minutes"] if retailer else 15
+        if body.interval_minutes < minimum:
+            raise HTTPException(422, f"The minimum check interval for this retailer is {minimum} minutes")
+        row.interval_minutes = body.interval_minutes
+    if "maximum_price" in sent:
+        if row.type == "store":
+            raise HTTPException(422, "A store monitor has no alert price")
+        conditions = dict(row.conditions)
+        try:
+            threshold = parse_threshold(body.maximum_price)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        if threshold is None:
+            conditions.pop("maximum_price", None)
+        else:
+            conditions["maximum_price"] = threshold
+        row.conditions = conditions  # a new dict, so the change is saved
+    audit(db, p.user.id, "monitor.updated", "monitor", row.id)
+    db.commit()
+    return monitor_dict(row, db)
+
+
 @app.get("/v1/monitors/{monitor_id}/events")
 def monitor_events(monitor_id: str, db: Session = Depends(get_db),
                          p: Principal = Depends(principal)):
@@ -1751,11 +1946,12 @@ def _link_barcode(db: Session, p: Principal, request: Request, product: Product,
         raise HTTPException(409, str(exc)) from exc
     except BarcodeTaken as taken:
         if not body.merge:
-            return JSONResponse(status_code=409, content={
+            # jsonable_encoder: the summary carries when a person linked the barcode (a datetime)
+            return JSONResponse(status_code=409, content=jsonable_encoder({
                 "code": "conflict", "request_id": request.state.request_id,
                 "message": f"That barcode already belongs to '{taken.product.name}'. If they are "
                            "the same item, resend with merge=true.",
-                "details": [{"existing_product": product_summary(db, taken.product)}]})
+                "details": [{"existing_product": product_summary(db, taken.product)}]}))
         try:
             merged = merge_products(db, product, taken.product)
         except BarcodeConflict as exc:

@@ -281,7 +281,8 @@ def test_a_search_shows_the_offer_and_the_stock_at_each_store(shop):
         assert result["state"] == "succeeded"
         (item,) = result["result"]["items"]
         assert item["offers"] == [{"terms": "2 för 35 kr", "title": "Oatly iKaffe 1L", "price": "35",
-                                   "eligibility": "public", "valid_to": None}]
+                                   "eligibility": "public", "valid_to": None,
+                                   "quantity": 2, "unit_price": "17.50"}]  # 2 för 35 kr on a 20 kr item
         assert (item["availability"], item["stock_quantity"]) == ("in_stock", quantity)
         assert (item["display_name"], item["brand"], item["size"]) == ("iKaffe", "Oatly", "1 L")
         assert item["current_price"] == "20.00" and item["url"] == LINK

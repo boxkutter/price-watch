@@ -8,6 +8,7 @@ limits, the workflows with examples, events and webhooks, and a full endpoint re
 - **Machine-readable spec:** `/openapi.json` (also committed as [`openapi.json`](openapi.json))
 - **This guide, served by the app:** `/api-guide`; a short index for agents: `/llms.txt`
 - **A working client you can copy:** [`examples/shopper_client.py`](../examples/shopper_client.py)
+- **A phone app that uses it:** [`mobile/`](../mobile/README.md) (Android now). The service serves the app at `/download`, and installed apps update from there.
 - **See it in action:** the example client page at `/demo` (sign in there with your email and password, or paste an invitation code to create your account; it works on a phone and can scan a barcode with the camera)
 
 The project is in development. There is no compatibility promise yet: paths, fields and behaviour
@@ -92,6 +93,22 @@ curl $BASE/v1/monitors -H "Authorization: Bearer $USER_TOKEN" -H "X-Client-Token
 
 A client token on its own is useless (`401`), and a user without a grant for that client gets
 `403`. Clients can never hold `clients:manage` or administrator rights.
+
+### An app signs itself in (no administrator needed)
+
+A phone app should not ask a person for a client id and token. After the person logs in, the app
+creates its own client credential, which is granted the app scopes in the same call:
+
+```bash
+curl -X POST $BASE/v1/me/app-credentials -H "Authorization: Bearer $USER_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name": "Price Watch Android (Pixel 9a)"}'
+# 201 {"client_id": "...", "client_token": "<shown once>", "scopes": ["catalogue:read", "monitors:read", "monitors:write", "events:read"]}
+```
+
+The app then sends both tokens as usual. Its scopes are the app scopes the person already has, never
+more: no webhooks, no accounts, no other apps, and only a user token can make this call. Up to 10 are
+kept per person (the oldest is replaced beyond that). To sign out, `DELETE /v1/me/app-credentials/{client_id}`.
+Credentials an administrator makes with `POST /v1/clients` still work for apps that need other scopes.
 
 ### Scopes
 
@@ -178,6 +195,8 @@ These exist to keep traffic to real stores polite, and apply per person unless s
 | Live lookups per hour | 20 |
 | Manual `check` of one monitor | one per 60 seconds |
 | Stores in "my stores" | 15 |
+| Store lookups by postcode | 6 per hour |
+| App sign-ins kept per person | 10 |
 | Stores in one barcode comparison | 8 |
 | Monitor check interval | at least 60 minutes for City Gross, Coop, Willys and Lidl (15 for the demo shop) |
 
@@ -211,6 +230,22 @@ curl -X PUT $BASE/v1/me/stores/<store_id> $AUTH             # 204: compare and s
 curl $BASE/v1/me/stores $AUTH                               # {"items": [{"store_id", "name", "retailer_id"}]}
 curl -X DELETE $BASE/v1/me/stores/<store_id> $AUTH          # 204
 ```
+
+### Find stores near you
+
+`GET /v1/connectors` says which retailers can look their stores up (`capabilities.store_discovery`)
+and what to ask (`store_discovery_inputs`, such as a postcode for Coop). Ask once and choose from what
+comes back:
+
+```bash
+curl -X POST $BASE/v1/retailers/se.coop/stores/discover $AUTH -H 'Content-Type: application/json' -d '{"postcode": "264 31"}'
+# 202 {"job_id": "…", "status": "queued", "status_url": "/v1/jobs/…"}
+# the finished job: {"status": "success", "stores": 3, "created": 1, "store_ids": ["…", "…", "…"], "names": ["…"]}
+curl -X PUT $BASE/v1/me/stores/<one of store_ids> $AUTH     # 204: compare and search here
+```
+
+One small request goes to the retailer. The stores it names join the shared list, so everyone sees
+them in `GET /v1/stores`. A person may ask 6 times an hour (`429` after that).
 
 ### Add a product by its page link
 
@@ -273,8 +308,9 @@ search again is instant. Send `"fresh": true` to ask the stores now instead (the
 the next search). `POST /v1/monitors/{id}/check` ("Check now") always asks the store itself; scheduled
 checks use the kept answer.
 
-`offers` lists what the store offers on this product right now on this product right now (`terms`, such as "2 för 35 kr", the bundle
-`price` when it states one, `eligibility` `public` or `member`, `valid_to` or null); they are shown
+`offers` lists what the store offers on this product right now (`terms`, such as "2 för 35 kr", the bundle
+`price` when it states one, `eligibility` `public` or `member`, `valid_to` or null, and for a multi-buy `quantity` and
+`unit_price`, the price per item); they are shown
 for what was just looked up and are recorded when the product is watched. `availability` is
 `in_stock`, `out_of_stock` or null (unknown), and `stock_quantity` is how many the store says it has
 at that store, when it says (null otherwise; a figure is per store, so each store's result has its own).
@@ -436,6 +472,33 @@ first). A monitor's events: `GET /v1/monitors/{id}/events`. Check now (one per 6
 curl -X POST $BASE/v1/monitors/<monitor_id>/check $AUTH     # 202 {"job_id": "…", "status": "queued"}
 ```
 
+### The alert price and multi-buys
+
+A monitor's alert price (`maximum_price`) is compared with the price of **one item**, and also with the
+price **per item of a public multi-buy**. "2 för 35 kr" is 17,50 kr each, so it reaches an alert price of
+19 kr even when one item costs 20 kr; "3 för 2" and "Köp 2 betala för 1" are read against the price of one
+item, and "19 kr/st vid köp av 2" is 19 kr each. Such a deal raises `price.threshold_reached` with
+`multibuy: true` (and the usual `offer.detected`), once per offer, and again if the offer changes.
+
+- Only wording that states the deal is understood. Percentage discounts ("20 % rabatt") and wording the
+  service cannot read stay plain offers.
+- **Member offers are never counted**: the person may not be a member.
+- Offers carry `quantity` and `unit_price` (the price per item, or `null` for anything that is not a
+  multi-buy), and a watched product's monitor has `offer`: its cheapest current public multi-buy
+  (`terms`, `quantity`, `unit_price`, `valid_to`), or `null`.
+- Like the single price, the first check only sets a baseline, and changing the alert price does not
+  raise an event by itself.
+
+### Change the alert price
+
+```bash
+curl -X PATCH $BASE/v1/monitors/<monitor_id> $AUTH -H 'Content-Type: application/json' -d '{"maximum_price": "17.50"}'
+# 200 the monitor. {"maximum_price": null} removes the alert price; a field left out is not changed.
+```
+
+`name` and `interval_minutes` (not below the retailer's minimum) can be changed the same way. Changing
+the alert price does not raise an event by itself: you are told when the price next crosses down to it.
+
 ### Remove
 
 ```bash
@@ -458,7 +521,7 @@ monitor limit.
 | Event `type` | When | `payload` |
 |---|---|---|
 | `price.decreased`, `price.increased` | The price changed between checks | `listing_id`, `old`, `new`, `store_id`, `channel` |
-| `price.threshold_reached` | The price crossed down to your `maximum_price` | `listing_id`, `price`, `threshold` |
+| `price.threshold_reached` | The price crossed down to your `maximum_price`, or a public multi-buy brought the price per item down to it | `listing_id`, `price`, `threshold`; for a multi-buy also `multibuy: true`, `terms`, `quantity`, `offer_id`, `valid_to` (`price` is then the price per item) |
 | `offer.detected` | A promotion on a watched product appeared | `offer_id`, `title`, `terms`, `eligibility`, `valid_to`, `store_id` |
 | `offer.changed` | A known promotion changed | as above |
 | `product.discovered` | A new product matched a `generic_product` monitor | `listing_id`, `name` |
@@ -535,6 +598,8 @@ Scope is what the token needs. All paths are under the base URL.
 | POST | `/v1/clients` | admin | Create an API client credential (token shown once) |
 | DELETE | `/v1/clients/{client_id}` | admin | Revoke an API client |
 | POST | `/v1/me/client-grants` | `clients:manage` | Grant a client a subset of scopes |
+| POST | `/v1/me/app-credentials` | `clients:manage` | Sign an app in: create its client credential and grant it the app scopes in one call |
+| DELETE | `/v1/me/app-credentials/{client_id}` | `clients:manage` | Sign an app out: revoke a credential made that way |
 | DELETE | `/v1/me/client-grants/{client_id}` | `clients:manage` | Revoke a grant |
 | GET | `/v1/retailers` | `catalogue:read` | Retailers and their status |
 | GET | `/v1/connectors` | `catalogue:read` | Connectors, capabilities, status |
@@ -542,6 +607,7 @@ Scope is what the token needs. All paths are under the base URL.
 | GET | `/v1/retailers/{retailer_id}/stores` | `catalogue:read` | Stores of one retailer |
 | GET | `/v1/stores` | `catalogue:read` | All registered stores |
 | GET | `/v1/stores/{store_id}` | `catalogue:read` | One store |
+| POST | `/v1/retailers/{retailer_id}/stores/discover` | `monitors:write` | Find the stores of a retailer near you (asynchronous) |
 | GET | `/v1/stores/{store_id}/offers` | `catalogue:read` | Current promotions observed at a store |
 | GET | `/v1/stores/{store_id}/offers/history` | `catalogue:read` | Promotion revisions at a store |
 | GET | `/v1/offers` | `catalogue:read` | Promotions, optionally by `store_id` |
@@ -563,6 +629,7 @@ Scope is what the token needs. All paths are under the base URL.
 | POST | `/v1/monitors/from-url` | `monitors:write` | Add a product from its page link (asynchronous) |
 | GET | `/v1/monitors` | `monitors:read` | Your monitors (`include_removed`) |
 | GET | `/v1/monitors/{monitor_id}` | `monitors:read` | One monitor |
+| PATCH | `/v1/monitors/{monitor_id}` | `monitors:write` | Change the alert price, name or check interval |
 | GET | `/v1/monitors/{monitor_id}/events` | `events:read` | One monitor's events |
 | DELETE | `/v1/monitors/{monitor_id}` | `monitors:write` | Remove (`permanent=true` to delete) |
 | POST | `/v1/monitors/{monitor_id}/check` | `monitors:write` | Check now (asynchronous) |

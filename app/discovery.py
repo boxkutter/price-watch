@@ -40,6 +40,7 @@ def process_discovery(db: Session, job: Job) -> dict:
         made = getattr(getattr(connector, "client", None), "requests_made", 0) - before
         connector_state.add_requests(db, retailer_id, made)
     created = updated = 0
+    store_ids = []
     for info in stores:
         row = db.scalar(select(Store).where(Store.retailer_id == retailer_id,
                                             Store.external_id == info.external_id))
@@ -47,8 +48,11 @@ def process_discovery(db: Session, job: Job) -> dict:
             updated += row.name != info.name
             row.name = info.name
         else:
-            db.add(Store(retailer_id=retailer_id, external_id=info.external_id, name=info.name))
+            row = Store(retailer_id=retailer_id, external_id=info.external_id, name=info.name)
+            db.add(row)
             created += 1
+        db.flush()
+        store_ids.append(row.id)
     connector_state.record_success(db, retailer_id)
     return {"status": "success", "stores": len(stores), "created": created, "updated": updated,
-            "names": [info.name for info in stores[:5]]}
+            "names": [info.name for info in stores[:5]], "store_ids": store_ids}
