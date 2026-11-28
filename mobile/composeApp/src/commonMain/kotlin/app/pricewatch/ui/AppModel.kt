@@ -41,6 +41,12 @@ class AppModel(val graph: AppGraph, val platform: PlatformServices, private val 
 
     init {
         // a linked or merged barcode regroups the same search (answered from the cache, no store is asked)
+        // what a deal costs depends on membership: show current prices again
+        directory.onMembershipChanged = {
+            monitors.refresh()
+            if (lookup.results.value != null && lookup.query.value.isNotBlank()) lookup.search()
+            compare.state.value.gtin?.let { compare.lookup(it) }
+        }
         barcodes.onChanged = { if (lookup.results.value != null && lookup.query.value.isNotBlank()) lookup.search() }
         scope.launch {
             graph.sessions.session.collect { session ->

@@ -44,10 +44,13 @@ object EventDescriber {
                 "Now ${money("new") ?: "higher"}$where" + (money("old")?.let { ", was $it" } ?: "")
             "price.threshold_reached" -> NoticeKind.TargetReached to run {
                 val target = money("threshold")?.let { " (target $it)" } ?: ""
-                if (p.str("multibuy") == "true") {
-                    val terms = p.str("terms")?.let { " with $it" } ?: ""
-                    "Reached your target: ${money("price") ?: "now"} each$terms$where$target"
-                } else "Reached your target: ${money("price") ?: "now"}$where$target"
+                val terms = p.str("terms")?.let { " with $it" } ?: ""
+                when {
+                    p.str("member") == "true" -> "Reached your target with your member price: ${money("price") ?: "now"}$terms$where$target"
+                    p.str("multibuy") == "true" -> "Reached your target: ${money("price") ?: "now"} each$terms$where$target"
+                    p.str("terms") != null -> "Reached your target: ${money("price") ?: "now"}$terms$where$target"
+                    else -> "Reached your target: ${money("price") ?: "now"}$where$target"
+                }
             }
             "offer.detected", "offer.changed" -> NoticeKind.Offer to run {
                 val terms = p.str("terms") ?: p.str("title") ?: "A new offer"
@@ -60,7 +63,7 @@ object EventDescriber {
             "product.discovered" -> NoticeKind.NewProduct to "${p.str("name") ?: "A new product"} matches your watch$where"
             else -> return null
         }
-        return Notice(event.id, event.monitorId, kind, title, text, event.createdAt, viaOffer = p.str("multibuy") == "true")
+        return Notice(event.id, event.monitorId, kind, title, text, event.createdAt, viaOffer = p.str("terms") != null && event.type == "price.threshold_reached")
     }
 
     /** Whether the person asked to hear about this kind of event. */

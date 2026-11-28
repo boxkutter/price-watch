@@ -345,6 +345,7 @@ private fun StoresPage(model: AppModel, onBack: () -> Unit) {
     val mine by model.directory.mine.collectAsState()
     val found by model.directory.found.collectAsState()
     val connectors by model.directory.connectors.collectAsState()
+    val members by model.directory.members.collectAsState()
     val grouped = remember(all) { all.groupBy { it.retailerId } }
     val foundStores = remember(all, found) { all.filter { it.id in found } }
     var finding by remember { mutableStateOf(false) }
@@ -393,10 +394,14 @@ private fun StoresPage(model: AppModel, onBack: () -> Unit) {
         if (all.isEmpty()) item { Text("No stores are available on the server yet.", Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         grouped.forEach { (retailerId, stores) ->
             item(key = "h-$retailerId") {
-                Row(Modifier.padding(start = 20.dp, top = 18.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                     RetailerBadge(model.directory.retailerName(retailerId), model.directory.logoUrl(retailerId), 26.dp)
                     Spacer(Modifier.width(10.dp))
-                    Text(model.directory.retailerName(retailerId), style = MaterialTheme.typography.titleMedium)
+                    Column(Modifier.weight(1f)) {
+                        Text(model.directory.retailerName(retailerId), style = MaterialTheme.typography.titleMedium)
+                        Text("I am a member", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(retailerId in members, { model.settings.setMember(retailerId, it) })
                 }
             }
             items(stores, key = { it.id }) { StoreRow(it) }

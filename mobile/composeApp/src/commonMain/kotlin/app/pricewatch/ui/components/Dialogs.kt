@@ -48,7 +48,7 @@ fun AlertPriceDialog(
                     text, { text = it.filter { c -> c.isDigit() || c == ',' || c == '.' }.take(8) },
                     label = { Text("Alert me at or below (kr)") }, singleLine = true, shape = MaterialTheme.shapes.medium,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    supportingText = { Text("Multi-buys count too: 2 för 35 kr is 17,50 kr each.") },
+                    supportingText = { Text("Deals count too: multi-buys, percentages and, if you are a member, member prices.") },
                     isError = text.isNotEmpty() && parsed == null,
                 )
             }

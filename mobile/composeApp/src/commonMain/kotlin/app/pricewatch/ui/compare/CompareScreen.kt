@@ -58,6 +58,7 @@ import app.pricewatch.ui.AppModel
 import app.pricewatch.ui.ScanPurpose
 import app.pricewatch.ui.components.EmptyState
 import app.pricewatch.ui.components.ErrorCard
+import app.pricewatch.ui.components.dealNote
 import app.pricewatch.ui.components.Pill
 import app.pricewatch.ui.components.RetailerBadge
 import app.pricewatch.ui.components.ScreenTitle
@@ -150,9 +151,9 @@ fun CompareScreen(model: AppModel) {
     }
 }
 
-/** Rows with a price first, cheapest first, then the stores that do not have it or were not asked. */
+/** Rows with a price first, cheapest first by what the person pays (deals count), then the stores that do not have it or were not asked. */
 internal fun sortRows(rows: List<CompareRow>): List<CompareRow> =
-    rows.sortedWith(compareBy({ it.currentPrice.toAmount() == null }, { it.currentPrice.toAmount() ?: 0.0 }, { it.storeName }))
+    rows.sortedWith(compareBy({ (it.effectivePrice ?: it.currentPrice).toAmount() == null }, { (it.effectivePrice ?: it.currentPrice).toAmount() ?: 0.0 }, { it.storeName }))
 
 @Composable
 private fun ProductHeader(state: app.pricewatch.ui.CompareModel.State, modifier: Modifier) {
@@ -161,12 +162,12 @@ private fun ProductHeader(state: app.pricewatch.ui.CompareModel.State, modifier:
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(product?.name ?: "Barcode ${state.gtin?.trimStart('0')}", style = MaterialTheme.typography.titleLarge)
         if (product == null && !state.loading) Text("This barcode is not in the catalogue yet. The stores are being asked.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-        if (cheapest?.currentPrice != null && !state.checkingLive) {
+        if (cheapest != null && (cheapest.effectivePrice ?: cheapest.currentPrice) != null && !state.checkingLive) {
             val saving = state.saving?.amount.toAmount()
             Surface2(
                 if (saving != null && saving < 0) "Cheaper elsewhere: save ${formatMoney(-saving, "SEK")}${state.saving?.percent?.toAmount()?.let { " (${(-it).toInt()}%)" } ?: ""} at ${cheapest.storeName}"
-                else if (saving != null && saving >= 0 && state.rows.size > 1) "Best price is here: ${cheapest.storeName} ${formatMoney(cheapest.currentPrice)}"
-                else "Cheapest: ${cheapest.storeName} ${formatMoney(cheapest.currentPrice)}",
+                else if (saving != null && saving >= 0 && state.rows.size > 1) "Best price is here: ${cheapest.storeName} ${formatMoney(cheapest.effectivePrice ?: cheapest.currentPrice)}"
+                else "Cheapest: ${cheapest.storeName} ${formatMoney(cheapest.effectivePrice ?: cheapest.currentPrice)}",
             )
         }
     }
@@ -191,7 +192,9 @@ private fun CompareRowCard(row: CompareRow, model: AppModel, isHere: Boolean, mo
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(row.storeName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (found) {
+                    row.best?.let { Text(dealNote(it), style = MaterialTheme.typography.bodySmall, color = priceColors.offer) }
                     val sub = listOfNotNull(
+                        if (row.best != null) "shelf ${formatMoney(row.currentPrice, row.currency)}" else null,
                         formatUnitPrice(row.unitPrice?.amount, row.unitPrice?.unit, row.currency),
                         if (row.availability == "out_of_stock") "Out of stock" else null,
                         row.ageSeconds?.takeIf { row.source == "catalogue" }?.let { ageWords(it) },
@@ -205,7 +208,7 @@ private fun CompareRowCard(row: CompareRow, model: AppModel, isHere: Boolean, mo
             }
             if (found) {
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(formatMoney(row.currentPrice, row.currency), style = MaterialTheme.typography.titleLarge.merge(PriceStyle),
+                    Text(formatMoney(row.effectivePrice ?: row.currentPrice, row.currency), style = MaterialTheme.typography.titleLarge.merge(PriceStyle),
                         color = if (row.isCheapest) priceColors.cheaper else MaterialTheme.colorScheme.onSurface)
                     val extra = row.vsCheapest?.amount.toAmount()
                     if (extra != null && extra > 0.004) Text("+${formatMoney(extra, row.currency)}", style = MaterialTheme.typography.bodySmall, color = priceColors.dearer)

@@ -6,8 +6,8 @@ A phone app for the Price Watch service. Four tabs along the bottom:
 |---|---|
 | **Lookup** | Search every store you chose by product name or barcode, or paste a product page link. Results of the same item are lined up by store, cheapest first, with the price per item of any multi-buy. Tap **Watch**, with an optional alert price. An item with no barcode can be given one (scan or type it). |
 | **Monitor** | Your watchlist with live prices, change badges and "target reached"; per product a price chart, the alert price (change or remove it), the barcode and any multi-buy; an **Activity** feed of price drops, offers and restocks. |
-| **Compare** | In a shop: scan a barcode (or type it) and see that item's price in each of your stores, cheapest first, and what you would save. |
-| **Settings** | Sign in, choose your stores (or find the ones near you by postcode or town), choose which alerts you want, quiet hours and how often the phone looks, update the app. |
+| **Compare** | In a shop: scan a barcode (or type it) and see what that item costs *you* in each of your stores, cheapest first (multi-buys, percentages and your member prices count), and what you would save. |
+| **Settings** | Sign in, choose your stores (or find the ones near you by postcode or town) and say which chains you are a member of, choose which alerts you want, quiet hours and how often the phone looks, update the app. |
 
 The phone **notifies** you when a watched product drops in price, reaches your target, goes on offer
 or is back in stock.
@@ -72,10 +72,16 @@ announced twice, and the first look after signing in only notes where the feed s
 **Quiet hours** (Settings, for example 22:00 to 07:00) hold alerts back: the phone does not even ask the
 server during them, so nothing is lost, and the first look afterwards announces what happened overnight.
 
-**Multi-buys count towards the alert price.** "2 för 35 kr" is 17,50 kr each, so it reaches an alert price of
-19 kr even when one item costs 20 kr; the server reads the wording ("3 för 2", "Köp 2 betala för 1" and
-"19 kr/st vid köp av 2" too) and the app shows the price per item beside the offer, marks "Target reached" and
-words the notification as "17,50 kr each with 2 för 35 kr". Member offers are never counted.
+**The cheapest deal for you, not the shelf price.** The point is finding the cheapest way to buy, so a price
+per item counts wherever it comes from: a multi-buy ("2 för 35 kr" is 17,50 kr each; "3 för 2", "Köp 2 betala för 1"
+and "19 kr/st vid köp av 2" too), a percentage off, and, if you are a member, the chain's member prices and offers.
+Say which chains you are a member of with the switch on each chain in **My stores** (membership is per chain
+such as ICA or City Gross, not per shop). Then:
+
+- a watched product alerts when *any* of those reaches your alert price, and its card shows "Target reached"
+  with the deal ("15,00 kr · member price", "17,50 kr each · 2 för 35 kr");
+- Lookup and Compare rank stores by what you would pay, show the shelf price beneath, and say what a deal needs
+  ("buy 2", "members").
 
 This needs no Google account or Firebase, which suits a self-hosted server and a phone without Google
 services. The cost is that alerts arrive within the chosen interval, not instantly. **On iPhone this is
@@ -116,6 +122,5 @@ as `19,95 kr`. Unknown is shown as a dash, never as zero.
 
 ## Not done yet
 
-Percentage discounts ("20 % rabatt") are plain offers and are not compared with the alert price, nor are
-member offers; Compare ignores multi-buys; release builds are not shrunk (R8) yet; iPhone push
-(see Notifications).
+Offers are only as good as the stores' own data: a deal is counted only when its wording states a price
+(anything else stays a plain offer); release builds are not shrunk (R8) yet; iPhone push (see Notifications).

@@ -165,3 +165,17 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     )
 }
 
+
+/** How a deal reads under a price: "2 för 35 kr · buy 2 · members". */
+fun dealNote(best: app.pricewatch.shared.api.BestOffer): String = listOfNotNull(
+    best.terms,
+    if (best.quantity > 1) "buy ${best.quantity}" else null,
+    if (best.member) "members" else null,
+).joinToString(" · ")
+
+/** The short label for a deal on a card. */
+fun dealLabel(best: app.pricewatch.shared.api.BestOffer): String = when {
+    best.member -> "Member price"
+    best.quantity > 1 -> "Buy ${best.quantity}"
+    else -> "Deal"
+}

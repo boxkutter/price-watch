@@ -63,6 +63,8 @@ import app.pricewatch.ui.AppModel
 import app.pricewatch.ui.ScanPurpose
 import app.pricewatch.ui.Tab
 import app.pricewatch.ui.components.EmptyState
+import app.pricewatch.ui.components.dealLabel
+import app.pricewatch.ui.components.dealNote
 import app.pricewatch.ui.components.parsePrice
 import app.pricewatch.ui.components.ErrorCard
 import app.pricewatch.ui.components.Pill
@@ -217,12 +219,12 @@ private fun ProductCard(group: ProductGroup, model: AppModel, watching: Boolean,
             }
             Spacer(Modifier.width(8.dp))
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(formatMoney(cheapest.currentPrice, cheapest.currency), style = MaterialTheme.typography.titleLarge.merge(PriceStyle))
+                Text(formatMoney(cheapest.effectivePrice, cheapest.currency), style = MaterialTheme.typography.titleLarge.merge(PriceStyle))
+                if (cheapest.best != null) Text("Shelf ${formatMoney(cheapest.currentPrice, cheapest.currency)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (group.storeCount > 1) Pill("${group.storeCount} stores", MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
-                if (cheapest.offers.isNotEmpty()) {
-                    val each = cheapest.offers.filter { it.eligibility != "member" }.mapNotNull { it.unitPrice }.minByOrNull { it.toAmount() ?: Double.MAX_VALUE }
-                    Pill(if (each != null) "${formatMoney(each, cheapest.currency)} each" else "Offer", priceColors.cheaperContainer, priceColors.cheaper)
-                }
+                val best = cheapest.best
+                if (best != null) Pill(dealLabel(best), priceColors.cheaperContainer, priceColors.cheaper)
+                else if (cheapest.offers.isNotEmpty()) Pill("Offer", MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
                 if (watching) Pill("Watching", MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer, icon = Icons.Default.Check)
             }
         }
@@ -257,22 +259,24 @@ private fun GroupSheet(group: ProductGroup, model: AppModel, watched: Set<String
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(store?.name ?: "Store", style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            val offer = item.offers.firstOrNull { it.unitPrice != null } ?: item.offers.firstOrNull()
+                            val best = item.best
+                            val offer = item.offers.firstOrNull()
                             val note = when {
+                                best != null -> listOfNotNull(dealNote(best), "shelf ${formatMoney(item.currentPrice, item.currency)}", best.validTo?.let { "until ${shortDate(it)}" }).joinToString(" · ")
                                 offer != null -> listOfNotNull(
                                     offer.terms,
                                     offer.unitPrice?.let { "${formatMoney(it, item.currency)} each" },
-                                    if (offer.eligibility == "member") "members" else null,
+                                    if (offer.eligibility == "member") "members only" else null,
                                     offer.validTo?.let { "until ${shortDate(it)}" },
                                 ).joinToString(" · ")
                                 item.availability == "out_of_stock" -> "Out of stock"
                                 else -> null
                             }
-                            if (note != null) Text(note, style = MaterialTheme.typography.bodySmall, color = if (offer != null) priceColors.offer else MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (note != null) Text(note, style = MaterialTheme.typography.bodySmall, color = if (best != null || offer != null) priceColors.offer else MaterialTheme.colorScheme.onSurfaceVariant)
                             if (isCheapest) Pill("Cheapest", priceColors.cheaperContainer, priceColors.cheaper, Modifier.padding(top = 4.dp))
                         }
                         Spacer(Modifier.width(8.dp))
-                        Text(formatMoney(item.currentPrice, item.currency), style = MaterialTheme.typography.titleMedium.merge(PriceStyle))
+                        Text(formatMoney(item.effectivePrice, item.currency), style = MaterialTheme.typography.titleMedium.merge(PriceStyle))
                         Spacer(Modifier.width(6.dp))
                         if (item.listingId in watched) {
                             Icon(Icons.Default.Check, "Watching", Modifier.padding(12.dp).size(24.dp), tint = MaterialTheme.colorScheme.primary)

@@ -234,6 +234,54 @@ class MultiBuyTest {
     }
 }
 
+class MemberDealsTest {
+    private fun item(store: String, listing: String, shelf: String, best: String? = null, member: Boolean = false, key: String = "barcode:1") =
+        SearchItem(productId = "p", listingId = listing, storeId = store, name = "Havregryn", currentPrice = shelf, likeKey = key,
+            best = best?.let { app.pricewatch.shared.api.BestOffer(terms = "Medlemspris: $it kr", quantity = 1, unitPrice = it, member = member) })
+
+    @Test fun storesAreRankedByWhatOneCostsThePersonNotByTheShelfPrice() {
+        val groups = groupResults(listOf(
+            item("coop", "l1", "17.50"),
+            item("citygross", "l2", "19.95", best = "15.00", member = true),   // dearer on the shelf, cheapest for a member
+        ))
+        val group = groups.single()
+        assertEquals(listOf("citygross", "coop"), group.offers.map { it.storeId })
+        assertEquals("15.00", group.cheapest.effectivePrice)
+        assertEquals(2.5, group.spread!!, 0.001, "the spread is measured on what is paid")
+    }
+
+    @Test fun anItemWithNoDealCostsItsShelfPrice() {
+        assertEquals("17.50", item("coop", "l1", "17.50").effectivePrice)
+    }
+
+    @Test fun aMemberPriceThatReachedTheTargetIsWordedAsSuch() = runTest {
+        val server = FakeServer()
+        server.on("GET /v1/events", """{"items":[],"next_cursor":null}""")
+        server.on("GET /v1/monitors", """{"items":[{"id":"m1","name":"Oats","store_name":"City Gross Höör","latest":{"current_price":"20.00","currency":"SEK"}}]}""")
+        val graph = graphWith(server)
+        graph.notifier.poll()
+        server.on("GET /v1/events", """{"items":[{"id":"e1","type":"price.threshold_reached","monitor_id":"m1","payload":{"price":"15.00","threshold":"18","member":true,"multibuy":false,"terms":"Medlemspris: 15.00 kr","quantity":1},"created_at":"2026-11-28T10:00:00Z"}],"next_cursor":null}""")
+        val notice = graph.notifier.poll().single()
+        assertEquals("Reached your target with your member price: 15,00 kr with Medlemspris: 15.00 kr at City Gross Höör (target 18,00 kr)", notice.text)
+    }
+
+    @Test fun membershipIsPerChainAndShowsOnTheStoresTheServerReports() = runTest {
+        val server = FakeServer()
+        server.on("PUT /v1/me/memberships/se.citygross", "", 204)
+        server.on("DELETE /v1/me/memberships/se.citygross", "", 204)
+        server.on("GET /v1/me/stores", """{"items":[
+            {"store_id":"a","name":"City Gross Höör","retailer_id":"se.citygross","member":true},
+            {"store_id":"b","name":"City Gross Staffanstorp","retailer_id":"se.citygross","member":true},
+            {"store_id":"c","name":"Coop Online Syd","retailer_id":"se.coop"}]}""")
+        val graph = graphWith(server)
+        graph.api.setMember("se.citygross", true)
+        graph.api.setMember("se.citygross", false)
+        assertEquals(listOf("PUT", "DELETE"), server.requests.filter { it.url.encodedPath.contains("memberships") }.map { it.method.value })
+        val mine = graph.api.myStores()
+        assertEquals(listOf(true, true, false), mine.map { it.member })
+    }
+}
+
 class SignInTest {
     private val login = """{"access_token":"tok","expires_in":100,"user_id":"u"}"""
     private val credential = """{"client_id":"cid","client_token":"ctok","scopes":["catalogue:read"]}"""

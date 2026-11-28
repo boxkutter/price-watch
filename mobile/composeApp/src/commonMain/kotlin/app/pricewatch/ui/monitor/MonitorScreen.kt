@@ -197,7 +197,7 @@ private fun MonitorCard(m: Monitor, model: AppModel, onClick: () -> Unit) {
                 }
                 m.offer?.let { deal ->
                     Text(
-                        listOfNotNull("${formatMoney(deal.unitPrice, latest?.currency ?: "SEK")} each", deal.terms).joinToString(" · "),
+                        listOfNotNull(formatMoney(deal.unitPrice, latest?.currency ?: "SEK") + if (deal.quantity > 1) " each" else "", if (deal.quantity == 1 && deal.member) "member price" else deal.terms).joinToString(" · "),
                         style = MaterialTheme.typography.bodySmall, color = priceColors.offer, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
@@ -298,8 +298,8 @@ private fun MonitorDetail(m: Monitor, model: AppModel) {
                     ) { editAlert = true }
                     m.offer?.let { deal ->
                         DetailRow(
-                            "Multi-buy",
-                            listOfNotNull("${formatMoney(deal.unitPrice, currency)} each", deal.terms, deal.validTo?.let { "until ${shortDate(it)}" }).joinToString(" · "),
+                            if (deal.member) "Your member price" else "Best deal",
+                            listOfNotNull(formatMoney(deal.unitPrice, currency) + if (deal.quantity > 1) " each" else "", deal.terms, if (deal.quantity > 1) "buy ${deal.quantity}" else null, deal.validTo?.let { "until ${shortDate(it)}" }).joinToString(" · "),
                             null,
                         ) {}
                     }

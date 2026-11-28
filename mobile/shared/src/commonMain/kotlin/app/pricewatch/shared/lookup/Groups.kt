@@ -19,7 +19,7 @@ data class ProductGroup(
     /** How much the dearest store costs over the cheapest one, when more than one store has a price. */
     val spread: Double?
         get() {
-            val prices = offers.mapNotNull { it.currentPrice.toAmount() }
+            val prices = offers.mapNotNull { it.effectivePrice.toAmount() }
             return if (prices.size > 1) prices.max() - prices.min() else null
         }
 }
@@ -36,7 +36,7 @@ fun groupResults(items: List<SearchItem>): List<ProductGroup> {
     return order.map { (key, group) ->
         val sorted = group
             .distinctBy { it.storeId to it.listingId }
-            .sortedWith(compareBy({ it.currentPrice.toAmount() == null }, { it.currentPrice.toAmount() ?: 0.0 }))
+            .sortedWith(compareBy({ it.effectivePrice.toAmount() == null }, { it.effectivePrice.toAmount() ?: 0.0 }))
         val lead = sorted.firstOrNull { it.displayName != null } ?: sorted.first()
         ProductGroup(
             key = key,

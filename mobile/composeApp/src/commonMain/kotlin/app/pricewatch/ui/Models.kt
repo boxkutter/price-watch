@@ -485,6 +485,19 @@ class SettingsModel(private val graph: AppGraph, private val scope: CoroutineSco
 
     fun resetFind() { _find.value = FindState.Idle }
 
+    fun setMember(retailerId: String, member: Boolean) {
+        scope.launch {
+            try {
+                directory.setMember(retailerId, member)
+                messages.say(if (member) "Member prices now count for ${directory.retailerName(retailerId)}" else "Member prices no longer count")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                messages.say(e.friendly())
+            }
+        }
+    }
+
     fun clearConnectError() { if (_connect.value is ConnectState.Failed) _connect.value = ConnectState.Idle }
 
     fun signOut(onDone: () -> Unit) {

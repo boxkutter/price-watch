@@ -21,6 +21,14 @@ class Directory(private val api: PriceWatchApi) {
     private val _connectors = MutableStateFlow<Map<String, Connector>>(emptyMap())
     val connectors: StateFlow<Map<String, Connector>> = _connectors.asStateFlow()
 
+    private val _members = MutableStateFlow<Set<String>>(emptySet())
+
+    /** The chains the person is a member of (ICA, City Gross): membership is per chain, not per shop. */
+    val members: StateFlow<Set<String>> = _members.asStateFlow()
+
+    /** Called after membership changed, so prices that depend on it can be shown again. */
+    var onMembershipChanged: () -> Unit = {}
+
     private val _found = MutableStateFlow<List<String>>(emptyList())
 
     /** Ids of the stores the last "find stores near me" turned up, to offer first. */
@@ -32,6 +40,7 @@ class Directory(private val api: PriceWatchApi) {
     suspend fun refresh() {
         _stores.value = api.stores()
         _mine.value = api.myStores()
+        _members.value = api.memberships()
         _connectors.value = runCatching { api.connectors() }.getOrDefault(emptyList()).associateBy { it.id }
         _loaded.value = true
     }
@@ -49,7 +58,21 @@ class Directory(private val api: PriceWatchApi) {
     /** Retailers that can look their stores up for a person. */
     fun findable(): List<Connector> = _connectors.value.values.filter { it.canFindStores }.sortedBy { it.name }
 
+    /** Says the person is (or is not) a member of a chain; shown at once, undone if the server refuses. */
+    suspend fun setMember(retailerId: String, member: Boolean) {
+        val before = _members.value
+        _members.value = if (member) before + retailerId else before - retailerId
+        try {
+            api.setMember(retailerId, member)
+        } catch (e: ApiException) {
+            _members.value = before
+            throw e
+        }
+        onMembershipChanged()
+    }
+
     fun clear() {
+        _members.value = emptySet()
         _found.value = emptyList()
         _stores.value = emptyList()
         _mine.value = emptyList()

@@ -46,6 +46,8 @@ data class MyStore(
     @SerialName("store_id") val storeId: String,
     val name: String,
     @SerialName("retailer_id") val retailerId: String,
+    /** Whether the person is a member of this store's chain (membership is per chain, not per shop). */
+    val member: Boolean = false,
 )
 
 /** One thing a retailer needs to find its stores (a postcode, or a town). */
@@ -126,7 +128,12 @@ data class SearchItem(
     val url: String? = null,
     val availability: String? = null,
     val offers: List<Offer> = emptyList(),
-)
+    /** The best price per item for this person at this store, when it beats the shelf price. */
+    val best: BestOffer? = null,
+) {
+    /** What one item costs this person: the best deal, or the shelf price. */
+    val effectivePrice: String? get() = best?.unitPrice ?: currentPrice
+}
 
 @Serializable
 data class Coverage(
@@ -176,12 +183,16 @@ data class Latest(
     @SerialName("observed_at") val observedAt: String? = null,
 )
 
-/** The cheapest public multi-buy on a watched product, as the price per item. */
+/**
+ * The cheapest way the person can buy an item: a multi-buy, a percentage off, a member price. [unitPrice]
+ * is what one costs that way, [quantity] how many to buy to get it (1 for a member price).
+ */
 @Serializable
 data class BestOffer(
     val terms: String? = null,
-    val quantity: Int = 2,
+    val quantity: Int = 1,
     @SerialName("unit_price") val unitPrice: String,
+    val member: Boolean = false,
     @SerialName("valid_to") val validTo: String? = null,
 )
 
@@ -267,6 +278,9 @@ data class CompareRow(
     @SerialName("current_price") val currentPrice: String? = null,
     @SerialName("regular_price") val regularPrice: String? = null,
     val currency: String = "SEK",
+    /** The best price per item for this person (what stores are ranked by), and how it comes about. */
+    @SerialName("effective_price") val effectivePrice: String? = null,
+    val best: BestOffer? = null,
     @SerialName("unit_price") val unitPrice: UnitPrice? = null,
     val availability: String? = null,
     @SerialName("age_seconds") val ageSeconds: Long? = null,
@@ -289,6 +303,7 @@ data class CheapestRef(
     @SerialName("store_id") val storeId: String? = null,
     @SerialName("store_name") val storeName: String? = null,
     @SerialName("current_price") val currentPrice: String? = null,
+    @SerialName("effective_price") val effectivePrice: String? = null,
 )
 
 @Serializable

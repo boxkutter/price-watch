@@ -240,6 +240,18 @@ class PriceWatchApi(
         return ApiJson.decodeFromJsonElement<FoundStores>(job.result ?: JsonObject(emptyMap())).storeIds
     }
 
+    /** The chains the person is a member of (retailer ids). */
+    suspend fun memberships(): Set<String> =
+        get<Items<RetailerRef>>("/v1/me/memberships").items.map { it.retailerId }.toSet()
+
+    @kotlinx.serialization.Serializable
+    private data class RetailerRef(@kotlinx.serialization.SerialName("retailer_id") val retailerId: String)
+
+    /** Says whether the person is a member of a chain (ICA, City Gross); member prices then count for them. */
+    suspend fun setMember(retailerId: String, member: Boolean) {
+        call(if (member) HttpMethod.Put else HttpMethod.Delete, "/v1/me/memberships/$retailerId")
+    }
+
     suspend fun addMyStore(storeId: String) { call(HttpMethod.Put, "/v1/me/stores/$storeId") }
     suspend fun removeMyStore(storeId: String) { call(HttpMethod.Delete, "/v1/me/stores/$storeId") }
 
