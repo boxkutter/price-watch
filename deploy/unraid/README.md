@@ -62,7 +62,7 @@ Up**. The containers then show in the Docker tab with a WebUI shortcut to the ad
 |---|---|
 | Database | `${DATA_DIR}/postgres` (default `/mnt/user/appdata/retail-monitor/postgres`) |
 | Connectors installed from the admin page | `${DATA_DIR}/connectors` |
-| The Android app for `/download` | `${DATA_DIR}/downloads` (`pricewatch.apk` and `latest.json`, put there by `mobile/scripts/publish.sh`) |
+| The Android app for `/download` | `${DATA_DIR}/downloads` (`pricewatch.apk` and `latest.json`, uploaded by `mobile/scripts/publish.sh`) |
 | Bundled connectors | inside the image |
 | Configuration | `.env` next to the compose file |
 
@@ -121,3 +121,18 @@ backup, because a database restored under a different secret cannot read them (e
 
 Stop everything with `docker compose down` (data stays). Remove the data only deliberately, by
 deleting `${DATA_DIR}`.
+
+## Publishing the Android app
+
+Phones install and update the app from `http://<server>:8085/download` (or your HTTPS address). You publish a
+new version from the development computer, with nothing to copy by hand:
+
+1. In this folder's `.env`, set `APP_UPLOAD_TOKEN` to a long random value (`openssl rand -base64 32`) and
+   update the stack (`docker compose pull && docker compose up -d`). Leave it empty to switch uploading off.
+2. On the development computer put the same value, and the server's address, in `mobile/.publish.env`
+   (git-ignored): `PW_SERVER=https://price-watch.example.org` and `APP_UPLOAD_TOKEN=...`.
+3. Run `mobile/scripts/publish.sh --bump --notes "What changed"`. It builds and signs the release and uploads it.
+
+The server refuses anything that is not an APK, a file over 150 MB, a wrong token, and a build older than the one
+on offer. A reverse proxy in front of it must allow uploads of about 50 MB (Nginx Proxy Manager: add
+`client_max_body_size 100m;` under the host's Advanced tab).

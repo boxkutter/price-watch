@@ -23,6 +23,7 @@ os.environ["MAX_STORE_LOOKUPS_PER_HOUR"] = "6"
 os.environ["MAX_COMPARE_STORES"] = "8"
 os.environ["MAX_PACKAGE_BYTES"] = "5000000"
 os.environ["APP_DOWNLOADS_DIR"] = os.path.join(TEST_DIR.name, "downloads")
+os.environ["APP_UPLOAD_TOKEN"] = ""
 os.environ["REFERENCE_ENABLED"] = "true"
 os.environ["REFERENCE_USER_AGENT"] = "retail-monitor-tests"
 os.environ["REFERENCE_MIN_INTERVAL_SECONDS"] = "0"

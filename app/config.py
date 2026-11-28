@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     max_package_bytes: int = 5_000_000
     # The published Android app (APK and latest.json) served at /download; see app/downloads.py.
     app_downloads_dir: str = "./data/downloads"
+    # Lets mobile/scripts/publish.sh upload a new app to /download over HTTPS. 24+ characters switches it
+    # on (openssl rand -base64 32); empty switches uploading off (downloads still work).
+    app_upload_token: str = ""
     # Inbound: limits on our own API so one caller cannot fan out into retailer traffic.
     api_rate_limit_per_minute: int = 300
     max_monitors_per_user: int = 50

@@ -7,10 +7,20 @@
 #   --bump           raise versionCode by one (and the patch number of versionName)
 #   --version X.Y.Z  set versionName (versionCode is raised by one as well)
 #   --notes TEXT     shown on the download page and in the app's update card
-#   --to DEST        a folder, or user@host:/path for a server you reach over ssh.
-#                    Default: ../data/downloads (the development compose file mounts it).
-#                    On Unraid: root@tower:/mnt/user/appdata/retail-monitor/downloads
+#   --to DEST        where to publish:
+#                      https://server   upload to the running service (needs APP_UPLOAD_TOKEN, below)
+#                      a folder         ../data/downloads is the development stack's
+#                      user@host:/path  copy over ssh
+#                    Default: PW_SERVER from mobile/.publish.env when it is set, else ../data/downloads.
 #   --no-build       publish the release APK that was built last
+#
+# Publishing over HTTPS (the usual way): put the server's address and its upload token in the
+# git-ignored mobile/.publish.env (environment variables of the same names win):
+#     PW_SERVER=https://price-watch.h03.eu
+#     APP_UPLOAD_TOKEN=<the value of APP_UPLOAD_TOKEN in the server's .env>
+# The server refuses a wrong token, a file that is not an APK, and a build older than the one on offer.
+# A reverse proxy in front of it must allow uploads of about 50 MB (Nginx Proxy Manager:
+# `client_max_body_size 100m;` under the host's Advanced tab).
 #
 # Every release must have a higher versionCode than the one before, or installed apps will not see it
 # as an update. The first run creates the signing key (keystore.properties and pricewatch-release.jks,
@@ -18,7 +28,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-dest="../data/downloads"; notes=""; bump=""; version=""; build=1
+# Optional local settings (git-ignored). Values already in the environment win.
+if [[ -f .publish.env ]]; then
+    while IFS='=' read -r key value; do
+        case "$key" in PW_SERVER|APP_UPLOAD_TOKEN) [[ -n ${!key:-} ]] || export "$key=$value" ;; esac
+    done < .publish.env
+fi
+
+dest=""; notes=""; bump=""; version=""; build=1
 while [[ $# -gt 0 ]]; do
     case $1 in
         --bump) bump=1 ;;
@@ -26,11 +43,13 @@ while [[ $# -gt 0 ]]; do
         --notes) notes=${2:?--notes needs text}; shift ;;
         --to) dest=${2:?--to needs a destination}; shift ;;
         --no-build) build="" ;;
-        -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
         *) echo "Unknown option: $1 (see --help)" >&2; exit 2 ;;
     esac
     shift
 done
+
+dest=${dest:-${PW_SERVER:-../data/downloads}}
 
 prop() { sed -n "s/^$1=//p" version.properties; }
 code=$(prop versionCode); name=$(prop versionName)
@@ -71,6 +90,22 @@ PY
 )
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 cp "$apk" "$tmp/pricewatch.apk"; printf '%s\n' "$json" > "$tmp/latest.json"
+
+if [[ $dest == http://* || $dest == https://* ]]; then
+    [[ -n ${APP_UPLOAD_TOKEN:-} ]] || { echo "Set APP_UPLOAD_TOKEN in mobile/.publish.env to the token in the server .env" >&2; exit 2; }
+    server=${dest%/}
+    echo "Uploading $(du -h "$apk" | cut -f1) to $server as $name ($code)"
+    # the notes travel percent-encoded, so any text (and non-ASCII) survives a header
+    encoded=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$notes")
+    curl --fail-with-body --silent --show-error --max-time 900 -X PUT "$server/download/pricewatch.apk" \
+        -H "Authorization: Bearer $APP_UPLOAD_TOKEN" -H "X-Version-Name: $name" -H "X-Version-Code: $code" \
+        -H "X-Notes: $encoded" -H "Content-Type: application/vnd.android.package-archive" --data-binary @"$apk"
+    echo
+    live=$(curl --silent --show-error --max-time 30 "$server/download/latest.json" | python3 -c 'import sys, json; print(json.load(sys.stdin)["version_name"])')
+    [[ $live == "$name" ]] || { echo "The server offers $live, not $name" >&2; exit 1; }
+    echo "Published Price Watch $name ($code). Phones get it at $server/download; installed apps offer it in Settings."
+    exit 0
+fi
 
 if [[ $dest == *:* ]]; then
     host=${dest%%:*}; path=${dest#*:}

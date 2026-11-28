@@ -97,16 +97,22 @@ about hourly, and the background check announces a new version once. **Settings 
 downloads the file, checks its SHA-256 against `latest.json`, and hands it to Android's installer. The
 first time, Android asks to allow installs from Price Watch.
 
-To release a new version:
+To release a new version, from the development computer:
 
 ```bash
-mobile/scripts/publish.sh --bump --notes "What changed"            # to ../data/downloads (development)
-mobile/scripts/publish.sh --bump --to root@tower:/mnt/user/appdata/retail-monitor/downloads   # Unraid
+mobile/scripts/publish.sh --bump --notes "What changed"
 ```
 
-It raises the version, builds and signs the release, verifies the signature and writes
-`pricewatch.apk` and `latest.json`. Every release needs a higher `versionCode` than the last
-(`version.properties`), or phones will not treat it as an update.
+It raises the version, builds and signs the release, verifies the signature and **uploads it over HTTPS** to the
+server in `mobile/.publish.env` (git-ignored: `PW_SERVER=https://price-watch.h03.eu` and `APP_UPLOAD_TOKEN=...`).
+The server accepts the upload only with that token (`APP_UPLOAD_TOKEN` in its `.env`, 24+ characters; empty
+switches uploading off), and refuses a file that is not an APK, one over 150 MB and a build older than the one on
+offer. Every release needs a higher `versionCode` than the last (`version.properties`), or phones will not treat
+it as an update. A reverse proxy in front of the server must allow uploads of about 50 MB (Nginx Proxy Manager:
+`client_max_body_size 100m;` under the host's Advanced tab).
+
+Other targets: `--to ../data/downloads` (the development stack's folder, the default when there is no
+`.publish.env`), `--to user@host:/path` (copy over ssh), `--no-build` (publish the last build again).
 
 **The signing key.** The first run creates `mobile/pricewatch-release.jks` and `keystore.properties`
 (both git-ignored). Android installs an update only over an app signed with the same key, so **back these

@@ -13,3 +13,4 @@ mobile/.kotlin/
 mobile/local.properties
 mobile/keystore.properties
 mobile/*.jks
+mobile/.publish.env

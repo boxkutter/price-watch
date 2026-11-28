@@ -220,6 +220,23 @@ def download_apk():
                         filename=downloads.apk_filename(release), headers={"Cache-Control": "no-cache"})
 
 
+@app.put("/download/pricewatch.apk", include_in_schema=False, status_code=201)
+async def upload_apk(request: Request, authorization: str = Header(""), x_version_code: str = Header(""),
+                     x_version_name: str = Header(""), x_notes: str = Header("")):
+    """Publishes a new app (mobile/scripts/publish.sh). Needs APP_UPLOAD_TOKEN: the body is the APK, the
+    version comes in X-Version-Code and X-Version-Name, and X-Notes (percent-encoded) says what changed."""
+    try:
+        downloads.check_token(settings.app_upload_token, authorization)
+        code, name = downloads.check_version(settings.app_downloads_dir, x_version_code, x_version_name)
+        length = request.headers.get("content-length")
+        apk = await downloads.receive_apk(settings.app_downloads_dir, request.stream(),
+                                          int(length) if length and length.isdigit() else None)
+        release = downloads.publish(settings.app_downloads_dir, apk, code, name, x_notes)
+    except downloads.UploadRefused as refused:
+        raise HTTPException(refused.status, refused.message) from refused
+    return JSONResponse(release, status_code=201)
+
+
 @app.get("/vendor/zxing.min.js", include_in_schema=False)
 def zxing_script():
     """The barcode-decoding library the example client's camera button loads (see static/vendor)."""
